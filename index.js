@@ -1,4 +1,5 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
+import { jsx, Fragment, jsxs } from 'react/jsx-runtime';
 
 // src/useHotkeys.ts
 
@@ -93,6 +94,32 @@ function formatCombination(combo) {
 function isModifierKey(key) {
   return ["Control", "Alt", "Shift", "Meta"].includes(key);
 }
+var SHIFTED_CHARS = /* @__PURE__ */ new Set([
+  "~",
+  "!",
+  "@",
+  "#",
+  "$",
+  "%",
+  "^",
+  "&",
+  "*",
+  "(",
+  ")",
+  "_",
+  "+",
+  "{",
+  "}",
+  "|",
+  ":",
+  '"',
+  "<",
+  ">",
+  "?"
+]);
+function isShiftedChar(key) {
+  return SHIFTED_CHARS.has(key);
+}
 function parseCombinationId(id) {
   const parts = id.toLowerCase().split("+");
   const key = parts[parts.length - 1];
@@ -121,7 +148,8 @@ function parseHotkey(hotkey) {
 }
 function matchesHotkey(e, hotkey) {
   const eventKey = normalizeKey(e.key);
-  return e.ctrlKey === hotkey.ctrl && e.altKey === hotkey.alt && e.shiftKey === hotkey.shift && e.metaKey === hotkey.meta && eventKey === hotkey.key;
+  const shiftMatches = isShiftedChar(e.key) ? hotkey.shift ? e.shiftKey : true : e.shiftKey === hotkey.shift;
+  return e.ctrlKey === hotkey.ctrl && e.altKey === hotkey.alt && shiftMatches && e.metaKey === hotkey.meta && eventKey === hotkey.key;
 }
 function useHotkeys(keymap, handlers, options = {}) {
   const {
@@ -277,7 +305,404 @@ function useRecordHotkey(options = {}) {
     activeKeys
   };
 }
+function useEditableHotkeys(defaults, handlers, options = {}) {
+  const { storageKey, ...hotkeyOptions } = options;
+  const [overrides, setOverrides] = useState(() => {
+    if (!storageKey || typeof window === "undefined") return {};
+    try {
+      const stored = localStorage.getItem(storageKey);
+      return stored ? JSON.parse(stored) : {};
+    } catch {
+      return {};
+    }
+  });
+  useEffect(() => {
+    if (!storageKey || typeof window === "undefined") return;
+    try {
+      if (Object.keys(overrides).length === 0) {
+        localStorage.removeItem(storageKey);
+      } else {
+        localStorage.setItem(storageKey, JSON.stringify(overrides));
+      }
+    } catch {
+    }
+  }, [storageKey, overrides]);
+  const keymap = useMemo(() => {
+    const actionToKey = {};
+    for (const [key, action] of Object.entries(defaults)) {
+      const actions = Array.isArray(action) ? action : [action];
+      for (const a of actions) {
+        actionToKey[a] = key;
+      }
+    }
+    for (const [key, action] of Object.entries(overrides)) {
+      if (action === void 0) continue;
+      const actions = Array.isArray(action) ? action : [action];
+      for (const a of actions) {
+        actionToKey[a] = key;
+      }
+    }
+    const result = {};
+    for (const [action, key] of Object.entries(actionToKey)) {
+      if (result[key]) {
+        const existing = result[key];
+        result[key] = Array.isArray(existing) ? [...existing, action] : [existing, action];
+      } else {
+        result[key] = action;
+      }
+    }
+    return result;
+  }, [defaults, overrides]);
+  useHotkeys(keymap, handlers, hotkeyOptions);
+  const setBinding = useCallback((action, key) => {
+    setOverrides((prev) => ({ ...prev, [key]: action }));
+  }, []);
+  const setKeymap = useCallback((newOverrides) => {
+    setOverrides((prev) => ({ ...prev, ...newOverrides }));
+  }, []);
+  const reset = useCallback(() => {
+    setOverrides({});
+  }, []);
+  return { keymap, setBinding, setKeymap, reset, overrides };
+}
+function buildActionMap(keymap) {
+  const map = /* @__PURE__ */ new Map();
+  for (const [key, actionOrActions] of Object.entries(keymap)) {
+    const actions = Array.isArray(actionOrActions) ? actionOrActions : [actionOrActions];
+    for (const action of actions) {
+      map.set(action, key);
+    }
+  }
+  return map;
+}
+function findConflicts(keymap) {
+  const keyToActions = /* @__PURE__ */ new Map();
+  for (const [key, actionOrActions] of Object.entries(keymap)) {
+    const actions = Array.isArray(actionOrActions) ? actionOrActions : [actionOrActions];
+    const existing = keyToActions.get(key) ?? [];
+    keyToActions.set(key, [...existing, ...actions]);
+  }
+  const conflicts = /* @__PURE__ */ new Map();
+  for (const [key, actions] of keyToActions) {
+    if (actions.length > 1) {
+      conflicts.set(key, actions);
+    }
+  }
+  return conflicts;
+}
+function KeybindingEditor({
+  keymap,
+  defaults,
+  descriptions,
+  onChange,
+  onReset,
+  className,
+  children
+}) {
+  const [editingAction, setEditingAction] = useState(null);
+  const actionMap = useMemo(() => buildActionMap(keymap), [keymap]);
+  const defaultActionMap = useMemo(() => buildActionMap(defaults), [defaults]);
+  const conflicts = useMemo(() => findConflicts(keymap), [keymap]);
+  const { isRecording, startRecording, cancel, activeKeys } = useRecordHotkey({
+    onCapture: useCallback(
+      (_combo, display) => {
+        if (editingAction) {
+          onChange(editingAction, display.id);
+          setEditingAction(null);
+        }
+      },
+      [editingAction, onChange]
+    ),
+    onCancel: useCallback(() => {
+      setEditingAction(null);
+    }, [])
+  });
+  const startEditing = useCallback(
+    (action) => {
+      setEditingAction(action);
+      startRecording();
+    },
+    [startRecording]
+  );
+  const cancelEditing = useCallback(() => {
+    cancel();
+    setEditingAction(null);
+  }, [cancel]);
+  const reset = useCallback(() => {
+    onReset?.();
+  }, [onReset]);
+  const bindings = useMemo(() => {
+    const allActions = /* @__PURE__ */ new Set([...actionMap.keys(), ...defaultActionMap.keys()]);
+    return Array.from(allActions).map((action) => {
+      const key = actionMap.get(action) ?? defaultActionMap.get(action) ?? "";
+      const defaultKey = defaultActionMap.get(action) ?? "";
+      const combo = parseCombinationId(key);
+      const display = formatCombination(combo);
+      const conflictActions = conflicts.get(key);
+      return {
+        action,
+        key,
+        display,
+        description: descriptions?.[action] ?? action,
+        isDefault: key === defaultKey,
+        hasConflict: conflictActions !== void 0 && conflictActions.length > 1
+      };
+    }).sort((a, b) => a.action.localeCompare(b.action));
+  }, [actionMap, defaultActionMap, descriptions, conflicts]);
+  if (children) {
+    return /* @__PURE__ */ jsx(Fragment, { children: children({
+      bindings,
+      editingAction,
+      activeKeys,
+      startEditing,
+      cancelEditing,
+      reset,
+      conflicts
+    }) });
+  }
+  return /* @__PURE__ */ jsxs("div", { className, children: [
+    /* @__PURE__ */ jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }, children: [
+      /* @__PURE__ */ jsx("h3", { style: { margin: 0 }, children: "Keybindings" }),
+      onReset && /* @__PURE__ */ jsx(
+        "button",
+        {
+          onClick: reset,
+          style: {
+            padding: "6px 12px",
+            backgroundColor: "#f5f5f5",
+            border: "1px solid #ddd",
+            borderRadius: "4px",
+            cursor: "pointer"
+          },
+          children: "Reset to defaults"
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsxs("table", { style: { width: "100%", borderCollapse: "collapse" }, children: [
+      /* @__PURE__ */ jsx("thead", { children: /* @__PURE__ */ jsxs("tr", { children: [
+        /* @__PURE__ */ jsx("th", { style: { textAlign: "left", padding: "8px", borderBottom: "2px solid #ddd" }, children: "Action" }),
+        /* @__PURE__ */ jsx("th", { style: { textAlign: "left", padding: "8px", borderBottom: "2px solid #ddd" }, children: "Keybinding" }),
+        /* @__PURE__ */ jsx("th", { style: { width: "80px", padding: "8px", borderBottom: "2px solid #ddd" } })
+      ] }) }),
+      /* @__PURE__ */ jsx("tbody", { children: bindings.map(({ action, display, description, isDefault, hasConflict }) => {
+        const isEditing = editingAction === action;
+        return /* @__PURE__ */ jsxs("tr", { style: { backgroundColor: hasConflict ? "#fff3cd" : void 0 }, children: [
+          /* @__PURE__ */ jsxs("td", { style: { padding: "8px", borderBottom: "1px solid #eee" }, children: [
+            description,
+            !isDefault && /* @__PURE__ */ jsx("span", { style: { marginLeft: "8px", fontSize: "0.75rem", color: "#666" }, children: "(modified)" })
+          ] }),
+          /* @__PURE__ */ jsxs("td", { style: { padding: "8px", borderBottom: "1px solid #eee" }, children: [
+            isEditing ? /* @__PURE__ */ jsx(
+              "kbd",
+              {
+                style: {
+                  backgroundColor: "#e3f2fd",
+                  padding: "4px 8px",
+                  borderRadius: "4px",
+                  border: "2px solid #2196f3",
+                  fontFamily: "monospace"
+                },
+                children: activeKeys ? formatCombination(activeKeys).display : "Press keys..."
+              }
+            ) : /* @__PURE__ */ jsx(
+              "kbd",
+              {
+                style: {
+                  backgroundColor: "#f5f5f5",
+                  padding: "4px 8px",
+                  borderRadius: "4px",
+                  border: "1px solid #ddd",
+                  fontFamily: "monospace"
+                },
+                children: display.display
+              }
+            ),
+            hasConflict && !isEditing && /* @__PURE__ */ jsx("span", { style: { marginLeft: "8px", color: "#856404", fontSize: "0.75rem" }, children: "\u26A0 Conflict" })
+          ] }),
+          /* @__PURE__ */ jsx("td", { style: { padding: "8px", borderBottom: "1px solid #eee", textAlign: "center" }, children: isEditing ? /* @__PURE__ */ jsx(
+            "button",
+            {
+              onClick: cancelEditing,
+              style: {
+                padding: "4px 8px",
+                backgroundColor: "#f5f5f5",
+                border: "1px solid #ddd",
+                borderRadius: "4px",
+                cursor: "pointer",
+                fontSize: "0.875rem"
+              },
+              children: "Cancel"
+            }
+          ) : /* @__PURE__ */ jsx(
+            "button",
+            {
+              onClick: () => startEditing(action),
+              disabled: isRecording,
+              style: {
+                padding: "4px 8px",
+                backgroundColor: "#f5f5f5",
+                border: "1px solid #ddd",
+                borderRadius: "4px",
+                cursor: isRecording ? "not-allowed" : "pointer",
+                fontSize: "0.875rem",
+                opacity: isRecording ? 0.5 : 1
+              },
+              children: "Edit"
+            }
+          ) })
+        ] }, action);
+      }) })
+    ] })
+  ] });
+}
+function parseAction(action) {
+  const colonIndex = action.indexOf(":");
+  if (colonIndex > 0) {
+    return { group: action.slice(0, colonIndex), name: action.slice(colonIndex + 1) };
+  }
+  return { group: "General", name: action };
+}
+function organizeShortcuts(keymap, descriptions, groupNames) {
+  const groupMap = /* @__PURE__ */ new Map();
+  for (const [key, actionOrActions] of Object.entries(keymap)) {
+    const actions = Array.isArray(actionOrActions) ? actionOrActions : [actionOrActions];
+    for (const action of actions) {
+      const { group: groupKey, name } = parseAction(action);
+      const groupName = groupNames?.[groupKey] ?? groupKey;
+      if (!groupMap.has(groupName)) {
+        groupMap.set(groupName, { name: groupName, shortcuts: [] });
+      }
+      groupMap.get(groupName).shortcuts.push({
+        key,
+        action,
+        description: descriptions?.[action] ?? name
+      });
+    }
+  }
+  return Array.from(groupMap.values()).sort((a, b) => {
+    if (a.name === "General") return 1;
+    if (b.name === "General") return -1;
+    return a.name.localeCompare(b.name);
+  });
+}
+function ShortcutsModal({
+  keymap,
+  descriptions,
+  groups: groupNames,
+  isOpen: controlledIsOpen,
+  onClose,
+  openKey = "?",
+  autoRegisterOpen = true,
+  children,
+  backdropClassName,
+  modalClassName
+}) {
+  const [internalIsOpen, setInternalIsOpen] = useState(false);
+  const isOpen = controlledIsOpen ?? internalIsOpen;
+  const close = useCallback(() => {
+    setInternalIsOpen(false);
+    onClose?.();
+  }, [onClose]);
+  const open = useCallback(() => {
+    setInternalIsOpen(true);
+  }, []);
+  const modalKeymap = autoRegisterOpen ? { [openKey]: "openShortcuts" } : {};
+  useHotkeys(
+    { ...modalKeymap, escape: "closeShortcuts" },
+    {
+      openShortcuts: open,
+      closeShortcuts: close
+    },
+    { enabled: autoRegisterOpen || isOpen }
+  );
+  const handleBackdropClick = useCallback(
+    (e) => {
+      if (e.target === e.currentTarget) {
+        close();
+      }
+    },
+    [close]
+  );
+  const shortcutGroups = organizeShortcuts(keymap, descriptions, groupNames);
+  if (!isOpen) return null;
+  if (children) {
+    return /* @__PURE__ */ jsx(Fragment, { children: children({ groups: shortcutGroups, close }) });
+  }
+  return /* @__PURE__ */ jsx(
+    "div",
+    {
+      className: backdropClassName,
+      onClick: handleBackdropClick,
+      style: backdropClassName ? void 0 : {
+        position: "fixed",
+        inset: 0,
+        backgroundColor: "rgba(0, 0, 0, 0.5)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 9999
+      },
+      children: /* @__PURE__ */ jsxs(
+        "div",
+        {
+          className: modalClassName,
+          role: "dialog",
+          "aria-modal": "true",
+          "aria-label": "Keyboard shortcuts",
+          style: modalClassName ? void 0 : {
+            backgroundColor: "white",
+            borderRadius: "8px",
+            padding: "24px",
+            maxWidth: "600px",
+            maxHeight: "80vh",
+            overflow: "auto",
+            boxShadow: "0 4px 20px rgba(0, 0, 0, 0.15)"
+          },
+          children: [
+            /* @__PURE__ */ jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }, children: [
+              /* @__PURE__ */ jsx("h2", { style: { margin: 0, fontSize: "1.25rem", fontWeight: 600 }, children: "Keyboard Shortcuts" }),
+              /* @__PURE__ */ jsx(
+                "button",
+                {
+                  onClick: close,
+                  "aria-label": "Close",
+                  style: {
+                    background: "none",
+                    border: "none",
+                    fontSize: "1.5rem",
+                    cursor: "pointer",
+                    padding: "4px",
+                    lineHeight: 1
+                  },
+                  children: "\xD7"
+                }
+              )
+            ] }),
+            shortcutGroups.map((group) => /* @__PURE__ */ jsxs("div", { style: { marginBottom: "16px" }, children: [
+              /* @__PURE__ */ jsx("h3", { style: { margin: "0 0 8px", fontSize: "0.875rem", fontWeight: 600, textTransform: "uppercase", color: "#666" }, children: group.name }),
+              /* @__PURE__ */ jsx("dl", { style: { margin: 0 }, children: group.shortcuts.map(({ key, action, description }) => {
+                const combo = parseCombinationId(key);
+                const display = formatCombination(combo);
+                return /* @__PURE__ */ jsxs(
+                  "div",
+                  {
+                    style: { display: "flex", justifyContent: "space-between", padding: "4px 0", borderBottom: "1px solid #eee" },
+                    children: [
+                      /* @__PURE__ */ jsx("dt", { style: { color: "#333" }, children: description }),
+                      /* @__PURE__ */ jsx("dd", { style: { margin: 0, fontFamily: "monospace", color: "#666" }, children: /* @__PURE__ */ jsx("kbd", { style: { backgroundColor: "#f5f5f5", padding: "2px 6px", borderRadius: "4px", border: "1px solid #ddd" }, children: display.display }) })
+                    ]
+                  },
+                  action
+                );
+              }) })
+            ] }, group.name))
+          ]
+        }
+      )
+    }
+  );
+}
 
-export { formatCombination, formatKeyForDisplay, isMac, isModifierKey, normalizeKey, parseCombinationId, useHotkeys, useRecordHotkey };
+export { KeybindingEditor, ShortcutsModal, formatCombination, formatKeyForDisplay, isMac, isModifierKey, normalizeKey, parseCombinationId, useEditableHotkeys, useHotkeys, useRecordHotkey };
 //# sourceMappingURL=index.js.map
 //# sourceMappingURL=index.js.map
