@@ -110,6 +110,22 @@ Examples:
 - `'ctrl+shift+k'` - Ctrl+Shift+K
 - `'meta+s'` - Cmd+S on Mac, Win+S elsewhere
 
+## Examples
+
+Projects using `@rdub/use-hotkeys`:
+
+- [runsascoded/awair] – Air quality dashboard with keyboard shortcuts for metric switching
+
+  Press `?` to see the shortcuts modal, or use single keys to switch metrics:
+  - `t` / `c` / `h` / `p` / `v` – Temperature / CO₂ / Humidity / PM2.5 / VOC
+  - `1` / `3` / `7` / `m` – 1 day / 3 days / 1 week / 1 month time range
+
+[runsascoded/awair]: https://github.com/runsascoded/awair
+
 ## See also
 
 [ROADMAP.md](./ROADMAP.md) - planned features including `<ShortcutsModal>` and `<KeybindingEditor>` components.
+
+## License
+
+MIT
