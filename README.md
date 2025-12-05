@@ -1,5 +1,7 @@
 # @rdub/use-hotkeys
 
+[![npm version](https://img.shields.io/npm/v/@rdub/use-hotkeys.svg)](https://www.npmjs.com/package/@rdub/use-hotkeys)
+
 React hooks for keyboard shortcuts with runtime editing and key capture.
 
 ## Installation
@@ -105,6 +107,7 @@ const { keymap, setBinding, reset, overrides } = useEditableHotkeys(
 - `handlers`: Action handlers (same as `useHotkeys`)
 - `options`:
   - `storageKey?: string` - localStorage key for persistence (omit to disable)
+  - `disableConflicts?: boolean` - disable keys with multiple actions bound (default: true)
   - Plus all `useHotkeys` options
 
 Returns:
@@ -113,6 +116,8 @@ Returns:
 - `setKeymap: (overrides) => void` - update multiple bindings
 - `reset: () => void` - clear all overrides
 - `overrides: Partial<HotkeyMap>` - user overrides only
+- `conflicts: Map<string, string[]>` - keys with multiple actions bound
+- `hasConflicts: boolean` - whether any conflicts exist
 
 ### `<ShortcutsModal>`
 
@@ -165,7 +170,12 @@ Props:
 ### Utilities
 
 ```tsx
-import { formatCombination, normalizeKey, parseCombinationId, isMac } from '@rdub/use-hotkeys'
+import {
+  formatCombination,
+  parseCombinationId,
+  findConflicts,
+  hasConflicts,
+} from '@rdub/use-hotkeys'
 
 formatCombination({ key: 'k', modifiers: { meta: true, shift: true, ctrl: false, alt: false }})
 // → { display: "⌘⇧K", id: "meta+shift+k" } on Mac
@@ -173,6 +183,11 @@ formatCombination({ key: 'k', modifiers: { meta: true, shift: true, ctrl: false,
 
 parseCombinationId('ctrl+shift+k')
 // → { key: 'k', modifiers: { ctrl: true, shift: true, alt: false, meta: false }}
+
+// Conflict detection
+const keymap = { 't': 'setTemp', 't': 'toggleTheme' } // same key!
+findConflicts(keymap) // → Map { 't' => ['setTemp', 'toggleTheme'] }
+hasConflicts(keymap)  // → true
 ```
 
 ## Key format
@@ -199,7 +214,7 @@ Projects using `@rdub/use-hotkeys`:
 
 ## See also
 
-[ROADMAP.md](./ROADMAP.md) - feature overview and future plans.
+[ROADMAP.md](./ROADMAP.md) - feature overview and future ideas.
 
 ## License
 

@@ -2,7 +2,7 @@
 
 React hooks library for keyboard shortcuts with runtime editing and key capture.
 
-## Current Features (v0.0.1)
+## Current Features (v0.1.0)
 
 ### `useHotkeys(keymap, handlers, options?)`
 Declarative keyboard shortcut registration:
@@ -57,11 +57,13 @@ UI for editing keybindings with conflict detection:
 - `formatCombination(combo)` - platform-aware display (⌘⇧K on Mac, Ctrl+Shift+K elsewhere)
 - `normalizeKey(key)` - canonical key names
 - `parseCombinationId(id)` - parse "ctrl+shift+k" back to KeyCombination
+- `findConflicts(keymap)` - detect multiple actions bound to same key
+- `hasConflicts(keymap)` - check if keymap has any conflicts
+- `getConflictsArray(keymap)` - get conflicts as `KeyConflict[]`
 
 ## Future Ideas
 
 - **Chord support**: `ctrl+k ctrl+c` (VS Code style sequences)
 - **Scope/context**: Different keymaps for different app states
-- **Conflict detection API**: `findConflicts(keymap1, keymap2)`
 - **Import/export**: JSON format for sharing keybindings
 - **Vim-style modes**: Normal/insert mode awareness
