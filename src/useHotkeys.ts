@@ -92,17 +92,29 @@ function eventToCombination(e: KeyboardEvent): KeyCombination {
 function isPartialMatch(pending: HotkeySequence, target: HotkeySequence): boolean {
   if (pending.length >= target.length) return false
   for (let i = 0; i < pending.length; i++) {
-    if (
-      pending[i].key !== target[i].key ||
-      pending[i].modifiers.ctrl !== target[i].modifiers.ctrl ||
-      pending[i].modifiers.alt !== target[i].modifiers.alt ||
-      pending[i].modifiers.shift !== target[i].modifiers.shift ||
-      pending[i].modifiers.meta !== target[i].modifiers.meta
-    ) {
+    if (!combinationsMatch(pending[i], target[i])) {
       return false
     }
   }
   return true
+}
+
+/**
+ * Check if two key combinations match (handles shifted chars like ?)
+ */
+function combinationsMatch(event: KeyCombination, target: KeyCombination): boolean {
+  // For shifted characters (like ?, !, @), ignore shift key mismatch
+  const shiftMatches = isShiftedChar(event.key)
+    ? (target.modifiers.shift ? event.modifiers.shift : true)
+    : event.modifiers.shift === target.modifiers.shift
+
+  return (
+    event.modifiers.ctrl === target.modifiers.ctrl &&
+    event.modifiers.alt === target.modifiers.alt &&
+    shiftMatches &&
+    event.modifiers.meta === target.modifiers.meta &&
+    event.key === target.key
+  )
 }
 
 /**
@@ -111,13 +123,7 @@ function isPartialMatch(pending: HotkeySequence, target: HotkeySequence): boolea
 function sequencesMatch(a: HotkeySequence, b: HotkeySequence): boolean {
   if (a.length !== b.length) return false
   for (let i = 0; i < a.length; i++) {
-    if (
-      a[i].key !== b[i].key ||
-      a[i].modifiers.ctrl !== b[i].modifiers.ctrl ||
-      a[i].modifiers.alt !== b[i].modifiers.alt ||
-      a[i].modifiers.shift !== b[i].modifiers.shift ||
-      a[i].modifiers.meta !== b[i].modifiers.meta
-    ) {
+    if (!combinationsMatch(a[i], b[i])) {
       return false
     }
   }
