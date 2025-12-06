@@ -31,6 +31,10 @@ export interface UseEditableHotkeysResult {
   isAwaitingSequence: boolean
   /** Cancel the current sequence */
   cancelSequence: () => void
+  /** When the current sequence timeout started (null if not awaiting) */
+  timeoutStartedAt: number | null
+  /** The sequence timeout duration in ms */
+  sequenceTimeout: number
 }
 
 /**
@@ -131,7 +135,7 @@ export function useEditableHotkeys(
   }, [keymap, conflicts, disableConflicts])
 
   // Register hotkeys (using effective keymap that excludes conflicts)
-  const { pendingKeys, isAwaitingSequence, cancelSequence } = useHotkeys(effectiveKeymap, handlers, hotkeyOptions)
+  const { pendingKeys, isAwaitingSequence, cancelSequence, timeoutStartedAt, sequenceTimeout } = useHotkeys(effectiveKeymap, handlers, hotkeyOptions)
 
   const setBinding = useCallback((action: string, key: string) => {
     setOverrides((prev) => {
@@ -168,5 +172,7 @@ export function useEditableHotkeys(
     pendingKeys,
     isAwaitingSequence,
     cancelSequence,
+    timeoutStartedAt,
+    sequenceTimeout,
   }
 }

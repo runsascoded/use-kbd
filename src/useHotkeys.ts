@@ -49,6 +49,10 @@ export interface UseHotkeysResult {
   isAwaitingSequence: boolean
   /** Cancel the current sequence */
   cancelSequence: () => void
+  /** When the current sequence timeout started (null if not awaiting) */
+  timeoutStartedAt: number | null
+  /** The sequence timeout duration in ms */
+  sequenceTimeout: number
 }
 
 /**
@@ -169,6 +173,7 @@ export function useHotkeys(
 
   const [pendingKeys, setPendingKeys] = useState<HotkeySequence>([])
   const [isAwaitingSequence, setIsAwaitingSequence] = useState(false)
+  const [timeoutStartedAt, setTimeoutStartedAt] = useState<number | null>(null)
 
   // Use refs for handlers to avoid re-attaching listeners
   const handlersRef = useRef(handlers)
@@ -178,6 +183,10 @@ export function useHotkeys(
   keymapRef.current = keymap
 
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Use ref for pendingKeys to avoid stale closure in event handlers
+  const pendingKeysRef = useRef<HotkeySequence>([])
+  pendingKeysRef.current = pendingKeys
 
   // Parse keymap into sequences for matching
   const parsedKeymapRef = useRef<Array<{ key: string; sequence: HotkeySequence; actions: string[] }>>([])
@@ -193,6 +202,7 @@ export function useHotkeys(
   const clearPending = useCallback(() => {
     setPendingKeys([])
     setIsAwaitingSequence(false)
+    setTimeoutStartedAt(null)
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current)
       timeoutRef.current = null
@@ -280,9 +290,9 @@ export function useHotkeys(
       }
 
       // Enter key submits current sequence
-      if (e.key === 'Enter' && pendingKeys.length > 0) {
+      if (e.key === 'Enter' && pendingKeysRef.current.length > 0) {
         e.preventDefault()
-        const executed = tryExecute(pendingKeys, e)
+        const executed = tryExecute(pendingKeysRef.current, e)
         clearPending()
         if (!executed) {
           onSequenceCancel?.()
@@ -291,7 +301,7 @@ export function useHotkeys(
       }
 
       // Escape cancels current sequence
-      if (e.key === 'Escape' && pendingKeys.length > 0) {
+      if (e.key === 'Escape' && pendingKeysRef.current.length > 0) {
         e.preventDefault()
         cancelSequence()
         return
@@ -299,7 +309,7 @@ export function useHotkeys(
 
       // Add current key to sequence
       const currentCombo = eventToCombination(e)
-      const newSequence = [...pendingKeys, currentCombo]
+      const newSequence = [...pendingKeysRef.current, currentCombo]
 
       // Check for exact match first
       const exactMatch = tryExecute(newSequence, e)
@@ -316,13 +326,14 @@ export function useHotkeys(
           setPendingKeys(newSequence)
           setIsAwaitingSequence(true)
 
-          if (pendingKeys.length === 0) {
+          if (pendingKeysRef.current.length === 0) {
             onSequenceStart?.(newSequence)
           } else {
             onSequenceProgress?.(newSequence)
           }
 
           // Set timeout
+          setTimeoutStartedAt(Date.now())
           timeoutRef.current = setTimeout(() => {
             if (onTimeout === 'submit') {
               // Try to execute whatever we have
@@ -336,10 +347,12 @@ export function useHotkeys(
                 return []
               })
               setIsAwaitingSequence(false)
+              setTimeoutStartedAt(null)
             } else {
               // Cancel mode
               setPendingKeys([])
               setIsAwaitingSequence(false)
+              setTimeoutStartedAt(null)
               onSequenceCancel?.()
             }
             timeoutRef.current = null
@@ -354,7 +367,7 @@ export function useHotkeys(
       }
 
       // No match and no potential - reset and try single key
-      if (pendingKeys.length > 0) {
+      if (pendingKeysRef.current.length > 0) {
         clearPending()
         onSequenceCancel?.()
       }
@@ -373,14 +386,17 @@ export function useHotkeys(
           }
 
           // Set timeout
+          setTimeoutStartedAt(Date.now())
           timeoutRef.current = setTimeout(() => {
             if (onTimeout === 'submit') {
               setPendingKeys([])
               setIsAwaitingSequence(false)
+              setTimeoutStartedAt(null)
               onSequenceCancel?.()
             } else {
               setPendingKeys([])
               setIsAwaitingSequence(false)
+              setTimeoutStartedAt(null)
               onSequenceCancel?.()
             }
             timeoutRef.current = null
@@ -405,7 +421,6 @@ export function useHotkeys(
     enableOnFormTags,
     sequenceTimeout,
     onTimeout,
-    pendingKeys,
     clearPending,
     cancelSequence,
     tryExecute,
@@ -416,5 +431,5 @@ export function useHotkeys(
     onSequenceCancel,
   ])
 
-  return { pendingKeys, isAwaitingSequence, cancelSequence }
+  return { pendingKeys, isAwaitingSequence, cancelSequence, timeoutStartedAt, sequenceTimeout }
 }

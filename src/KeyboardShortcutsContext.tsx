@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
-import { useHotkeys, HotkeyMap, HandlerMap, UseHotkeysOptions } from './useHotkeys'
+import { useHotkeys, HotkeyMap, HandlerMap, UseHotkeysOptions, UseHotkeysResult } from './useHotkeys'
 import { findConflicts } from './utils'
 
 export interface KeyboardShortcutsContextValue {
@@ -7,8 +7,12 @@ export interface KeyboardShortcutsContextValue {
   defaults: HotkeyMap
   /** Current keymap (defaults merged with user overrides) */
   keymap: HotkeyMap
-  /** Update a single keybinding */
+  /** Update a single keybinding (replaces existing binding for the action) */
   setBinding: (action: string, key: string) => void
+  /** Add a new key binding for an action (keeps existing bindings) */
+  addBinding: (action: string, key: string) => void
+  /** Remove a key binding */
+  removeBinding: (key: string) => void
   /** Update multiple keybindings at once */
   setKeymap: (overrides: Partial<HotkeyMap>) => void
   /** Reset all overrides to defaults */
@@ -82,32 +86,47 @@ export function KeyboardShortcutsProvider({
 
   // Merge defaults with overrides
   const keymap = useMemo(() => {
-    // Build action -> key map from defaults
-    const actionToKey: Record<string, string> = {}
-    for (const [key, action] of Object.entries(defaults)) {
-      const actions = Array.isArray(action) ? action : [action]
-      for (const a of actions) {
-        actionToKey[a] = key
+    // Track removed keys (marked with empty string in overrides)
+    const removedKeys = new Set<string>()
+    for (const [key, action] of Object.entries(overrides)) {
+      if (action === '') {
+        removedKeys.add(key)
       }
     }
 
-    // Apply overrides (key -> action)
-    for (const [key, action] of Object.entries(overrides)) {
-      if (action === undefined) continue
+    // Build action -> keys map from defaults (excluding removed)
+    const actionToKeys: Record<string, string[]> = {}
+    for (const [key, action] of Object.entries(defaults)) {
+      if (removedKeys.has(key)) continue
       const actions = Array.isArray(action) ? action : [action]
       for (const a of actions) {
-        actionToKey[a] = key
+        if (!actionToKeys[a]) actionToKeys[a] = []
+        actionToKeys[a].push(key)
+      }
+    }
+
+    // Apply overrides (key -> action), excluding removed markers
+    for (const [key, action] of Object.entries(overrides)) {
+      if (action === undefined || action === '') continue
+      const actions = Array.isArray(action) ? action : [action]
+      for (const a of actions) {
+        if (!actionToKeys[a]) actionToKeys[a] = []
+        if (!actionToKeys[a].includes(key)) {
+          actionToKeys[a].push(key)
+        }
       }
     }
 
     // Rebuild key -> action map
     const result: HotkeyMap = {}
-    for (const [action, key] of Object.entries(actionToKey)) {
-      if (result[key]) {
-        const existing = result[key]
-        result[key] = Array.isArray(existing) ? [...existing, action] : [existing, action]
-      } else {
-        result[key] = action
+    for (const [action, keys] of Object.entries(actionToKeys)) {
+      for (const key of keys) {
+        if (result[key]) {
+          const existing = result[key]
+          result[key] = Array.isArray(existing) ? [...existing, action] : [existing, action]
+        } else {
+          result[key] = action
+        }
       }
     }
 
@@ -134,6 +153,28 @@ export function KeyboardShortcutsProvider({
     })
   }, [])
 
+  const addBinding = useCallback((action: string, key: string) => {
+    setOverrides((prev) => {
+      // Simply add the new key -> action binding without removing existing ones
+      return { ...prev, [key]: action }
+    })
+  }, [])
+
+  const removeBinding = useCallback((key: string) => {
+    setOverrides((prev) => {
+      // Check if this key is in defaults
+      const isDefault = key in defaults
+      if (isDefault) {
+        // Mark as removed by setting to empty string (special marker)
+        return { ...prev, [key]: '' }
+      } else {
+        // Remove from overrides
+        const { [key]: _removed, ...rest } = prev
+        return rest
+      }
+    })
+  }, [defaults])
+
   const setKeymap = useCallback((newOverrides: Partial<HotkeyMap>) => {
     setOverrides((prev) => ({ ...prev, ...newOverrides }))
   }, [])
@@ -147,6 +188,8 @@ export function KeyboardShortcutsProvider({
       defaults,
       keymap,
       setBinding,
+      addBinding,
+      removeBinding,
       setKeymap,
       reset,
       overrides,
@@ -154,7 +197,7 @@ export function KeyboardShortcutsProvider({
       hasConflicts: hasConflictsValue,
       disableConflicts,
     }),
-    [defaults, keymap, setBinding, setKeymap, reset, overrides, conflicts, hasConflictsValue, disableConflicts],
+    [defaults, keymap, setBinding, addBinding, removeBinding, setKeymap, reset, overrides, conflicts, hasConflictsValue, disableConflicts],
   )
 
   return (
@@ -196,7 +239,7 @@ export function useKeyboardShortcutsContext(): KeyboardShortcutsContextValue {
 export function useRegisteredHotkeys(
   handlers: HandlerMap,
   options: Omit<UseHotkeysOptions, 'enabled'> & { enabled?: boolean } = {},
-): void {
+): UseHotkeysResult {
   const { keymap, conflicts, disableConflicts } = useKeyboardShortcutsContext()
 
   // Effective keymap - removes conflicting keys if disableConflicts is true
@@ -214,5 +257,5 @@ export function useRegisteredHotkeys(
     return filtered
   }, [keymap, conflicts, disableConflicts])
 
-  useHotkeys(effectiveKeymap, handlers, options)
+  return useHotkeys(effectiveKeymap, handlers, options)
 }
