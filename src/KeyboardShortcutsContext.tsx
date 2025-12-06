@@ -172,19 +172,30 @@ export function KeyboardShortcutsProvider({
 
   const setBinding = useCallback((action: string, key: string) => {
     setOverrides((prev) => {
-      // Remove any existing override that maps a different key to this action
-      const cleaned: Partial<HotkeyMap> = {}
-      for (const [k, v] of Object.entries(prev)) {
-        // Keep the entry unless it's a different key mapping to the same action
+      // Find default keys that map to this action and mark them as removed
+      const result: Partial<HotkeyMap> = {}
+
+      // Mark default keys for this action as removed (unless it's the new key)
+      for (const [k, v] of Object.entries(defaults)) {
         const actions = Array.isArray(v) ? v : [v]
-        if (k === key || !actions.includes(action)) {
-          cleaned[k] = v
+        if (actions.includes(action) && k !== key) {
+          result[k] = '' // Mark as removed
         }
       }
+
+      // Copy previous overrides, excluding any that map a different key to this action
+      for (const [k, v] of Object.entries(prev)) {
+        const actions = Array.isArray(v) ? v : [v]
+        if (k === key || !actions.includes(action)) {
+          result[k] = v
+        }
+      }
+
       // Add the new binding
-      return { ...cleaned, [key]: action }
+      result[key] = action
+      return result
     })
-  }, [])
+  }, [defaults])
 
   const addBinding = useCallback((action: string, key: string) => {
     setOverrides((prev) => {
