@@ -182,9 +182,18 @@ export function isSequence(hotkeyStr: string): boolean {
 }
 
 /**
- * Parse a single combination string (e.g., "ctrl+k") to KeyCombination
+ * Parse a single combination string (e.g., "ctrl+k") to KeyCombination.
+ * Supports uppercase letters as shorthand for shift+letter (e.g., "J" → shift+j)
  */
 function parseSingleCombination(str: string): KeyCombination {
+  // Single uppercase letter (A-Z) is shorthand for shift+<lowercase>
+  if (str.length === 1 && /^[A-Z]$/.test(str)) {
+    return {
+      key: str.toLowerCase(),
+      modifiers: { ctrl: false, alt: false, shift: true, meta: false },
+    }
+  }
+
   const parts = str.toLowerCase().split('+')
   const key = parts[parts.length - 1]
 
@@ -429,6 +438,13 @@ export function getActionBindings(keymap: Record<string, string | string[]>): Ma
       const existing = actionToKeys.get(action) ?? []
       actionToKeys.set(action, [...existing, key])
     }
+  }
+
+  // Debug logging for stack:none and region:nyc
+  const stackNone = actionToKeys.get('stack:none')
+  const regionNyc = actionToKeys.get('region:nyc')
+  if (stackNone || regionNyc) {
+    console.log('getActionBindings:', { 'stack:none': stackNone, 'region:nyc': regionNyc })
   }
 
   return actionToKeys

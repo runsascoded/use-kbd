@@ -98,55 +98,47 @@ export function KeyboardShortcutsProvider({
 
   // Merge defaults with overrides
   const keymap = useMemo(() => {
-    // Track removed keys (marked with empty string in overrides)
-    const removedKeys = new Set<string>()
+    // Build effective key -> action map
+    // Overrides REPLACE defaults for that key (not add to them)
+    const effectiveMap: Record<string, string | string[]> = {}
+
+    // Start with defaults
+    for (const [key, action] of Object.entries(defaults)) {
+      effectiveMap[key] = action
+    }
+
+    // Apply overrides - they replace defaults for that key
     for (const [key, action] of Object.entries(overrides)) {
       if (action === '') {
-        removedKeys.add(key)
+        // Remove the key entirely
+        delete effectiveMap[key]
+      } else if (action !== undefined) {
+        // Replace the default with the override
+        effectiveMap[key] = action
       }
     }
 
-    // Build action -> keys map from defaults (excluding removed)
-    const actionToKeys: Record<string, string[]> = {}
-    for (const [key, action] of Object.entries(defaults)) {
-      if (removedKeys.has(key)) continue
-      const actions = Array.isArray(action) ? action : [action]
-      for (const a of actions) {
-        if (!actionToKeys[a]) actionToKeys[a] = []
-        actionToKeys[a].push(key)
-      }
-    }
+    // Log all relevant keys
+    const relevantKeys = ['n', 'N', '-']
+    const relevantDefaults = Object.fromEntries(Object.entries(defaults).filter(([k]) => relevantKeys.includes(k)))
+    const relevantEffective = Object.fromEntries(Object.entries(effectiveMap).filter(([k]) => relevantKeys.includes(k)))
+    console.log('keymap computed:', {
+      defaults: relevantDefaults,
+      overrides,
+      effective: relevantEffective,
+    })
 
-    // Apply overrides (key -> action), excluding removed markers
-    for (const [key, action] of Object.entries(overrides)) {
-      if (action === undefined || action === '') continue
-      const actions = Array.isArray(action) ? action : [action]
-      for (const a of actions) {
-        if (!actionToKeys[a]) actionToKeys[a] = []
-        if (!actionToKeys[a].includes(key)) {
-          actionToKeys[a].push(key)
-        }
-      }
-    }
-
-    // Rebuild key -> action map
-    const result: HotkeyMap = {}
-    for (const [action, keys] of Object.entries(actionToKeys)) {
-      for (const key of keys) {
-        if (result[key]) {
-          const existing = result[key]
-          result[key] = Array.isArray(existing) ? [...existing, action] : [existing, action]
-        } else {
-          result[key] = action
-        }
-      }
-    }
-
-    return result
+    return effectiveMap as HotkeyMap
   }, [defaults, overrides])
 
   // Compute conflicts from current keymap
-  const conflicts = useMemo(() => findConflicts(keymap), [keymap])
+  const conflicts = useMemo(() => {
+    const c = findConflicts(keymap)
+    if (c.size > 0) {
+      console.log('conflicts found:', Object.fromEntries(c))
+    }
+    return c
+  }, [keymap])
   const hasConflictsValue = conflicts.size > 0
 
   // Action bindings map
@@ -171,28 +163,55 @@ export function KeyboardShortcutsProvider({
   )
 
   const setBinding = useCallback((action: string, key: string) => {
+    console.log('setBinding called:', { action, key })
     setOverrides((prev) => {
-      // Find default keys that map to this action and mark them as removed
+      console.log('setBinding prev:', prev)
       const result: Partial<HotkeyMap> = {}
 
-      // Mark default keys for this action as removed (unless it's the new key)
+      // Handle default keys that map to this action
       for (const [k, v] of Object.entries(defaults)) {
-        const actions = Array.isArray(v) ? v : [v]
-        if (actions.includes(action) && k !== key) {
-          result[k] = '' // Mark as removed
+        if (k === key) continue // Skip if it's the new key
+        const defaultActions = Array.isArray(v) ? v : [v]
+        if (defaultActions.includes(action)) {
+          // This default key maps to our action - need to remove this specific binding
+          const remaining = defaultActions.filter(a => a !== action)
+          if (remaining.length === 0) {
+            result[k] = '' // Mark as fully removed
+          } else {
+            // Keep the remaining actions - override replaces defaults for this key
+            result[k] = remaining.length === 1 ? remaining[0] : remaining
+          }
         }
       }
 
-      // Copy previous overrides, excluding any that map a different key to this action
+      // Copy previous overrides, handling keys that map to this action
       for (const [k, v] of Object.entries(prev)) {
-        const actions = Array.isArray(v) ? v : [v]
-        if (k === key || !actions.includes(action)) {
+        if (k === key) continue // Skip if it's the new key
+        if (v === '' || v === undefined) {
+          result[k] = v
+          continue
+        }
+        const overrideActions = Array.isArray(v) ? v : [v]
+        if (overrideActions.includes(action)) {
+          // Remove this action from the override
+          const remaining = overrideActions.filter(a => a !== action)
+          if (remaining.length === 0) {
+            // No actions left - check if it was overriding defaults
+            if (k in defaults) {
+              result[k] = '' // Mark default as removed
+            }
+            // Otherwise, just don't include this override
+          } else {
+            result[k] = remaining.length === 1 ? remaining[0] : remaining
+          }
+        } else {
           result[k] = v
         }
       }
 
       // Add the new binding
       result[key] = action
+      console.log('setBinding result:', result)
       return result
     })
   }, [defaults])
