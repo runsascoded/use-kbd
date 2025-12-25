@@ -45,6 +45,8 @@ export function useRecordHotkey(options: RecordHotkeyOptions = {}): RecordHotkey
   const {
     onCapture: onCaptureProp,
     onCancel: onCancelProp,
+    onTab: onTabProp,
+    onShiftTab: onShiftTabProp,
     preventDefault = true,
     sequenceTimeout = 1000,
   } = options
@@ -52,6 +54,8 @@ export function useRecordHotkey(options: RecordHotkeyOptions = {}): RecordHotkey
   // Stabilize callbacks to avoid effect re-runs
   const onCapture = useEventCallback(onCaptureProp)
   const onCancel = useEventCallback(onCancelProp)
+  const onTab = useEventCallback(onTabProp)
+  const onShiftTab = useEventCallback(onShiftTabProp)
 
   const [isRecording, setIsRecording] = useState(false)
   const [sequence, setSequence] = useState<HotkeySequence | null>(null)
@@ -63,6 +67,10 @@ export function useRecordHotkey(options: RecordHotkeyOptions = {}): RecordHotkey
   const hasNonModifierRef = useRef(false)
   const currentComboRef = useRef<KeyCombination | null>(null)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Keep a ref in sync with pendingKeys for synchronous access in event handlers
+  // (React 18 batching can delay useState updates)
+  const pendingKeysRef = useRef<HotkeySequence>([])
 
   const clearTimeout_ = useCallback(() => {
     if (timeoutRef.current) {
@@ -83,6 +91,7 @@ export function useRecordHotkey(options: RecordHotkeyOptions = {}): RecordHotkey
     currentComboRef.current = null
 
     setSequence(seq)
+    pendingKeysRef.current = []
     setPendingKeys([])
     setIsRecording(false)
     setActiveKeys(null)
@@ -93,6 +102,7 @@ export function useRecordHotkey(options: RecordHotkeyOptions = {}): RecordHotkey
   const cancel = useCallback(() => {
     clearTimeout_()
     setIsRecording(false)
+    pendingKeysRef.current = []
     setPendingKeys([])
     setActiveKeys(null)
     pressedKeysRef.current.clear()
@@ -101,10 +111,22 @@ export function useRecordHotkey(options: RecordHotkeyOptions = {}): RecordHotkey
     onCancel?.()
   }, [clearTimeout_, onCancel])
 
+  // Commit pending keys immediately (if any), otherwise cancel
+  const commit = useCallback(() => {
+    // Read from ref for synchronous access
+    const current = pendingKeysRef.current
+    if (current.length > 0) {
+      submit(current)
+    } else {
+      cancel()
+    }
+  }, [submit, cancel])
+
   const startRecording = useCallback(() => {
     clearTimeout_()
     setIsRecording(true)
     setSequence(null)
+    pendingKeysRef.current = []
     setPendingKeys([])
     setActiveKeys(null)
     pressedKeysRef.current.clear()
@@ -141,6 +163,68 @@ export function useRecordHotkey(options: RecordHotkeyOptions = {}): RecordHotkey
       // Escape cancels
       if (e.key === 'Escape') {
         cancel()
+        return
+      }
+
+      // Tab advances to next field (if handler provided)
+      if (e.key === 'Tab' && !e.shiftKey && onTab) {
+        // Clear timeout first to prevent race condition
+        clearTimeout_()
+
+        // Read pending keys from ref (synchronous, unaffected by React batching)
+        // Also include any key currently being held (Tab might fire before keyup)
+        const pendingSeq = [...pendingKeysRef.current]
+        if (hasNonModifierRef.current && currentComboRef.current) {
+          pendingSeq.push(currentComboRef.current)
+        }
+
+        // Clear all state
+        pendingKeysRef.current = []
+        setPendingKeys([])
+        pressedKeysRef.current.clear()
+        hasNonModifierRef.current = false
+        currentComboRef.current = null
+        setActiveKeys(null)
+
+        // Call onCapture BEFORE onTab (so callback sees current action, not next)
+        if (pendingSeq.length > 0) {
+          const display = formatCombination(pendingSeq)
+          onCapture?.(pendingSeq, display)
+        }
+
+        // Now move to next action
+        onTab()
+        return
+      }
+
+      // Shift+Tab goes to previous field (if handler provided)
+      if (e.key === 'Tab' && e.shiftKey && onShiftTab) {
+        // Clear timeout first to prevent race condition
+        clearTimeout_()
+
+        // Read pending keys from ref (synchronous, unaffected by React batching)
+        // Also include any key currently being held (Shift+Tab might fire before keyup)
+        const pendingSeq = [...pendingKeysRef.current]
+        if (hasNonModifierRef.current && currentComboRef.current) {
+          pendingSeq.push(currentComboRef.current)
+        }
+
+        // Clear all state
+        pendingKeysRef.current = []
+        setPendingKeys([])
+        pressedKeysRef.current.clear()
+        hasNonModifierRef.current = false
+        currentComboRef.current = null
+        setActiveKeys(null)
+
+        // Call onCapture BEFORE onShiftTab (so callback sees current action, not prev)
+        if (pendingSeq.length > 0) {
+          const display = formatCombination(pendingSeq)
+          onCapture?.(pendingSeq, display)
+        }
+
+        // Now move to previous action
+        onShiftTab()
         return
       }
 
@@ -203,18 +287,16 @@ export function useRecordHotkey(options: RecordHotkeyOptions = {}): RecordHotkey
         currentComboRef.current = null
         setActiveKeys(null)
 
-        // Add to pending sequence
-        setPendingKeys(current => {
-          const newSequence = [...current, combo]
+        // Add to pending sequence (update both ref and state)
+        const newSequence = [...pendingKeysRef.current, combo]
+        pendingKeysRef.current = newSequence
+        setPendingKeys(newSequence)
 
-          // Set timeout to submit
-          clearTimeout_()
-          timeoutRef.current = setTimeout(() => {
-            submit(newSequence)
-          }, sequenceTimeout)
-
-          return newSequence
-        })
+        // Set timeout to submit
+        clearTimeout_()
+        timeoutRef.current = setTimeout(() => {
+          submit(newSequence)
+        }, sequenceTimeout)
       }
     }
 
@@ -227,7 +309,7 @@ export function useRecordHotkey(options: RecordHotkeyOptions = {}): RecordHotkey
       window.removeEventListener('keyup', handleKeyUp, true)
       clearTimeout_()
     }
-  }, [isRecording, preventDefault, sequenceTimeout, clearTimeout_, submit, cancel])
+  }, [isRecording, preventDefault, sequenceTimeout, clearTimeout_, submit, cancel, onCapture, onTab, onShiftTab])
 
   const display = sequence ? formatCombination(sequence) : null
 
@@ -238,6 +320,7 @@ export function useRecordHotkey(options: RecordHotkeyOptions = {}): RecordHotkey
     isRecording,
     startRecording,
     cancel,
+    commit,
     sequence,
     display,
     pendingKeys,

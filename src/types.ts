@@ -42,6 +42,8 @@ export interface RecordHotkeyResult {
   startRecording: () => () => void
   /** Cancel recording */
   cancel: () => void
+  /** Commit pending keys immediately (if any), otherwise cancel */
+  commit: () => void
   /** The captured sequence (null until complete) */
   sequence: HotkeySequence | null
   /** Display strings for the sequence */
@@ -64,6 +66,10 @@ export interface RecordHotkeyOptions {
   onCapture?: (sequence: HotkeySequence, display: KeyCombinationDisplay) => void
   /** Called when recording is cancelled */
   onCancel?: () => void
+  /** Called when Tab is pressed during recording (for advancing to next field) */
+  onTab?: () => void
+  /** Called when Shift+Tab is pressed during recording (for going to previous field) */
+  onShiftTab?: () => void
   /** Prevent default on captured keys (default: true) */
   preventDefault?: boolean
   /** Timeout in ms before sequence is submitted (default: 1000) */
