@@ -1,6 +1,6 @@
 {
   "name": "@rdub/use-hotkeys",
-  "version": "0.1.0-dist.0085e04",
+  "version": "0.2.1-dist.5ffe0cc",
   "description": "Keyboard shortcuts with runtime-editable keybindings and capture UI",
   "type": "module",
   "main": "./index.cjs",

@@ -143,6 +143,12 @@ function isSequence(hotkeyStr) {
   return hotkeyStr.includes(" ");
 }
 function parseSingleCombination(str) {
+  if (str.length === 1 && /^[A-Z]$/.test(str)) {
+    return {
+      key: str.toLowerCase(),
+      modifiers: { ctrl: false, alt: false, shift: true, meta: false }
+    };
+  }
   const parts = str.toLowerCase().split("+");
   const key = parts[parts.length - 1];
   return {
@@ -267,6 +273,11 @@ function getActionBindings(keymap) {
       const existing = actionToKeys.get(action) ?? [];
       actionToKeys.set(action, [...existing, key]);
     }
+  }
+  const stackNone = actionToKeys.get("stack:none");
+  const regionNyc = actionToKeys.get("region:nyc");
+  if (stackNone || regionNyc) {
+    console.log("getActionBindings:", { "stack:none": stackNone, "region:nyc": regionNyc });
   }
   return actionToKeys;
 }
@@ -627,43 +638,18 @@ function KeyboardShortcutsProvider({
     }
   }, [storageKey, overrides]);
   const keymap = useMemo(() => {
-    const removedKeys = /* @__PURE__ */ new Set();
+    const effectiveMap = {};
+    for (const [key, action] of Object.entries(defaults)) {
+      effectiveMap[key] = action;
+    }
     for (const [key, action] of Object.entries(overrides)) {
       if (action === "") {
-        removedKeys.add(key);
+        delete effectiveMap[key];
+      } else if (action !== void 0) {
+        effectiveMap[key] = action;
       }
     }
-    const actionToKeys = {};
-    for (const [key, action] of Object.entries(defaults)) {
-      if (removedKeys.has(key)) continue;
-      const actions = Array.isArray(action) ? action : [action];
-      for (const a of actions) {
-        if (!actionToKeys[a]) actionToKeys[a] = [];
-        actionToKeys[a].push(key);
-      }
-    }
-    for (const [key, action] of Object.entries(overrides)) {
-      if (action === void 0 || action === "") continue;
-      const actions = Array.isArray(action) ? action : [action];
-      for (const a of actions) {
-        if (!actionToKeys[a]) actionToKeys[a] = [];
-        if (!actionToKeys[a].includes(key)) {
-          actionToKeys[a].push(key);
-        }
-      }
-    }
-    const result = {};
-    for (const [action, keys] of Object.entries(actionToKeys)) {
-      for (const key of keys) {
-        if (result[key]) {
-          const existing = result[key];
-          result[key] = Array.isArray(existing) ? [...existing, action] : [existing, action];
-        } else {
-          result[key] = action;
-        }
-      }
-    }
-    return result;
+    return effectiveMap;
   }, [defaults, overrides]);
   const conflicts = useMemo(() => findConflicts(keymap), [keymap]);
   const hasConflictsValue = conflicts.size > 0;
@@ -680,23 +666,84 @@ function KeyboardShortcutsProvider({
     (actionId) => actionBindings.get(actionId) ?? [],
     [actionBindings]
   );
+  const isDefaultBinding = useCallback(
+    (key, action) => {
+      const defaultAction = defaults[key];
+      if (!defaultAction) return false;
+      const defaultActions = Array.isArray(defaultAction) ? defaultAction : [defaultAction];
+      return defaultActions.includes(action);
+    },
+    [defaults]
+  );
   const setBinding = useCallback((action, key) => {
     setOverrides((prev) => {
       const result = {};
+      const valuesEqual = (a, b) => {
+        if (a === void 0 && b === void 0) return true;
+        if (a === void 0 || b === void 0) return false;
+        const arrA = Array.isArray(a) ? a : [a];
+        const arrB = Array.isArray(b) ? b : [b];
+        if (arrA.length !== arrB.length) return false;
+        return arrA.every((v, i) => v === arrB[i]);
+      };
       for (const [k, v] of Object.entries(defaults)) {
-        const actions = Array.isArray(v) ? v : [v];
-        if (actions.includes(action) && k !== key) {
-          result[k] = "";
+        if (k === key) continue;
+        const defaultActions = Array.isArray(v) ? v : [v];
+        if (defaultActions.includes(action)) {
+          const remaining = defaultActions.filter((a) => a !== action);
+          if (remaining.length === 0) {
+            result[k] = "";
+          } else {
+            result[k] = remaining.length === 1 ? remaining[0] : remaining;
+          }
         }
       }
       for (const [k, v] of Object.entries(prev)) {
-        const actions = Array.isArray(v) ? v : [v];
-        if (k === key || !actions.includes(action)) {
+        if (k === key) continue;
+        if (v === "" || v === void 0) {
+          result[k] = v;
+          continue;
+        }
+        const overrideActions = Array.isArray(v) ? v : [v];
+        if (overrideActions.includes(action)) {
+          const remaining = overrideActions.filter((a) => a !== action);
+          if (remaining.length === 0) {
+            if (k in defaults) {
+              result[k] = "";
+            }
+          } else {
+            result[k] = remaining.length === 1 ? remaining[0] : remaining;
+          }
+        } else {
           result[k] = v;
         }
       }
-      result[key] = action;
-      return result;
+      const existingFromOverrides = prev[key];
+      const existingFromDefaults = defaults[key];
+      let currentActions = [];
+      if (existingFromOverrides !== void 0) {
+        if (existingFromOverrides !== "") {
+          currentActions = Array.isArray(existingFromOverrides) ? [...existingFromOverrides] : [existingFromOverrides];
+        }
+      } else if (existingFromDefaults !== void 0) {
+        currentActions = Array.isArray(existingFromDefaults) ? [...existingFromDefaults] : [existingFromDefaults];
+      }
+      if (!currentActions.includes(action)) {
+        currentActions.push(action);
+      }
+      result[key] = currentActions.length === 1 ? currentActions[0] : currentActions;
+      const canonical = {};
+      for (const [k, v] of Object.entries(result)) {
+        const defaultVal = defaults[k];
+        if (v === "") {
+          if (k in defaults) {
+            canonical[k] = v;
+          }
+        } else if (!valuesEqual(v, defaultVal)) {
+          canonical[k] = v;
+        }
+      }
+      return canonical;
     });
   }, [defaults]);
   const addBinding = useCallback((action, key) => {
@@ -715,6 +762,36 @@ function KeyboardShortcutsProvider({
       }
     });
   }, [defaults]);
+  const removeBindingForAction = useCallback((action, key) => {
+    setOverrides((prev) => {
+      const overrideValue = prev[key];
+      const defaultValue = defaults[key];
+      let currentActions;
+      if (overrideValue !== void 0) {
+        if (overrideValue === "") {
+          return prev;
+        }
+        currentActions = Array.isArray(overrideValue) ? [...overrideValue] : [overrideValue];
+      } else if (defaultValue !== void 0) {
+        currentActions = Array.isArray(defaultValue) ? [...defaultValue] : [defaultValue];
+      } else {
+        return prev;
+      }
+      const remaining = currentActions.filter((a) => a !== action);
+      if (remaining.length === 0) {
+        if (key in defaults) {
+          return { ...prev, [key]: "" };
+        } else {
+          const { [key]: _removed, ...rest } = prev;
+          return rest;
+        }
+      } else if (remaining.length === currentActions.length) {
+        return prev;
+      } else {
+        return { ...prev, [key]: remaining.length === 1 ? remaining[0] : remaining };
+      }
+    });
+  }, [defaults]);
   const setKeymap = useCallback((newOverrides) => {
     setOverrides((prev) => ({ ...prev, ...newOverrides }));
   }, []);
@@ -729,6 +806,7 @@ function KeyboardShortcutsProvider({
       setBinding,
       addBinding,
       removeBinding,
+      removeBindingForAction,
       setKeymap,
       reset,
       overrides,
@@ -737,9 +815,10 @@ function KeyboardShortcutsProvider({
       disableConflicts,
       searchActions: searchActionsInContext,
       getCompletions,
-      getBindingsForAction
+      getBindingsForAction,
+      isDefaultBinding
     }),
-    [defaults, keymap, actionsProp, setBinding, addBinding, removeBinding, setKeymap, reset, overrides, conflicts, hasConflictsValue, disableConflicts, searchActionsInContext, getCompletions, getBindingsForAction]
+    [defaults, keymap, actionsProp, setBinding, addBinding, removeBinding, removeBindingForAction, setKeymap, reset, overrides, conflicts, hasConflictsValue, disableConflicts, searchActionsInContext, getCompletions, getBindingsForAction, isDefaultBinding]
   );
   return /* @__PURE__ */ jsx(KeyboardShortcutsContext.Provider, { value, children });
 }
@@ -775,11 +854,16 @@ function useRecordHotkey(options = {}) {
   const {
     onCapture: onCaptureProp,
     onCancel: onCancelProp,
+    onTab: onTabProp,
+    onShiftTab: onShiftTabProp,
     preventDefault = true,
-    sequenceTimeout = 1e3
+    sequenceTimeout = 1e3,
+    pauseTimeout = false
   } = options;
   const onCapture = useEventCallback(onCaptureProp);
   const onCancel = useEventCallback(onCancelProp);
+  const onTab = useEventCallback(onTabProp);
+  const onShiftTab = useEventCallback(onShiftTabProp);
   const [isRecording, setIsRecording] = useState(false);
   const [sequence, setSequence] = useState(null);
   const [pendingKeys, setPendingKeys] = useState([]);
@@ -788,6 +872,9 @@ function useRecordHotkey(options = {}) {
   const hasNonModifierRef = useRef(false);
   const currentComboRef = useRef(null);
   const timeoutRef = useRef(null);
+  const pauseTimeoutRef = useRef(pauseTimeout);
+  pauseTimeoutRef.current = pauseTimeout;
+  const pendingKeysRef = useRef([]);
   const clearTimeout_ = useCallback(() => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
@@ -802,6 +889,7 @@ function useRecordHotkey(options = {}) {
     hasNonModifierRef.current = false;
     currentComboRef.current = null;
     setSequence(seq);
+    pendingKeysRef.current = [];
     setPendingKeys([]);
     setIsRecording(false);
     setActiveKeys(null);
@@ -810,6 +898,7 @@ function useRecordHotkey(options = {}) {
   const cancel = useCallback(() => {
     clearTimeout_();
     setIsRecording(false);
+    pendingKeysRef.current = [];
     setPendingKeys([]);
     setActiveKeys(null);
     pressedKeysRef.current.clear();
@@ -817,10 +906,19 @@ function useRecordHotkey(options = {}) {
     currentComboRef.current = null;
     onCancel?.();
   }, [clearTimeout_, onCancel]);
+  const commit = useCallback(() => {
+    const current = pendingKeysRef.current;
+    if (current.length > 0) {
+      submit(current);
+    } else {
+      cancel();
+    }
+  }, [submit, cancel]);
   const startRecording = useCallback(() => {
     clearTimeout_();
     setIsRecording(true);
     setSequence(null);
+    pendingKeysRef.current = [];
     setPendingKeys([]);
     setActiveKeys(null);
     pressedKeysRef.current.clear();
@@ -828,6 +926,19 @@ function useRecordHotkey(options = {}) {
     currentComboRef.current = null;
     return cancel;
   }, [cancel, clearTimeout_]);
+  useEffect(() => {
+    if (pauseTimeout) {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    } else if (isRecording && pendingKeysRef.current.length > 0 && !timeoutRef.current) {
+      const currentSequence = pendingKeysRef.current;
+      timeoutRef.current = setTimeout(() => {
+        submit(currentSequence);
+      }, sequenceTimeout);
+    }
+  }, [pauseTimeout, isRecording, sequenceTimeout, submit]);
   useEffect(() => {
     if (!isRecording) return;
     const handleKeyDown = (e) => {
@@ -847,6 +958,44 @@ function useRecordHotkey(options = {}) {
       }
       if (e.key === "Escape") {
         cancel();
+        return;
+      }
+      if (e.key === "Tab" && !e.shiftKey && onTab) {
+        clearTimeout_();
+        const pendingSeq = [...pendingKeysRef.current];
+        if (hasNonModifierRef.current && currentComboRef.current) {
+          pendingSeq.push(currentComboRef.current);
+        }
+        pendingKeysRef.current = [];
+        setPendingKeys([]);
+        pressedKeysRef.current.clear();
+        hasNonModifierRef.current = false;
+        currentComboRef.current = null;
+        setActiveKeys(null);
+        if (pendingSeq.length > 0) {
+          const display2 = formatCombination(pendingSeq);
+          onCapture?.(pendingSeq, display2);
+        }
+        onTab();
+        return;
+      }
+      if (e.key === "Tab" && e.shiftKey && onShiftTab) {
+        clearTimeout_();
+        const pendingSeq = [...pendingKeysRef.current];
+        if (hasNonModifierRef.current && currentComboRef.current) {
+          pendingSeq.push(currentComboRef.current);
+        }
+        pendingKeysRef.current = [];
+        setPendingKeys([]);
+        pressedKeysRef.current.clear();
+        hasNonModifierRef.current = false;
+        currentComboRef.current = null;
+        setActiveKeys(null);
+        if (pendingSeq.length > 0) {
+          const display2 = formatCombination(pendingSeq);
+          onCapture?.(pendingSeq, display2);
+        }
+        onShiftTab();
         return;
       }
       const key = e.key;
@@ -890,14 +1039,15 @@ function useRecordHotkey(options = {}) {
         hasNonModifierRef.current = false;
         currentComboRef.current = null;
         setActiveKeys(null);
-        setPendingKeys((current) => {
-          const newSequence = [...current, combo];
-          clearTimeout_();
+        const newSequence = [...pendingKeysRef.current, combo];
+        pendingKeysRef.current = newSequence;
+        setPendingKeys(newSequence);
+        clearTimeout_();
+        if (!pauseTimeoutRef.current) {
           timeoutRef.current = setTimeout(() => {
             submit(newSequence);
           }, sequenceTimeout);
-          return newSequence;
-        });
+        }
       }
     };
     window.addEventListener("keydown", handleKeyDown, true);
@@ -907,13 +1057,14 @@ function useRecordHotkey(options = {}) {
       window.removeEventListener("keyup", handleKeyUp, true);
       clearTimeout_();
     };
-  }, [isRecording, preventDefault, sequenceTimeout, clearTimeout_, submit, cancel]);
+  }, [isRecording, preventDefault, sequenceTimeout, clearTimeout_, submit, cancel, onCapture, onTab, onShiftTab]);
   const display = sequence ? formatCombination(sequence) : null;
   const combination = sequence && sequence.length > 0 ? sequence[0] : null;
   return {
     isRecording,
     startRecording,
     cancel,
+    commit,
     sequence,
     display,
     pendingKeys,
@@ -1497,7 +1648,111 @@ function ShortcutsModal({
     }
   );
 }
+var baseStyle = {
+  width: "1.2em",
+  height: "1.2em",
+  marginRight: "2px",
+  verticalAlign: "middle"
+};
+var wideStyle = {
+  ...baseStyle,
+  width: "1.4em"
+};
+function CommandIcon({ className, style }) {
+  return /* @__PURE__ */ jsx(
+    "svg",
+    {
+      className,
+      style: { ...baseStyle, ...style },
+      viewBox: "0 0 24 24",
+      fill: "currentColor",
+      children: /* @__PURE__ */ jsx("path", { d: "M6 4a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h2v4H6a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2v-2h4v2a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2v-2a2 2 0 0 0-2-2h-2v-4h2a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v2h-4V6a2 2 0 0 0-2-2H6zm4 6h4v4h-4v-4z" })
+    }
+  );
+}
+function CtrlIcon({ className, style }) {
+  return /* @__PURE__ */ jsx(
+    "svg",
+    {
+      className,
+      style: { ...baseStyle, ...style },
+      viewBox: "0 0 24 24",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: "3",
+      strokeLinecap: "round",
+      strokeLinejoin: "round",
+      children: /* @__PURE__ */ jsx("path", { d: "M6 15l6-6 6 6" })
+    }
+  );
+}
+function ShiftIcon({ className, style }) {
+  return /* @__PURE__ */ jsx(
+    "svg",
+    {
+      className,
+      style: { ...wideStyle, ...style },
+      viewBox: "0 0 28 24",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: "2",
+      strokeLinejoin: "round",
+      children: /* @__PURE__ */ jsx("path", { d: "M14 3L3 14h6v7h10v-7h6L14 3z" })
+    }
+  );
+}
+function OptIcon({ className, style }) {
+  return /* @__PURE__ */ jsx(
+    "svg",
+    {
+      className,
+      style: { ...baseStyle, ...style },
+      viewBox: "0 0 24 24",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: "2.5",
+      strokeLinecap: "round",
+      strokeLinejoin: "round",
+      children: /* @__PURE__ */ jsx("path", { d: "M4 6h6l8 12h6M14 6h6" })
+    }
+  );
+}
+function AltIcon({ className, style }) {
+  return /* @__PURE__ */ jsx(
+    "svg",
+    {
+      className,
+      style: { ...baseStyle, ...style },
+      viewBox: "0 0 24 24",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: "2.5",
+      strokeLinecap: "round",
+      strokeLinejoin: "round",
+      children: /* @__PURE__ */ jsx("path", { d: "M4 18h8M12 18l4-6M12 18l4 0M16 12l4-6h-8" })
+    }
+  );
+}
+var isMac2 = typeof navigator !== "undefined" && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
+function getModifierIcon(modifier) {
+  switch (modifier) {
+    case "meta":
+      return CommandIcon;
+    case "ctrl":
+      return CtrlIcon;
+    case "shift":
+      return ShiftIcon;
+    case "opt":
+      return OptIcon;
+    case "alt":
+      return isMac2 ? OptIcon : AltIcon;
+  }
+}
+function ModifierIcon({ modifier, ...props }) {
+  const Icon = getModifierIcon(modifier);
+  return /* @__PURE__ */ jsx(Icon, { ...props });
+}
 
-export { KeybindingEditor, KeyboardShortcutsProvider, ShortcutsModal, findConflicts, formatCombination, formatKeyForDisplay, fuzzyMatch, getActionBindings, getConflictsArray, getSequenceCompletions, hasConflicts, isMac, isModifierKey, isSequence, normalizeKey, parseCombinationId, parseHotkeyString, searchActions, useEditableHotkeys, useHotkeys, useKeyboardShortcutsContext, useOmnibar, useRecordHotkey, useRegisteredHotkeys };
+export { AltIcon, CommandIcon, CtrlIcon, KeybindingEditor, KeyboardShortcutsProvider, ModifierIcon, OptIcon, ShiftIcon, ShortcutsModal, findConflicts, formatCombination, formatKeyForDisplay, fuzzyMatch, getActionBindings, getConflictsArray, getModifierIcon, getSequenceCompletions, hasConflicts, isMac, isModifierKey, isSequence, normalizeKey, parseCombinationId, parseHotkeyString, searchActions, useEditableHotkeys, useHotkeys, useKeyboardShortcutsContext, useOmnibar, useRecordHotkey, useRegisteredHotkeys };
 //# sourceMappingURL=index.js.map
 //# sourceMappingURL=index.js.map

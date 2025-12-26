@@ -42,6 +42,8 @@ interface RecordHotkeyResult {
     startRecording: () => () => void;
     /** Cancel recording */
     cancel: () => void;
+    /** Commit pending keys immediately (if any), otherwise cancel */
+    commit: () => void;
     /** The captured sequence (null until complete) */
     sequence: HotkeySequence | null;
     /** Display strings for the sequence */
@@ -63,10 +65,16 @@ interface RecordHotkeyOptions {
     onCapture?: (sequence: HotkeySequence, display: KeyCombinationDisplay) => void;
     /** Called when recording is cancelled */
     onCancel?: () => void;
+    /** Called when Tab is pressed during recording (for advancing to next field) */
+    onTab?: () => void;
+    /** Called when Shift+Tab is pressed during recording (for going to previous field) */
+    onShiftTab?: () => void;
     /** Prevent default on captured keys (default: true) */
     preventDefault?: boolean;
     /** Timeout in ms before sequence is submitted (default: 1000) */
     sequenceTimeout?: number;
+    /** When true, pause the auto-submit timeout (useful for conflict warnings). Default: false */
+    pauseTimeout?: boolean;
 }
 /**
  * Definition of an action that can be triggered by hotkeys or omnibar
@@ -447,8 +455,10 @@ interface KeyboardShortcutsContextValue {
     setBinding: (action: string, key: string) => void;
     /** Add a new key binding for an action (keeps existing bindings) */
     addBinding: (action: string, key: string) => void;
-    /** Remove a key binding */
+    /** Remove a key binding entirely */
     removeBinding: (key: string) => void;
+    /** Remove a specific action from a key (for resolving conflicts) */
+    removeBindingForAction: (action: string, key: string) => void;
     /** Update multiple keybindings at once */
     setKeymap: (overrides: Partial<HotkeyMap>) => void;
     /** Reset all overrides to defaults */
@@ -467,6 +477,8 @@ interface KeyboardShortcutsContextValue {
     getCompletions: (pendingKeys: HotkeySequence) => SequenceCompletion[];
     /** Get all bindings for an action */
     getBindingsForAction: (actionId: string) => string[];
+    /** Check if a key binding is a default (not user-added) */
+    isDefaultBinding: (key: string, action: string) => boolean;
 }
 interface KeyboardShortcutsProviderProps {
     /** Default hotkey map */
@@ -553,6 +565,28 @@ declare function useRegisteredHotkeys(handlers: HandlerMap, options?: Omit<UseHo
  * ```
  */
 declare function useRecordHotkey(options?: RecordHotkeyOptions): RecordHotkeyResult;
+
+interface ModifierIconProps {
+    className?: string;
+    style?: React$1.CSSProperties;
+}
+/** Command/Meta key icon (⌘) */
+declare function CommandIcon({ className, style }: ModifierIconProps): react_jsx_runtime.JSX.Element;
+/** Control key icon (^) - chevron/caret */
+declare function CtrlIcon({ className, style }: ModifierIconProps): react_jsx_runtime.JSX.Element;
+/** Shift key icon (⇧) - hollow arrow */
+declare function ShiftIcon({ className, style }: ModifierIconProps): react_jsx_runtime.JSX.Element;
+/** Option key icon (⌥) - macOS style */
+declare function OptIcon({ className, style }: ModifierIconProps): react_jsx_runtime.JSX.Element;
+/** Alt key icon (⎇) - Windows style, though "Alt" text is more common on Windows */
+declare function AltIcon({ className, style }: ModifierIconProps): react_jsx_runtime.JSX.Element;
+type ModifierType = 'meta' | 'ctrl' | 'shift' | 'alt' | 'opt';
+/** Get the appropriate icon component for a modifier key */
+declare function getModifierIcon(modifier: ModifierType): React$1.ComponentType<ModifierIconProps>;
+/** Render a modifier icon by name */
+declare function ModifierIcon({ modifier, ...props }: ModifierIconProps & {
+    modifier: ModifierType;
+}): react_jsx_runtime.JSX.Element;
 
 /**
  * Detect if running on macOS
@@ -671,4 +705,4 @@ declare function fuzzyMatch(pattern: string, text: string): FuzzyMatchResult;
  */
 declare function searchActions(query: string, actions: ActionRegistry, keymap?: Record<string, string | string[]>): ActionSearchResult[];
 
-export { type ActionDefinition, type ActionRegistry, type ActionSearchResult, type BindingInfo, type FuzzyMatchResult, type HandlerMap, type HotkeyMap, type HotkeySequence, type KeyCombination, type KeyCombinationDisplay, type KeyConflict, KeybindingEditor, type KeybindingEditorProps, type KeybindingEditorRenderProps, type KeyboardShortcutsContextValue, KeyboardShortcutsProvider, type KeyboardShortcutsProviderProps, type RecordHotkeyOptions, type RecordHotkeyResult, type SequenceCompletion, type ShortcutGroup, ShortcutsModal, type ShortcutsModalProps, type UseEditableHotkeysOptions, type UseEditableHotkeysResult, type UseHotkeysOptions, type UseHotkeysResult, type UseOmnibarOptions, type UseOmnibarResult, findConflicts, formatCombination, formatKeyForDisplay, fuzzyMatch, getActionBindings, getConflictsArray, getSequenceCompletions, hasConflicts, isMac, isModifierKey, isSequence, normalizeKey, parseCombinationId, parseHotkeyString, searchActions, useEditableHotkeys, useHotkeys, useKeyboardShortcutsContext, useOmnibar, useRecordHotkey, useRegisteredHotkeys };
+export { type ActionDefinition, type ActionRegistry, type ActionSearchResult, AltIcon, type BindingInfo, CommandIcon, CtrlIcon, type FuzzyMatchResult, type HandlerMap, type HotkeyMap, type HotkeySequence, type KeyCombination, type KeyCombinationDisplay, type KeyConflict, KeybindingEditor, type KeybindingEditorProps, type KeybindingEditorRenderProps, type KeyboardShortcutsContextValue, KeyboardShortcutsProvider, type KeyboardShortcutsProviderProps, ModifierIcon, type ModifierIconProps, type ModifierType, OptIcon, type RecordHotkeyOptions, type RecordHotkeyResult, type SequenceCompletion, ShiftIcon, type ShortcutGroup, ShortcutsModal, type ShortcutsModalProps, type UseEditableHotkeysOptions, type UseEditableHotkeysResult, type UseHotkeysOptions, type UseHotkeysResult, type UseOmnibarOptions, type UseOmnibarResult, findConflicts, formatCombination, formatKeyForDisplay, fuzzyMatch, getActionBindings, getConflictsArray, getModifierIcon, getSequenceCompletions, hasConflicts, isMac, isModifierKey, isSequence, normalizeKey, parseCombinationId, parseHotkeyString, searchActions, useEditableHotkeys, useHotkeys, useKeyboardShortcutsContext, useOmnibar, useRecordHotkey, useRegisteredHotkeys };
