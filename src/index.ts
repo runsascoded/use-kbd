@@ -41,6 +41,16 @@ export { useOmnibar } from './useOmnibar'
 // Components
 export { KeybindingEditor } from './KeybindingEditor'
 export { ShortcutsModal } from './ShortcutsModal'
+export {
+  CommandIcon,
+  CtrlIcon,
+  ShiftIcon,
+  OptIcon,
+  AltIcon,
+  ModifierIcon,
+  getModifierIcon,
+} from './ModifierIcons'
+export type { ModifierIconProps, ModifierType } from './ModifierIcons'
 
 // Utilities
 export {
