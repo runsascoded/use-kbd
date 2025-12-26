@@ -36,6 +36,8 @@ export interface KeyboardShortcutsContextValue {
   getCompletions: (pendingKeys: HotkeySequence) => SequenceCompletion[]
   /** Get all bindings for an action */
   getBindingsForAction: (actionId: string) => string[]
+  /** Check if a key binding is a default (not user-added) */
+  isDefaultBinding: (key: string, action: string) => boolean
 }
 
 const KeyboardShortcutsContext = createContext<KeyboardShortcutsContextValue | null>(null)
@@ -146,6 +148,17 @@ export function KeyboardShortcutsProvider({
   const getBindingsForAction = useCallback(
     (actionId: string) => actionBindings.get(actionId) ?? [],
     [actionBindings],
+  )
+
+  // Check if a binding is from defaults (not user-added)
+  const isDefaultBinding = useCallback(
+    (key: string, action: string) => {
+      const defaultAction = defaults[key]
+      if (!defaultAction) return false
+      const defaultActions = Array.isArray(defaultAction) ? defaultAction : [defaultAction]
+      return defaultActions.includes(action)
+    },
+    [defaults],
   )
 
   const setBinding = useCallback((action: string, key: string) => {
@@ -343,8 +356,9 @@ export function KeyboardShortcutsProvider({
       searchActions: searchActionsInContext,
       getCompletions,
       getBindingsForAction,
+      isDefaultBinding,
     }),
-    [defaults, keymap, actionsProp, setBinding, addBinding, removeBinding, removeBindingForAction, setKeymap, reset, overrides, conflicts, hasConflictsValue, disableConflicts, searchActionsInContext, getCompletions, getBindingsForAction],
+    [defaults, keymap, actionsProp, setBinding, addBinding, removeBinding, removeBindingForAction, setKeymap, reset, overrides, conflicts, hasConflictsValue, disableConflicts, searchActionsInContext, getCompletions, getBindingsForAction, isDefaultBinding],
   )
 
   return (

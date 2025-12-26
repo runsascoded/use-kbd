@@ -49,6 +49,7 @@ export function useRecordHotkey(options: RecordHotkeyOptions = {}): RecordHotkey
     onShiftTab: onShiftTabProp,
     preventDefault = true,
     sequenceTimeout = 1000,
+    pauseTimeout = false,
   } = options
 
   // Stabilize callbacks to avoid effect re-runs
@@ -67,6 +68,10 @@ export function useRecordHotkey(options: RecordHotkeyOptions = {}): RecordHotkey
   const hasNonModifierRef = useRef(false)
   const currentComboRef = useRef<KeyCombination | null>(null)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Keep pauseTimeout in a ref for synchronous access in handlers
+  const pauseTimeoutRef = useRef(pauseTimeout)
+  pauseTimeoutRef.current = pauseTimeout
 
   // Keep a ref in sync with pendingKeys for synchronous access in event handlers
   // (React 18 batching can delay useState updates)
@@ -136,6 +141,23 @@ export function useRecordHotkey(options: RecordHotkeyOptions = {}): RecordHotkey
     // Return cancel function
     return cancel
   }, [cancel, clearTimeout_])
+
+  // Manage timeout based on pauseTimeout state
+  useEffect(() => {
+    if (pauseTimeout) {
+      // Pause: clear any existing timeout
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+        timeoutRef.current = null
+      }
+    } else if (isRecording && pendingKeysRef.current.length > 0 && !timeoutRef.current) {
+      // Resume: start a new timeout if we have pending keys and no timeout running
+      const currentSequence = pendingKeysRef.current
+      timeoutRef.current = setTimeout(() => {
+        submit(currentSequence)
+      }, sequenceTimeout)
+    }
+  }, [pauseTimeout, isRecording, sequenceTimeout, submit])
 
   useEffect(() => {
     if (!isRecording) return
@@ -292,11 +314,13 @@ export function useRecordHotkey(options: RecordHotkeyOptions = {}): RecordHotkey
         pendingKeysRef.current = newSequence
         setPendingKeys(newSequence)
 
-        // Set timeout to submit
+        // Set timeout to submit (unless paused)
         clearTimeout_()
-        timeoutRef.current = setTimeout(() => {
-          submit(newSequence)
-        }, sequenceTimeout)
+        if (!pauseTimeoutRef.current) {
+          timeoutRef.current = setTimeout(() => {
+            submit(newSequence)
+          }, sequenceTimeout)
+        }
       }
     }
 
