@@ -1,20 +1,34 @@
-import { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import type { HotkeySequence, KeyCombination, KeyCombinationDisplay } from './types'
 import type { HotkeyMap } from './useHotkeys'
 import { useHotkeys } from './useHotkeys'
-import { formatCombination, parseCombinationId } from './utils'
+import { useRecordHotkey } from './useRecordHotkey'
+import { findConflicts, formatCombination, getActionBindings, parseHotkeyString } from './utils'
+import { ModifierIcon } from './ModifierIcons'
 
 export interface ShortcutGroup {
   name: string
-  shortcuts: Array<{ key: string; action: string; description?: string }>
+  shortcuts: Array<{
+    actionId: string
+    label: string
+    description?: string
+    bindings: string[]
+  }>
 }
 
 export interface ShortcutsModalProps {
   /** The hotkey map to display */
   keymap: HotkeyMap
-  /** Descriptions for actions (action name -> description) */
+  /** Default keymap (for showing reset indicators) */
+  defaults?: HotkeyMap
+  /** Labels for actions (action ID -> label) */
+  labels?: Record<string, string>
+  /** Descriptions for actions (action ID -> description) */
   descriptions?: Record<string, string>
-  /** Group definitions (if omitted, actions are grouped by prefix before ':') */
+  /** Group definitions: action prefix -> display name (e.g., { metric: 'Metrics' }) */
   groups?: Record<string, string>
+  /** Ordered list of group names (if omitted, groups are sorted alphabetically) */
+  groupOrder?: string[]
   /** Control visibility externally */
   isOpen?: boolean
   /** Called when modal should close */
@@ -23,24 +37,51 @@ export interface ShortcutsModalProps {
   openKey?: string
   /** Whether to auto-register the open hotkey (default: true) */
   autoRegisterOpen?: boolean
+  /** Enable editing mode */
+  editable?: boolean
+  /** Called when a binding changes (required if editable) */
+  onBindingChange?: (action: string, oldKey: string | null, newKey: string) => void
+  /** Called when a binding is added (required if editable) */
+  onBindingAdd?: (action: string, key: string) => void
+  /** Called when a binding is removed */
+  onBindingRemove?: (action: string, key: string) => void
+  /** Called when reset is requested */
+  onReset?: () => void
+  /** Whether to allow multiple bindings per action (default: true) */
+  multipleBindings?: boolean
   /** Custom render function for the modal content */
-  children?: (props: { groups: ShortcutGroup[]; close: () => void }) => React.ReactNode
+  children?: (props: ShortcutsModalRenderProps) => React.ReactNode
   /** CSS class for the backdrop */
   backdropClassName?: string
   /** CSS class for the modal container */
   modalClassName?: string
 }
 
+export interface ShortcutsModalRenderProps {
+  groups: ShortcutGroup[]
+  close: () => void
+  editable: boolean
+  editingAction: string | null
+  editingBindingIndex: number | null
+  pendingKeys: HotkeySequence
+  activeKeys: KeyCombination | null
+  conflicts: Map<string, string[]>
+  startEditing: (action: string, bindingIndex?: number) => void
+  cancelEditing: () => void
+  removeBinding: (action: string, key: string) => void
+  reset: () => void
+}
+
 /**
- * Parse action name to extract group.
- * e.g., "metric:temp" -> { group: "metric", action: "temp" }
+ * Parse action ID to extract group prefix.
+ * e.g., "metric:temp" -> { group: "metric", name: "temp" }
  */
-function parseAction(action: string): { group: string; name: string } {
-  const colonIndex = action.indexOf(':')
+function parseActionId(actionId: string): { group: string; name: string } {
+  const colonIndex = actionId.indexOf(':')
   if (colonIndex > 0) {
-    return { group: action.slice(0, colonIndex), name: action.slice(colonIndex + 1) }
+    return { group: actionId.slice(0, colonIndex), name: actionId.slice(colonIndex + 1) }
   }
-  return { group: 'General', name: action }
+  return { group: 'General', name: actionId }
 }
 
 /**
@@ -48,72 +89,338 @@ function parseAction(action: string): { group: string; name: string } {
  */
 function organizeShortcuts(
   keymap: HotkeyMap,
+  labels?: Record<string, string>,
   descriptions?: Record<string, string>,
   groupNames?: Record<string, string>,
+  groupOrder?: string[],
 ): ShortcutGroup[] {
+  // Build action -> bindings map
+  const actionBindings = getActionBindings(keymap)
   const groupMap = new Map<string, ShortcutGroup>()
 
-  for (const [key, actionOrActions] of Object.entries(keymap)) {
-    const actions = Array.isArray(actionOrActions) ? actionOrActions : [actionOrActions]
+  for (const [actionId, bindings] of actionBindings) {
+    const { group: groupKey, name } = parseActionId(actionId)
+    const groupName = groupNames?.[groupKey] ?? groupKey
 
-    for (const action of actions) {
-      const { group: groupKey, name } = parseAction(action)
-      const groupName = groupNames?.[groupKey] ?? groupKey
-
-      if (!groupMap.has(groupName)) {
-        groupMap.set(groupName, { name: groupName, shortcuts: [] })
-      }
-
-      groupMap.get(groupName)!.shortcuts.push({
-        key,
-        action,
-        description: descriptions?.[action] ?? name,
-      })
+    if (!groupMap.has(groupName)) {
+      groupMap.set(groupName, { name: groupName, shortcuts: [] })
     }
+
+    groupMap.get(groupName)!.shortcuts.push({
+      actionId,
+      label: labels?.[actionId] ?? name,
+      description: descriptions?.[actionId],
+      bindings,
+    })
   }
 
-  // Sort groups: "General" last, others alphabetically
-  return Array.from(groupMap.values()).sort((a, b) => {
-    if (a.name === 'General') return 1
-    if (b.name === 'General') return -1
-    return a.name.localeCompare(b.name)
-  })
+  // Sort groups
+  const groups = Array.from(groupMap.values())
+
+  if (groupOrder) {
+    // Use provided order
+    groups.sort((a, b) => {
+      const aIdx = groupOrder.indexOf(a.name)
+      const bIdx = groupOrder.indexOf(b.name)
+      if (aIdx === -1 && bIdx === -1) return a.name.localeCompare(b.name)
+      if (aIdx === -1) return 1
+      if (bIdx === -1) return -1
+      return aIdx - bIdx
+    })
+  } else {
+    // Default: "General" last, others alphabetically
+    groups.sort((a, b) => {
+      if (a.name === 'General') return 1
+      if (b.name === 'General') return -1
+      return a.name.localeCompare(b.name)
+    })
+  }
+
+  return groups
 }
 
 /**
- * Modal component for displaying keyboard shortcuts.
+ * Render a single key combination with modifier icons
+ */
+function KeyDisplay({
+  combo,
+  className,
+}: {
+  combo: KeyCombination
+  className?: string
+}) {
+  const { key, modifiers } = combo
+  const parts: React.ReactNode[] = []
+
+  if (modifiers.meta) {
+    parts.push(<ModifierIcon key="meta" modifier="meta" className="hotkeys-modifier-icon" />)
+  }
+  if (modifiers.ctrl) {
+    parts.push(<ModifierIcon key="ctrl" modifier="ctrl" className="hotkeys-modifier-icon" />)
+  }
+  if (modifiers.alt) {
+    parts.push(<ModifierIcon key="alt" modifier="alt" className="hotkeys-modifier-icon" />)
+  }
+  if (modifiers.shift) {
+    parts.push(<ModifierIcon key="shift" modifier="shift" className="hotkeys-modifier-icon" />)
+  }
+
+  // Display key (uppercase for single chars)
+  const keyDisplay = key.length === 1 ? key.toUpperCase() : key.charAt(0).toUpperCase() + key.slice(1)
+  parts.push(<span key="key">{keyDisplay}</span>)
+
+  return <span className={className}>{parts}</span>
+}
+
+/**
+ * Render a hotkey binding (single key or sequence)
+ */
+function BindingDisplay({
+  binding,
+  className,
+  editable,
+  isEditing,
+  isConflict,
+  isPendingConflict,
+  isDefault,
+  onEdit,
+  onRemove,
+  pendingKeys,
+  activeKeys,
+}: {
+  binding: string
+  className?: string
+  editable?: boolean
+  isEditing?: boolean
+  isConflict?: boolean
+  isPendingConflict?: boolean
+  isDefault?: boolean
+  onEdit?: () => void
+  onRemove?: () => void
+  pendingKeys?: HotkeySequence
+  activeKeys?: KeyCombination | null
+}) {
+  const sequence = parseHotkeyString(binding)
+  const display = formatCombination(sequence)
+
+  let kbdClassName = 'hotkeys-kbd'
+  if (editable) kbdClassName += ' editable'
+  if (isEditing) kbdClassName += ' editing'
+  if (isConflict) kbdClassName += ' conflict'
+  if (isPendingConflict) kbdClassName += ' pending-conflict'
+  if (isDefault) kbdClassName += ' default-binding'
+  if (className) kbdClassName += ' ' + className
+
+  const handleClick = editable && onEdit ? onEdit : undefined
+
+  // Render editing state
+  if (isEditing) {
+    let content: React.ReactNode
+    if (pendingKeys && pendingKeys.length > 0) {
+      content = (
+        <>
+          {pendingKeys.map((combo, i) => (
+            <React.Fragment key={i}>
+              {i > 0 && <span className="hotkeys-sequence-sep"> </span>}
+              <KeyDisplay combo={combo} />
+            </React.Fragment>
+          ))}
+          {activeKeys && activeKeys.key && (
+            <>
+              <span className="hotkeys-sequence-sep"> → </span>
+              <KeyDisplay combo={activeKeys} />
+            </>
+          )}
+          <span>...</span>
+        </>
+      )
+    } else if (activeKeys && activeKeys.key) {
+      content = <><KeyDisplay combo={activeKeys} /><span>...</span></>
+    } else {
+      content = 'Press keys...'
+    }
+
+    return <kbd className={kbdClassName}>{content}</kbd>
+  }
+
+  // Render normal binding
+  return (
+    <kbd className={kbdClassName} onClick={handleClick}>
+      {display.isSequence ? (
+        sequence.map((combo, i) => (
+          <React.Fragment key={i}>
+            {i > 0 && <span className="hotkeys-sequence-sep"> </span>}
+            <KeyDisplay combo={combo} />
+          </React.Fragment>
+        ))
+      ) : (
+        <KeyDisplay combo={sequence[0]} />
+      )}
+      {editable && onRemove && (
+        <button
+          className="hotkeys-remove-btn"
+          onClick={(e) => { e.stopPropagation(); onRemove() }}
+          aria-label="Remove binding"
+        >
+          ×
+        </button>
+      )}
+    </kbd>
+  )
+}
+
+/**
+ * Modal component for displaying and optionally editing keyboard shortcuts.
+ *
+ * Uses CSS classes from styles.css. Override via CSS custom properties:
+ * --hotkeys-bg, --hotkeys-text, --hotkeys-kbd-bg, etc.
  *
  * @example
  * ```tsx
+ * // Read-only display
  * <ShortcutsModal
  *   keymap={HOTKEYS}
- *   descriptions={{ 'metric:temp': 'Switch to temperature view' }}
+ *   labels={{ 'metric:temp': 'Temperature' }}
+ * />
+ *
+ * // Editable with callbacks
+ * <ShortcutsModal
+ *   keymap={keymap}
+ *   defaults={DEFAULT_KEYMAP}
+ *   labels={labels}
+ *   editable
+ *   onBindingChange={(action, oldKey, newKey) => updateBinding(action, newKey)}
+ *   onBindingRemove={(action, key) => removeBinding(action, key)}
  * />
  * ```
  */
 export function ShortcutsModal({
   keymap,
+  defaults,
+  labels,
   descriptions,
   groups: groupNames,
+  groupOrder,
   isOpen: controlledIsOpen,
   onClose,
   openKey = '?',
   autoRegisterOpen = true,
+  editable = false,
+  onBindingChange,
+  onBindingAdd,
+  onBindingRemove,
+  onReset,
+  multipleBindings = true,
   children,
-  backdropClassName,
-  modalClassName,
+  backdropClassName = 'hotkeys-backdrop',
+  modalClassName = 'hotkeys-modal',
 }: ShortcutsModalProps) {
   const [internalIsOpen, setInternalIsOpen] = useState(false)
   const isOpen = controlledIsOpen ?? internalIsOpen
 
+  // Editing state
+  const [editingAction, setEditingAction] = useState<string | null>(null)
+  const [editingBindingIndex, setEditingBindingIndex] = useState<number | null>(null)
+  const [pendingConflict, setPendingConflict] = useState<{
+    action: string
+    key: string
+    conflictsWith: string[]
+  } | null>(null)
+
+  // Compute conflicts
+  const conflicts = useMemo(() => findConflicts(keymap), [keymap])
+  const actionBindings = useMemo(() => getActionBindings(keymap), [keymap])
+
   const close = useCallback(() => {
     setInternalIsOpen(false)
+    setEditingAction(null)
+    setEditingBindingIndex(null)
+    setPendingConflict(null)
     onClose?.()
   }, [onClose])
 
   const open = useCallback(() => {
     setInternalIsOpen(true)
   }, [])
+
+  // Check if a new binding would conflict
+  const checkConflict = useCallback((newKey: string, forAction: string): string[] | null => {
+    const existingActions = keymap[newKey]
+    if (!existingActions) return null
+    const actions = Array.isArray(existingActions) ? existingActions : [existingActions]
+    const conflicts = actions.filter(a => a !== forAction)
+    return conflicts.length > 0 ? conflicts : null
+  }, [keymap])
+
+  // Recording hook
+  const { isRecording, startRecording, cancel, pendingKeys, activeKeys } = useRecordHotkey({
+    onCapture: useCallback(
+      (sequence: HotkeySequence, display: KeyCombinationDisplay) => {
+        if (!editingAction) return
+
+        // Check for conflicts
+        const conflictActions = checkConflict(display.id, editingAction)
+        if (conflictActions && conflictActions.length > 0) {
+          setPendingConflict({
+            action: editingAction,
+            key: display.id,
+            conflictsWith: conflictActions,
+          })
+          return
+        }
+
+        // Get old key if replacing
+        const oldBindings = actionBindings.get(editingAction) ?? []
+        const oldKey = editingBindingIndex !== null ? oldBindings[editingBindingIndex] : null
+
+        if (editingBindingIndex !== null && oldKey) {
+          // Replacing existing binding
+          onBindingChange?.(editingAction, oldKey, display.id)
+        } else {
+          // Adding new binding
+          onBindingAdd?.(editingAction, display.id)
+        }
+
+        setEditingAction(null)
+        setEditingBindingIndex(null)
+      },
+      [editingAction, editingBindingIndex, actionBindings, checkConflict, onBindingChange, onBindingAdd],
+    ),
+    onCancel: useCallback(() => {
+      setEditingAction(null)
+      setEditingBindingIndex(null)
+      setPendingConflict(null)
+    }, []),
+    pauseTimeout: pendingConflict !== null,
+  })
+
+  const startEditing = useCallback(
+    (action: string, bindingIndex?: number) => {
+      setEditingAction(action)
+      setEditingBindingIndex(bindingIndex ?? null)
+      setPendingConflict(null)
+      startRecording()
+    },
+    [startRecording],
+  )
+
+  const cancelEditing = useCallback(() => {
+    cancel()
+    setEditingAction(null)
+    setEditingBindingIndex(null)
+    setPendingConflict(null)
+  }, [cancel])
+
+  const removeBinding = useCallback(
+    (action: string, key: string) => {
+      onBindingRemove?.(action, key)
+    },
+    [onBindingRemove],
+  )
+
+  const reset = useCallback(() => {
+    onReset?.()
+  }, [onReset])
 
   // Register open/close hotkeys
   const modalKeymap = autoRegisterOpen ? { [openKey]: 'openShortcuts' } : {}
@@ -126,6 +433,22 @@ export function ShortcutsModal({
     { enabled: autoRegisterOpen || isOpen },
   )
 
+  // Close on Escape during editing
+  useEffect(() => {
+    if (!isOpen || !editingAction) return
+
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        e.stopPropagation()
+        cancelEditing()
+      }
+    }
+
+    window.addEventListener('keydown', handleEscape, true)
+    return () => window.removeEventListener('keydown', handleEscape, true)
+  }, [isOpen, editingAction, cancelEditing])
+
   // Close on backdrop click
   const handleBackdropClick = useCallback(
     (e: React.MouseEvent) => {
@@ -137,97 +460,190 @@ export function ShortcutsModal({
   )
 
   // Organize shortcuts into groups
-  const shortcutGroups = organizeShortcuts(keymap, descriptions, groupNames)
+  const shortcutGroups = useMemo(
+    () => organizeShortcuts(keymap, labels, descriptions, groupNames, groupOrder),
+    [keymap, labels, descriptions, groupNames, groupOrder],
+  )
 
   if (!isOpen) return null
 
   // Custom render
   if (children) {
-    return <>{children({ groups: shortcutGroups, close })}</>
+    return (
+      <>
+        {children({
+          groups: shortcutGroups,
+          close,
+          editable,
+          editingAction,
+          editingBindingIndex,
+          pendingKeys,
+          activeKeys,
+          conflicts,
+          startEditing,
+          cancelEditing,
+          removeBinding,
+          reset,
+        })}
+      </>
+    )
   }
 
   // Default render
   return (
-    <div
-      className={backdropClassName}
-      onClick={handleBackdropClick}
-      style={
-        backdropClassName
-          ? undefined
-          : {
-              position: 'fixed',
-              inset: 0,
-              backgroundColor: 'rgba(0, 0, 0, 0.5)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              zIndex: 9999,
-            }
-      }
-    >
-      <div
-        className={modalClassName}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Keyboard shortcuts"
-        style={
-          modalClassName
-            ? undefined
-            : {
-                backgroundColor: 'white',
-                borderRadius: '8px',
-                padding: '24px',
-                maxWidth: '600px',
-                maxHeight: '80vh',
-                overflow: 'auto',
-                boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)',
-              }
-        }
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-          <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 600 }}>Keyboard Shortcuts</h2>
-          <button
-            onClick={close}
-            aria-label="Close"
-            style={{
-              background: 'none',
-              border: 'none',
-              fontSize: '1.5rem',
-              cursor: 'pointer',
-              padding: '4px',
-              lineHeight: 1,
-            }}
-          >
+    <div className={backdropClassName} onClick={handleBackdropClick}>
+      <div className={modalClassName} role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
+        <div className="hotkeys-modal-header">
+          <h2 className="hotkeys-modal-title">Keyboard Shortcuts</h2>
+          <button className="hotkeys-modal-close" onClick={close} aria-label="Close">
             ×
           </button>
         </div>
 
         {shortcutGroups.map((group) => (
-          <div key={group.name} style={{ marginBottom: '16px' }}>
-            <h3 style={{ margin: '0 0 8px', fontSize: '0.875rem', fontWeight: 600, textTransform: 'uppercase', color: '#666' }}>
-              {group.name}
-            </h3>
-            <dl style={{ margin: 0 }}>
-              {group.shortcuts.map(({ key, action, description }) => {
-                const combo = parseCombinationId(key)
-                const display = formatCombination(combo)
-                return (
-                  <div
-                    key={action}
-                    style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #eee' }}
-                  >
-                    <dt style={{ color: '#333' }}>{description}</dt>
-                    <dd style={{ margin: 0, fontFamily: 'monospace', color: '#666' }}>
-                      <kbd style={{ backgroundColor: '#f5f5f5', padding: '2px 6px', borderRadius: '4px', border: '1px solid #ddd' }}>
-                        {display.display}
-                      </kbd>
-                    </dd>
+          <div key={group.name} className="hotkeys-group">
+            <h3 className="hotkeys-group-title">{group.name}</h3>
+
+            {group.shortcuts.map(({ actionId, label, description, bindings }) => {
+              const isEditingThisAction = editingAction === actionId
+              const hasConflict = bindings.some((b) => conflicts.has(b) && (conflicts.get(b)?.length ?? 0) > 1)
+
+              return (
+                <div key={actionId} className="hotkeys-action">
+                  <span className="hotkeys-action-label" title={description}>
+                    {label}
+                  </span>
+                  <div className="hotkeys-action-bindings">
+                    {bindings.map((binding, idx) => {
+                      const conflictActions = conflicts.get(binding)
+                      const isConflict = conflictActions && conflictActions.length > 1
+                      const isEditing = isEditingThisAction && editingBindingIndex === idx
+                      const isDefault = defaults
+                        ? (() => {
+                            const defaultAction = defaults[binding]
+                            if (!defaultAction) return false
+                            const defaultActions = Array.isArray(defaultAction) ? defaultAction : [defaultAction]
+                            return defaultActions.includes(actionId)
+                          })()
+                        : true
+
+                      return (
+                        <BindingDisplay
+                          key={binding}
+                          binding={binding}
+                          editable={editable}
+                          isEditing={isEditing}
+                          isConflict={isConflict}
+                          isDefault={isDefault}
+                          onEdit={() => startEditing(actionId, idx)}
+                          onRemove={editable ? () => removeBinding(actionId, binding) : undefined}
+                          pendingKeys={pendingKeys}
+                          activeKeys={activeKeys}
+                        />
+                      )
+                    })}
+
+                    {/* Add binding button */}
+                    {editable && multipleBindings && !isEditingThisAction && (
+                      <button
+                        className="hotkeys-add-btn"
+                        onClick={() => startEditing(actionId)}
+                        disabled={isRecording && !isEditingThisAction}
+                      >
+                        +
+                      </button>
+                    )}
+
+                    {/* New binding being added (no existing bindings or adding another) */}
+                    {isEditingThisAction && editingBindingIndex === null && (
+                      <BindingDisplay
+                        binding=""
+                        isEditing
+                        pendingKeys={pendingKeys}
+                        activeKeys={activeKeys}
+                      />
+                    )}
                   </div>
-                )
-              })}
-            </dl>
+                </div>
+              )
+            })}
           </div>
         ))}
+
+        {/* Pending conflict warning */}
+        {pendingConflict && (
+          <div className="hotkeys-conflict-warning" style={{
+            padding: '12px',
+            marginTop: '16px',
+            backgroundColor: 'var(--hk-warning-bg)',
+            borderRadius: 'var(--hk-radius-sm)',
+            border: '1px solid var(--hk-warning)',
+          }}>
+            <p style={{ margin: '0 0 8px', color: 'var(--hk-warning)' }}>
+              This key is already bound to: {pendingConflict.conflictsWith.join(', ')}
+            </p>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => {
+                  // Accept and override
+                  const oldBindings = actionBindings.get(pendingConflict.action) ?? []
+                  const oldKey = editingBindingIndex !== null ? oldBindings[editingBindingIndex] : null
+
+                  if (editingBindingIndex !== null && oldKey) {
+                    onBindingChange?.(pendingConflict.action, oldKey, pendingConflict.key)
+                  } else {
+                    onBindingAdd?.(pendingConflict.action, pendingConflict.key)
+                  }
+
+                  setEditingAction(null)
+                  setEditingBindingIndex(null)
+                  setPendingConflict(null)
+                }}
+                style={{
+                  padding: '4px 12px',
+                  backgroundColor: 'var(--hk-accent)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: 'var(--hk-radius-sm)',
+                  cursor: 'pointer',
+                }}
+              >
+                Override
+              </button>
+              <button
+                onClick={cancelEditing}
+                style={{
+                  padding: '4px 12px',
+                  backgroundColor: 'var(--hk-bg-secondary)',
+                  border: '1px solid var(--hk-border)',
+                  borderRadius: 'var(--hk-radius-sm)',
+                  cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Reset button */}
+        {editable && onReset && (
+          <div style={{ marginTop: '16px', textAlign: 'right' }}>
+            <button
+              onClick={reset}
+              style={{
+                padding: '6px 12px',
+                backgroundColor: 'var(--hk-bg-secondary)',
+                border: '1px solid var(--hk-border)',
+                borderRadius: 'var(--hk-radius-sm)',
+                cursor: 'pointer',
+                color: 'var(--hk-text)',
+              }}
+            >
+              Reset to defaults
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )

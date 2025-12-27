@@ -1,0 +1,348 @@
+/* use-hotkeys default styles
+ *
+ * Override these CSS custom properties to customize the appearance:
+ *
+ * :root {
+ *   --hotkeys-bg: #1f2937;
+ *   --hotkeys-text: #f3f4f6;
+ *   ...
+ * }
+ */
+
+/* === CSS Custom Properties === */
+.hotkeys-modal,
+.hotkeys-omnibar {
+  /* Colors */
+  --hk-bg: var(--hotkeys-bg, #ffffff);
+  --hk-bg-secondary: var(--hotkeys-bg-secondary, #f9fafb);
+  --hk-text: var(--hotkeys-text, #1f2937);
+  --hk-text-secondary: var(--hotkeys-text-secondary, #6b7280);
+  --hk-border: var(--hotkeys-border, #e5e7eb);
+  --hk-accent: var(--hotkeys-accent, #3b82f6);
+  --hk-accent-hover: var(--hotkeys-accent-hover, #2563eb);
+
+  /* Conflict/warning colors */
+  --hk-conflict: var(--hotkeys-conflict, #ef4444);
+  --hk-conflict-bg: var(--hotkeys-conflict-bg, #fef2f2);
+  --hk-warning: var(--hotkeys-warning, #f59e0b);
+  --hk-warning-bg: var(--hotkeys-warning-bg, #fef3c7);
+
+  /* Kbd element */
+  --hk-kbd-bg: var(--hotkeys-kbd-bg, #f3f4f6);
+  --hk-kbd-border: var(--hotkeys-kbd-border, #d1d5db);
+  --hk-kbd-text: var(--hotkeys-kbd-text, #374151);
+
+  /* Spacing & sizing */
+  --hk-radius: var(--hotkeys-radius, 8px);
+  --hk-radius-sm: var(--hotkeys-radius-sm, 4px);
+  --hk-gap: var(--hotkeys-gap, 8px);
+  --hk-padding: var(--hotkeys-padding, 16px);
+
+  /* Animation */
+  --hk-transition: var(--hotkeys-transition, 150ms ease);
+}
+
+/* === Backdrop === */
+.hotkeys-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+/* === Modal === */
+.hotkeys-modal {
+  background-color: var(--hk-bg);
+  border-radius: var(--hk-radius);
+  padding: var(--hk-padding);
+  width: 85vw;
+  max-width: 480px;
+  max-height: 80vh;
+  overflow: auto;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  color: var(--hk-text);
+}
+
+.hotkeys-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--hk-gap);
+}
+
+.hotkeys-modal-title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.hotkeys-modal-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 4px;
+  line-height: 1;
+  color: var(--hk-text-secondary);
+  transition: color var(--hk-transition);
+}
+
+.hotkeys-modal-close:hover {
+  color: var(--hk-text);
+}
+
+/* === Groups === */
+.hotkeys-group {
+  margin-bottom: var(--hk-padding);
+}
+
+.hotkeys-group-title {
+  margin: 0 0 var(--hk-gap);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--hk-text-secondary);
+  letter-spacing: 0.05em;
+}
+
+/* === Action rows === */
+.hotkeys-action {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--hk-border);
+  gap: var(--hk-gap);
+}
+
+.hotkeys-action:last-child {
+  border-bottom: none;
+}
+
+.hotkeys-action-label {
+  flex: 1;
+  font-size: 0.875rem;
+}
+
+.hotkeys-action-bindings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+/* === Kbd element === */
+.hotkeys-kbd {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background-color: var(--hk-kbd-bg);
+  border: 1px solid var(--hk-kbd-border);
+  border-radius: var(--hk-radius-sm);
+  padding: 3px 6px;
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+  font-size: 0.75rem;
+  color: var(--hk-kbd-text);
+  min-height: 24px;
+  white-space: nowrap;
+}
+
+.hotkeys-kbd.editable {
+  cursor: pointer;
+  transition: all var(--hk-transition);
+}
+
+.hotkeys-kbd.editable:hover {
+  border-color: var(--hk-accent);
+  background-color: var(--hk-bg-secondary);
+}
+
+.hotkeys-kbd.editing {
+  border-color: var(--hk-accent);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.hotkeys-kbd.conflict {
+  border-color: var(--hk-conflict);
+  background-color: var(--hk-conflict-bg);
+  color: var(--hk-conflict);
+}
+
+.hotkeys-kbd.pending-conflict {
+  border-color: var(--hk-warning);
+  background-color: var(--hk-warning-bg);
+  color: #92400e;
+  animation: hotkeys-pulse 1s ease-in-out infinite;
+}
+
+.hotkeys-kbd.default-binding {
+  border-bottom: 1px solid var(--hk-text-secondary);
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+@keyframes hotkeys-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* === Modifier icons === */
+.hotkeys-modifier-icon {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+/* === Sequence separator === */
+.hotkeys-sequence-sep {
+  color: var(--hk-text-secondary);
+  margin: 0 1px;
+}
+
+/* === Add binding button === */
+.hotkeys-add-btn {
+  background: none;
+  border: 1px dashed var(--hk-border);
+  border-radius: var(--hk-radius-sm);
+  padding: 3px 8px;
+  font-size: 0.875rem;
+  color: var(--hk-text-secondary);
+  cursor: pointer;
+  transition: all var(--hk-transition);
+}
+
+.hotkeys-add-btn:hover {
+  border-color: var(--hk-accent);
+  color: var(--hk-accent);
+}
+
+/* === Remove binding button === */
+.hotkeys-remove-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  margin-left: 2px;
+  font-size: 0.875rem;
+  color: var(--hk-text-secondary);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--hk-transition);
+}
+
+.hotkeys-kbd:hover .hotkeys-remove-btn {
+  opacity: 1;
+}
+
+.hotkeys-remove-btn:hover {
+  color: var(--hk-conflict);
+}
+
+/* === Timeout bar === */
+.hotkeys-timeout-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  background-color: var(--hk-accent);
+  animation: hotkeys-timeout linear forwards;
+}
+
+@keyframes hotkeys-timeout {
+  from { width: 100%; }
+  to { width: 0%; }
+}
+
+/* === Omnibar === */
+.hotkeys-omnibar-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 20vh;
+  z-index: 9999;
+}
+
+.hotkeys-omnibar {
+  background-color: var(--hk-bg);
+  border-radius: var(--hk-radius);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  width: 90vw;
+  max-width: 500px;
+  overflow: hidden;
+}
+
+.hotkeys-omnibar-input {
+  width: 100%;
+  padding: 12px var(--hk-padding);
+  border: none;
+  border-bottom: 1px solid var(--hk-border);
+  font-size: 1rem;
+  background-color: var(--hk-bg);
+  color: var(--hk-text);
+  outline: none;
+}
+
+.hotkeys-omnibar-input::placeholder {
+  color: var(--hk-text-secondary);
+}
+
+.hotkeys-omnibar-results {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.hotkeys-omnibar-result {
+  display: flex;
+  align-items: center;
+  padding: 10px var(--hk-padding);
+  cursor: pointer;
+  gap: var(--hk-gap);
+  transition: background-color var(--hk-transition);
+}
+
+.hotkeys-omnibar-result:hover,
+.hotkeys-omnibar-result.selected {
+  background-color: var(--hk-bg-secondary);
+}
+
+.hotkeys-omnibar-result-label {
+  flex: 1;
+  font-size: 0.875rem;
+}
+
+.hotkeys-omnibar-result-category {
+  font-size: 0.75rem;
+  color: var(--hk-text-secondary);
+}
+
+.hotkeys-omnibar-result-bindings {
+  display: flex;
+  gap: 4px;
+}
+
+.hotkeys-omnibar-no-results {
+  padding: var(--hk-padding);
+  text-align: center;
+  color: var(--hk-text-secondary);
+  font-size: 0.875rem;
+}
+
+/* === Dark mode preset === */
+[data-theme="dark"] .hotkeys-modal,
+[data-theme="dark"] .hotkeys-omnibar,
+.dark .hotkeys-modal,
+.dark .hotkeys-omnibar {
+  --hk-bg: var(--hotkeys-bg, #1f2937);
+  --hk-bg-secondary: var(--hotkeys-bg-secondary, #374151);
+  --hk-text: var(--hotkeys-text, #f3f4f6);
+  --hk-text-secondary: var(--hotkeys-text-secondary, #9ca3af);
+  --hk-border: var(--hotkeys-border, #4b5563);
+  --hk-kbd-bg: var(--hotkeys-kbd-bg, #374151);
+  --hk-kbd-border: var(--hotkeys-kbd-border, #4b5563);
+  --hk-kbd-text: var(--hotkeys-kbd-text, #e5e7eb);
+}

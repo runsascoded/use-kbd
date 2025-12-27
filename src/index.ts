@@ -19,13 +19,32 @@ export type {
   KeybindingEditorProps,
   KeybindingEditorRenderProps,
 } from './KeybindingEditor'
-export type { ShortcutGroup, ShortcutsModalProps } from './ShortcutsModal'
+export type { ShortcutGroup, ShortcutsModalProps, ShortcutsModalRenderProps } from './ShortcutsModal'
+export type { OmnibarProps, OmnibarRenderProps } from './Omnibar'
 export type {
   KeyboardShortcutsContextValue,
   KeyboardShortcutsProviderProps,
 } from './KeyboardShortcutsContext'
 
-// Context & Provider
+// Action types and helpers
+export type { Action, Actions, ActionsByRoute, RouteMatcher } from './actions'
+export {
+  defineActions,
+  defineActionsByRoute,
+  filterActionsByRoute,
+  getActionRegistry,
+  getDefaultKeymap,
+  getGroups,
+  getHandlers,
+  groupActions,
+  matchesRoute,
+} from './actions'
+
+// HotkeysProvider (high-level integration)
+export type { HotkeysConfig, HotkeysContextValue, HotkeysProviderProps } from './HotkeysProvider'
+export { HotkeysProvider, useHotkeysContext, useHotkeysUI } from './HotkeysProvider'
+
+// Context & Provider (lower-level)
 export {
   KeyboardShortcutsProvider,
   useKeyboardShortcutsContext,
@@ -41,6 +60,7 @@ export { useOmnibar } from './useOmnibar'
 // Components
 export { KeybindingEditor } from './KeybindingEditor'
 export { ShortcutsModal } from './ShortcutsModal'
+export { Omnibar } from './Omnibar'
 export {
   CommandIcon,
   CtrlIcon,
