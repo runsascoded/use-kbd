@@ -10,12 +10,10 @@ import type { ActionDefinition } from './types'
 export type RouteMatcher = string | RegExp | ((route: string) => boolean)
 
 /**
- * Full action definition with handler and defaults.
- * Extends ActionDefinition with runtime behavior.
+ * Action metadata - static definition without runtime handler.
+ * Used for defining actions that will have handlers bound later.
  */
-export interface Action extends ActionDefinition {
-  /** Callback to invoke when action is triggered */
-  handler: () => void
+export interface ActionMetadata extends ActionDefinition {
   /** Default key sequence(s) for this action */
   defaultBindings?: string[]
   /** Display group for shortcuts modal (e.g., "Time Range", "Navigation") */
@@ -25,6 +23,20 @@ export interface Action extends ActionDefinition {
   /** Whether action is currently active (for visual feedback) */
   isActive?: () => boolean
 }
+
+/**
+ * Full action definition with optional handler.
+ * Handler can be provided inline or bound later via provider.
+ */
+export interface Action extends ActionMetadata {
+  /** Callback to invoke when action is triggered (optional - can be bound via provider) */
+  handler?: () => void
+}
+
+/**
+ * Registry of action metadata keyed by action ID.
+ */
+export type ActionMetadataRegistry = Record<string, ActionMetadata>
 
 /**
  * Registry of actions keyed by action ID.
@@ -49,23 +61,32 @@ export function matchesRoute(route: string, matcher: RouteMatcher | undefined): 
 
 /**
  * Define actions with type safety.
- * Actions can optionally specify route scope.
+ * Handlers are optional - they can be provided inline or bound later via HotkeysProvider.
  *
  * @example
  * ```tsx
+ * // Without handlers (handlers bound via HotkeysProvider)
+ * const ACTIONS = defineActions({
+ *   'nav:home': {
+ *     label: 'Go Home',
+ *     defaultBindings: ['g h'],
+ *     group: 'Navigation',
+ *   },
+ *   'edit:save': {
+ *     label: 'Save',
+ *     defaultBindings: ['meta+s'],
+ *     group: 'Edit',
+ *     route: '/editor',  // Only available on /editor
+ *   },
+ * })
+ *
+ * // With handlers inline
  * const actions = defineActions({
  *   'nav:home': {
  *     label: 'Go Home',
  *     handler: () => navigate('/'),
  *     defaultBindings: ['g h'],
  *     group: 'Navigation',
- *   },
- *   'edit:save': {
- *     label: 'Save',
- *     handler: () => save(),
- *     defaultBindings: ['meta+s'],
- *     group: 'Edit',
- *     route: '/editor',  // Only available on /editor
  *   },
  * })
  * ```
@@ -161,11 +182,14 @@ export function getDefaultKeymap(actions: Actions): Record<string, string | stri
 /**
  * Extract handlers from actions.
  * Returns a map of actionId -> handler function.
+ * Only includes actions that have handlers defined.
  */
 export function getHandlers(actions: Actions): Record<string, () => void> {
   const handlers: Record<string, () => void> = {}
   for (const [actionId, action] of Object.entries(actions)) {
-    handlers[actionId] = action.handler
+    if (action.handler) {
+      handlers[actionId] = action.handler
+    }
   }
   return handlers
 }

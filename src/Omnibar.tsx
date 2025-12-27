@@ -1,4 +1,6 @@
-import React, { useCallback, useEffect, useRef } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef } from 'react'
+import { getActionRegistry } from './actions'
+import { useMaybeHotkeysContext } from './HotkeysProvider'
 import type { ActionRegistry, ActionSearchResult, HotkeySequence, SequenceCompletion } from './types'
 import type { HandlerMap, HotkeyMap } from './useHotkeys'
 import { useOmnibar } from './useOmnibar'
@@ -6,23 +8,44 @@ import { formatCombination, parseHotkeyString } from './utils'
 import { ModifierIcon } from './ModifierIcons'
 
 export interface OmnibarProps {
-  /** Registry of available actions */
-  actions: ActionRegistry
-  /** Handlers for actions (optional - if not provided, use onExecute callback) */
+  /**
+   * Registry of available actions.
+   * If not provided, uses actions from HotkeysContext.
+   */
+  actions?: ActionRegistry
+  /**
+   * Handlers for actions.
+   * If not provided, uses handlers from HotkeysContext, falling back to executeAction.
+   */
   handlers?: HandlerMap
-  /** Current keymap (to show bindings in results) */
+  /**
+   * Current keymap (to show bindings in results).
+   * If not provided, uses keymap from HotkeysContext.
+   */
   keymap?: HotkeyMap
-  /** Hotkey to open omnibar (default: 'meta+k') */
+  /** Hotkey to open omnibar (default: 'meta+k'). Set to empty string to disable. */
   openKey?: string
-  /** Whether omnibar hotkey is enabled (default: true) */
+  /**
+   * Whether omnibar hotkey is enabled.
+   * When using HotkeysContext, defaults to false (provider handles it).
+   */
   enabled?: boolean
-  /** Control visibility externally */
+  /**
+   * Control visibility externally.
+   * If not provided, uses isOmnibarOpen from HotkeysContext.
+   */
   isOpen?: boolean
   /** Called when omnibar opens */
   onOpen?: () => void
-  /** Called when omnibar closes */
+  /**
+   * Called when omnibar closes.
+   * If not provided, uses closeOmnibar from HotkeysContext.
+   */
   onClose?: () => void
-  /** Called when an action is executed */
+  /**
+   * Called when an action is executed.
+   * If not provided, uses executeAction from HotkeysContext.
+   */
   onExecute?: (actionId: string) => void
   /** Maximum number of results to show (default: 10) */
   maxResults?: number
@@ -91,15 +114,15 @@ function BindingBadge({ binding }: { binding: string }) {
  * ```
  */
 export function Omnibar({
-  actions,
-  handlers,
-  keymap = {},
+  actions: actionsProp,
+  handlers: handlersProp,
+  keymap: keymapProp,
   openKey = 'meta+k',
-  enabled = true,
-  isOpen: controlledIsOpen,
-  onOpen,
-  onClose,
-  onExecute,
+  enabled: enabledProp,
+  isOpen: isOpenProp,
+  onOpen: onOpenProp,
+  onClose: onCloseProp,
+  onExecute: onExecuteProp,
   maxResults = 10,
   placeholder = 'Type a command...',
   children,
@@ -107,6 +130,50 @@ export function Omnibar({
   omnibarClassName = 'hotkeys-omnibar',
 }: OmnibarProps) {
   const inputRef = useRef<HTMLInputElement | null>(null)
+
+  // Try to get context (returns null if not within HotkeysProvider)
+  const ctx = useMaybeHotkeysContext()
+
+  // Derive actions from context if not provided as prop
+  const contextActions = useMemo(() => {
+    if (!ctx?.allActions) return undefined
+    return getActionRegistry(ctx.allActions)
+  }, [ctx?.allActions])
+
+  // Use context values with prop overrides
+  const actions = actionsProp ?? contextActions ?? {}
+  const handlers = handlersProp ?? ctx?.handlers
+  const keymap = keymapProp ?? ctx?.keymap ?? {}
+
+  // When using context, default enabled to false (HotkeysProvider handles the trigger)
+  const enabled = enabledProp ?? (ctx ? false : true)
+
+  // Create execute handler that falls back to context
+  const handleExecute = useCallback((actionId: string) => {
+    if (onExecuteProp) {
+      onExecuteProp(actionId)
+    } else if (ctx?.executeAction) {
+      ctx.executeAction(actionId)
+    }
+  }, [onExecuteProp, ctx])
+
+  // Create close handler that falls back to context
+  const handleClose = useCallback(() => {
+    if (onCloseProp) {
+      onCloseProp()
+    } else if (ctx?.closeOmnibar) {
+      ctx.closeOmnibar()
+    }
+  }, [onCloseProp, ctx])
+
+  // Create open handler that falls back to context
+  const handleOpen = useCallback(() => {
+    if (onOpenProp) {
+      onOpenProp()
+    } else if (ctx?.openOmnibar) {
+      ctx.openOmnibar()
+    }
+  }, [onOpenProp, ctx])
 
   const {
     isOpen: internalIsOpen,
@@ -127,14 +194,15 @@ export function Omnibar({
     handlers,
     keymap,
     openKey,
-    enabled: controlledIsOpen === undefined ? enabled : false, // Disable hotkey if controlled
-    onOpen,
-    onClose,
-    onExecute,
+    enabled: isOpenProp === undefined && ctx === null ? enabled : false, // Disable hotkey if controlled or using context
+    onOpen: handleOpen,
+    onClose: handleClose,
+    onExecute: handleExecute,
     maxResults,
   })
 
-  const isOpen = controlledIsOpen ?? internalIsOpen
+  // Use prop, then context, then internal state
+  const isOpen = isOpenProp ?? ctx?.isOmnibarOpen ?? internalIsOpen
 
   // Focus input when opened
   useEffect(() => {

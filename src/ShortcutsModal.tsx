@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import { getActionRegistry } from './actions'
+import { useMaybeHotkeysContext } from './HotkeysProvider'
 import type { HotkeySequence, KeyCombination, KeyCombinationDisplay } from './types'
 import type { HotkeyMap } from './useHotkeys'
 import { useHotkeys } from './useHotkeys'
@@ -17,25 +19,40 @@ export interface ShortcutGroup {
 }
 
 export interface ShortcutsModalProps {
-  /** The hotkey map to display */
-  keymap: HotkeyMap
-  /** Default keymap (for showing reset indicators) */
+  /**
+   * The hotkey map to display.
+   * If not provided, uses keymap from HotkeysContext.
+   */
+  keymap?: HotkeyMap
+  /**
+   * Default keymap (for showing reset indicators).
+   * If not provided, uses defaults from HotkeysContext.
+   */
   defaults?: HotkeyMap
-  /** Labels for actions (action ID -> label) */
+  /** Labels for actions (action ID -> label). Falls back to action.label from context. */
   labels?: Record<string, string>
-  /** Descriptions for actions (action ID -> description) */
+  /** Descriptions for actions (action ID -> description). Falls back to action.description from context. */
   descriptions?: Record<string, string>
-  /** Group definitions: action prefix -> display name (e.g., { metric: 'Metrics' }) */
+  /** Group definitions: action prefix -> display name (e.g., { metric: 'Metrics' }). Falls back to action.group from context. */
   groups?: Record<string, string>
   /** Ordered list of group names (if omitted, groups are sorted alphabetically) */
   groupOrder?: string[]
-  /** Control visibility externally */
+  /**
+   * Control visibility externally.
+   * If not provided, uses isModalOpen from HotkeysContext.
+   */
   isOpen?: boolean
-  /** Called when modal should close */
+  /**
+   * Called when modal should close.
+   * If not provided, uses closeModal from HotkeysContext.
+   */
   onClose?: () => void
-  /** Hotkey to open modal (default: '?') */
+  /** Hotkey to open modal (default: '?'). Set to empty string to disable. */
   openKey?: string
-  /** Whether to auto-register the open hotkey (default: true) */
+  /**
+   * Whether to auto-register the open hotkey (default: true).
+   * When using HotkeysContext, the provider already handles this, so set to false.
+   */
   autoRegisterOpen?: boolean
   /** Enable editing mode */
   editable?: boolean
@@ -295,16 +312,16 @@ function BindingDisplay({
  * ```
  */
 export function ShortcutsModal({
-  keymap,
-  defaults,
-  labels,
-  descriptions,
-  groups: groupNames,
+  keymap: keymapProp,
+  defaults: defaultsProp,
+  labels: labelsProp,
+  descriptions: descriptionsProp,
+  groups: groupNamesProp,
   groupOrder,
-  isOpen: controlledIsOpen,
-  onClose,
+  isOpen: isOpenProp,
+  onClose: onCloseProp,
   openKey = '?',
-  autoRegisterOpen = true,
+  autoRegisterOpen,
   editable = false,
   onBindingChange,
   onBindingAdd,
@@ -315,8 +332,56 @@ export function ShortcutsModal({
   backdropClassName = 'hotkeys-backdrop',
   modalClassName = 'hotkeys-modal',
 }: ShortcutsModalProps) {
+  // Try to get context (returns null if not within HotkeysProvider)
+  const ctx = useMaybeHotkeysContext()
+
+  // Derive labels/descriptions/groups from context actions if not provided as props
+  const contextLabels = useMemo(() => {
+    if (!ctx?.allActions) return undefined
+    const registry = getActionRegistry(ctx.allActions)
+    const labels: Record<string, string> = {}
+    for (const [id, action] of Object.entries(registry)) {
+      labels[id] = action.label
+    }
+    return labels
+  }, [ctx?.allActions])
+
+  const contextDescriptions = useMemo(() => {
+    if (!ctx?.allActions) return undefined
+    const registry = getActionRegistry(ctx.allActions)
+    const descriptions: Record<string, string> = {}
+    for (const [id, action] of Object.entries(registry)) {
+      if (action.description) descriptions[id] = action.description
+    }
+    return descriptions
+  }, [ctx?.allActions])
+
+  const contextGroups = useMemo(() => {
+    if (!ctx?.allActions) return undefined
+    const groups: Record<string, string> = {}
+    for (const action of Object.values(ctx.allActions)) {
+      if (action.group) {
+        // Map action prefix to group name
+        const prefix = action.group.toLowerCase().replace(/[\s-]/g, '')
+        groups[prefix] = action.group
+      }
+    }
+    return groups
+  }, [ctx?.allActions])
+
+  // Use context values with prop overrides
+  const keymap = keymapProp ?? ctx?.keymap ?? {}
+  const defaults = defaultsProp ?? ctx?.defaults
+  const labels = labelsProp ?? contextLabels
+  const descriptions = descriptionsProp ?? contextDescriptions
+  const groupNames = groupNamesProp ?? contextGroups
+
+  // When using context, default autoRegisterOpen to false (HotkeysProvider handles it)
+  const shouldAutoRegisterOpen = autoRegisterOpen ?? (ctx ? false : true)
+
   const [internalIsOpen, setInternalIsOpen] = useState(false)
-  const isOpen = controlledIsOpen ?? internalIsOpen
+  // Use prop, then context, then internal state
+  const isOpen = isOpenProp ?? ctx?.isModalOpen ?? internalIsOpen
 
   // Editing state
   const [editingAction, setEditingAction] = useState<string | null>(null)
@@ -336,12 +401,21 @@ export function ShortcutsModal({
     setEditingAction(null)
     setEditingBindingIndex(null)
     setPendingConflict(null)
-    onClose?.()
-  }, [onClose])
+    // Use prop callback, then context, then nothing
+    if (onCloseProp) {
+      onCloseProp()
+    } else if (ctx?.closeModal) {
+      ctx.closeModal()
+    }
+  }, [onCloseProp, ctx])
 
   const open = useCallback(() => {
-    setInternalIsOpen(true)
-  }, [])
+    if (ctx?.openModal) {
+      ctx.openModal()
+    } else {
+      setInternalIsOpen(true)
+    }
+  }, [ctx])
 
   // Check if a new binding would conflict
   const checkConflict = useCallback((newKey: string, forAction: string): string[] | null => {
@@ -423,14 +497,14 @@ export function ShortcutsModal({
   }, [onReset])
 
   // Register open/close hotkeys
-  const modalKeymap = autoRegisterOpen ? { [openKey]: 'openShortcuts' } : {}
+  const modalKeymap = shouldAutoRegisterOpen ? { [openKey]: 'openShortcuts' } : {}
   useHotkeys(
     { ...modalKeymap, escape: 'closeShortcuts' },
     {
       openShortcuts: open,
       closeShortcuts: close,
     },
-    { enabled: autoRegisterOpen || isOpen },
+    { enabled: shouldAutoRegisterOpen || isOpen },
   )
 
   // Close on Escape during editing

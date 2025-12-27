@@ -27,7 +27,7 @@ export type {
 } from './KeyboardShortcutsContext'
 
 // Action types and helpers
-export type { Action, Actions, ActionsByRoute, RouteMatcher } from './actions'
+export type { Action, ActionMetadata, ActionMetadataRegistry, Actions, ActionsByRoute, RouteMatcher } from './actions'
 export {
   defineActions,
   defineActionsByRoute,
@@ -40,9 +40,19 @@ export {
   matchesRoute,
 } from './actions'
 
-// HotkeysProvider (high-level integration)
+// HotkeysProvider (high-level integration with static actions)
 export type { HotkeysConfig, HotkeysContextValue, HotkeysProviderProps } from './HotkeysProvider'
-export { HotkeysProvider, useHotkeysContext, useHotkeysUI } from './HotkeysProvider'
+export { HotkeysProvider, useHotkeysContext, useMaybeHotkeysContext, useHotkeysUI } from './HotkeysProvider'
+
+// DynamicHotkeysProvider (high-level integration with dynamic action registration)
+export type { DynamicHotkeysConfig, DynamicHotkeysContextValue, DynamicHotkeysProviderProps } from './DynamicHotkeysProvider'
+export { DynamicHotkeysProvider, useDynamicHotkeysContext, useMaybeDynamicHotkeysContext } from './DynamicHotkeysProvider'
+
+// Dynamic action registration
+export type { ActionConfig } from './useAction'
+export { useAction, useActions } from './useAction'
+export type { ActionsRegistryValue, RegisteredAction } from './ActionsRegistry'
+export { ActionsRegistryContext, useActionsRegistry } from './ActionsRegistry'
 
 // Context & Provider (lower-level)
 export {

@@ -40,7 +40,7 @@
     "url": "https://github.com/runsascoded/use-hotkeys"
   },
   "devDependencies": {
-    "@types/react": "^18.3.18",
+    "@types/react": "^18.3.27",
     "react": "^18.3.1",
     "tsup": "^8.3.5",
     "typescript": "^5.7.2",

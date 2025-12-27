@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import type { Actions, RouteMatcher } from './actions'
+import type { HotkeySequence } from './types'
 import {
   filterActionsByRoute,
   getActionRegistry,
@@ -98,6 +99,14 @@ export interface HotkeysContextValue extends KeyboardShortcutsContextValue {
   toggleOmnibar: () => void
   /** Execute an action by ID */
   executeAction: (actionId: string) => void
+  /** Sequence state: pending key combinations */
+  pendingKeys: HotkeySequence
+  /** Sequence state: whether waiting for more keys */
+  isAwaitingSequence: boolean
+  /** Sequence state: when the timeout started */
+  sequenceTimeoutStartedAt: number | null
+  /** Sequence state: timeout duration in ms */
+  sequenceTimeout: number
 }
 
 const HotkeysContext = createContext<HotkeysContextValue | null>(null)
@@ -105,6 +114,8 @@ const HotkeysContext = createContext<HotkeysContextValue | null>(null)
 export interface HotkeysProviderProps {
   /** Action definitions */
   actions: Actions
+  /** Handlers for actions (merged with any handlers in action definitions) */
+  handlers?: Record<string, () => void>
   /** Configuration options */
   config?: HotkeysConfig
   /** Children */
@@ -116,10 +127,12 @@ export interface HotkeysProviderProps {
  */
 function HotkeysProviderInner({
   allActions,
+  externalHandlers,
   config,
   children,
 }: {
   allActions: Actions
+  externalHandlers?: Record<string, () => void>
   config: Required<HotkeysConfig>
   children: React.ReactNode
 }) {
@@ -131,8 +144,11 @@ function HotkeysProviderInner({
     return filterActionsByRoute(allActions, config.currentRoute)
   }, [allActions, config.currentRoute])
 
-  // Get handlers for filtered actions
-  const handlers = useMemo(() => getHandlers(actions), [actions])
+  // Get handlers: merge action handlers with external handlers (external takes precedence)
+  const handlers = useMemo(() => {
+    const actionHandlers = getHandlers(actions)
+    return { ...actionHandlers, ...externalHandlers }
+  }, [actions, externalHandlers])
 
   // Get groups and grouped actions
   const groups = useMemo(() => getGroups(actions), [actions])
@@ -206,13 +222,17 @@ function HotkeysProviderInner({
   const closeOmnibar = useCallback(() => setIsOmnibarOpen(false), [])
   const toggleOmnibar = useCallback(() => setIsOmnibarOpen(prev => !prev), [])
 
-  // Execute action by ID
+  // Execute action by ID (uses merged handlers)
   const executeAction = useCallback((actionId: string) => {
-    const action = actions[actionId]
-    if (action && (action.enabled === undefined || action.enabled)) {
-      action.handler()
+    const handler = handlers[actionId]
+    if (handler) {
+      // Check if action is enabled (if action exists)
+      const action = actions[actionId]
+      if (!action || action.enabled === undefined || action.enabled) {
+        handler()
+      }
     }
-  }, [actions])
+  }, [handlers, actions])
 
   // Build handlers including built-in triggers
   const allHandlers = useMemo(() => {
@@ -233,7 +253,12 @@ function HotkeysProviderInner({
 
   // Register hotkeys (only when enabled and modal/omnibar closed)
   const hotkeysEnabled = isEnabled && !isModalOpen && !isOmnibarOpen
-  useRegisteredHotkeys(allHandlers, { enabled: hotkeysEnabled })
+  const {
+    pendingKeys,
+    isAwaitingSequence,
+    timeoutStartedAt: sequenceTimeoutStartedAt,
+    sequenceTimeout,
+  } = useRegisteredHotkeys(allHandlers, { enabled: hotkeysEnabled })
 
   // Build context value
   const value = useMemo<HotkeysContextValue>(() => ({
@@ -254,6 +279,10 @@ function HotkeysProviderInner({
     closeOmnibar,
     toggleOmnibar,
     executeAction,
+    pendingKeys,
+    isAwaitingSequence,
+    sequenceTimeoutStartedAt,
+    sequenceTimeout,
   }), [
     shortcutsContext,
     allActions,
@@ -272,6 +301,10 @@ function HotkeysProviderInner({
     closeOmnibar,
     toggleOmnibar,
     executeAction,
+    pendingKeys,
+    isAwaitingSequence,
+    sequenceTimeoutStartedAt,
+    sequenceTimeout,
   ])
 
   return (
@@ -298,20 +331,41 @@ const DEFAULT_CONFIG: Required<HotkeysConfig> = {
 /**
  * Provider for hotkeys with actions, config, and built-in modal/omnibar support.
  *
+ * Handlers can be provided inline in action definitions, or separately via the
+ * `handlers` prop (useful when handlers need access to runtime state).
+ *
  * @example
  * ```tsx
- * const actions = defineActions({
+ * // Define actions (handlers optional)
+ * const ACTIONS = defineActions({
  *   'nav:home': {
  *     label: 'Go Home',
- *     handler: () => navigate('/'),
  *     defaultBindings: ['g h'],
  *     group: 'Navigation',
+ *   },
+ *   'edit:save': {
+ *     label: 'Save',
+ *     defaultBindings: ['meta+s'],
+ *     group: 'Edit',
  *   },
  * })
  *
  * function App() {
+ *   const navigate = useNavigate()
+ *   const { save } = useDocument()
+ *
+ *   // Handlers defined where they have access to state
+ *   const handlers = useMemo(() => ({
+ *     'nav:home': () => navigate('/'),
+ *     'edit:save': save,
+ *   }), [navigate, save])
+ *
  *   return (
- *     <HotkeysProvider actions={actions}>
+ *     <HotkeysProvider
+ *       actions={ACTIONS}
+ *       handlers={handlers}
+ *       config={{ storageKey: 'my-app-hotkeys' }}
+ *     >
  *       <MyApp />
  *       <ShortcutsModal />
  *       <Omnibar />
@@ -322,6 +376,7 @@ const DEFAULT_CONFIG: Required<HotkeysConfig> = {
  */
 export function HotkeysProvider({
   actions: actionsProp,
+  handlers: handlersProp,
   config: configProp = {},
   children,
 }: HotkeysProviderProps) {
@@ -356,7 +411,7 @@ export function HotkeysProvider({
       storageKey={config.storageType !== 'none' ? config.storageKey : undefined}
       disableConflicts={config.disableConflicts}
     >
-      <HotkeysProviderInner allActions={actionsProp} config={config}>
+      <HotkeysProviderInner allActions={actionsProp} externalHandlers={handlersProp} config={config}>
         {children}
       </HotkeysProviderInner>
     </KeyboardShortcutsProvider>
@@ -373,6 +428,14 @@ export function useHotkeysContext(): HotkeysContextValue {
     throw new Error('useHotkeysContext must be used within a HotkeysProvider')
   }
   return context
+}
+
+/**
+ * Hook to optionally access hotkeys context.
+ * Returns null if not within a HotkeysProvider (useful for components that can work standalone).
+ */
+export function useMaybeHotkeysContext(): HotkeysContextValue | null {
+  return useContext(HotkeysContext)
 }
 
 /**
