@@ -19,22 +19,45 @@ function useActionsRegistry(options = {}) {
       return {};
     }
   });
+  const isDefaultBinding = react.useCallback((key, actionId) => {
+    const action = actionsRef.current.get(actionId);
+    return action?.config.defaultBindings?.includes(key) ?? false;
+  }, []);
+  const filterRedundantOverrides = react.useCallback((overrides2) => {
+    const filtered = {};
+    for (const [key, actionOrActions] of Object.entries(overrides2)) {
+      if (actionOrActions === "") {
+        filtered[key] = actionOrActions;
+      } else if (Array.isArray(actionOrActions)) {
+        const nonDefaultActions = actionOrActions.filter((a) => !isDefaultBinding(key, a));
+        if (nonDefaultActions.length > 0) {
+          filtered[key] = nonDefaultActions.length === 1 ? nonDefaultActions[0] : nonDefaultActions;
+        }
+      } else {
+        if (!isDefaultBinding(key, actionOrActions)) {
+          filtered[key] = actionOrActions;
+        }
+      }
+    }
+    return filtered;
+  }, [isDefaultBinding]);
   const updateOverrides = react.useCallback((update) => {
     setOverrides((prev) => {
       const newOverrides = typeof update === "function" ? update(prev) : update;
+      const filteredOverrides = filterRedundantOverrides(newOverrides);
       if (storageKey && typeof window !== "undefined") {
         try {
-          if (Object.keys(newOverrides).length === 0) {
+          if (Object.keys(filteredOverrides).length === 0) {
             localStorage.removeItem(storageKey);
           } else {
-            localStorage.setItem(storageKey, JSON.stringify(newOverrides));
+            localStorage.setItem(storageKey, JSON.stringify(filteredOverrides));
           }
         } catch {
         }
       }
-      return newOverrides;
+      return filteredOverrides;
     });
-  }, [storageKey]);
+  }, [storageKey, filterRedundantOverrides]);
   const register = react.useCallback((id, config) => {
     actionsRef.current.set(id, {
       config,

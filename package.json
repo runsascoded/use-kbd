@@ -1,6 +1,6 @@
 {
   "name": "use-kbd",
-  "version": "0.3.0-dist.9a0dd75",
+  "version": "0.3.0-dist.c100b93",
   "description": "Keyboard-first UX for React: action registration, shortcuts modal, omnibar, and sequences",
   "type": "module",
   "main": "./index.cjs",
