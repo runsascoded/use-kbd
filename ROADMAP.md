@@ -1,4 +1,4 @@
-# use-hotkeys Roadmap
+# use-kbd Roadmap
 
 ## Vision
 
@@ -95,7 +95,7 @@ Only paired-column layout is app-specific.
 
 ### hotkeyConfig.ts
 ```tsx
-import { defineActions } from '@rdub/use-hotkeys'
+import { defineActions } from 'use-kbd'
 
 export type AwairCallbacks = {
   setLeftMetric: (metric: Metric) => void
@@ -135,7 +135,7 @@ export const createActions = (cb: AwairCallbacks) => defineActions({
 ### AwairHotkeysProvider.tsx
 ```tsx
 import { createContext, useContext, useRef, useMemo } from 'react'
-import { HotkeysProvider } from '@rdub/use-hotkeys'
+import { HotkeysProvider } from 'use-kbd'
 import { createActions, type AwairCallbacks } from './hotkeyConfig'
 
 type CallbacksRef = MutableRefObject<Partial<AwairCallbacks>>
@@ -280,12 +280,12 @@ Expose customization:
 
 ## Files to Change
 
-### use-hotkeys (Phase 1)
+### use-kbd (Phase 1)
 - `src/ShortcutsModal.tsx` - Use context for defaults
 - `src/Omnibar.tsx` - Use context for defaults, use executeAction
 - `src/HotkeysProvider.tsx` - Ensure executeAction uses all handlers
 
-### use-hotkeys (Phase 2)
+### use-kbd (Phase 2)
 - `src/ShortcutsModal.tsx` - Built-in editing UI
 - `src/components/GroupRenderer.tsx` - Default group rendering
 - `src/components/BindingEditor.tsx` - Binding add/edit/remove

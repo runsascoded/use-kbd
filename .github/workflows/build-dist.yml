@@ -14,3 +14,4 @@ jobs:
     with:
       source_ref: ${{ inputs.src }}
       dist_branch: ${{ inputs.dst }}
+      extra_files: src/styles.css

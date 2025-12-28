@@ -1,7 +1,7 @@
 {
-  "name": "@rdub/use-hotkeys",
-  "version": "0.2.1",
-  "description": "Keyboard shortcuts with runtime-editable keybindings and capture UI",
+  "name": "use-kbd",
+  "version": "0.3.0",
+  "description": "Keyboard-first UX for React: action registration, shortcuts modal, omnibar, and sequences",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -25,10 +25,14 @@
     "lint": "eslint src"
   },
   "keywords": [
-    "hotkeys",
     "keyboard",
     "shortcuts",
+    "hotkeys",
     "keybindings",
+    "omnibar",
+    "command-palette",
+    "accessibility",
+    "a11y",
     "react",
     "hooks",
     "typescript"
@@ -37,7 +41,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/runsascoded/use-hotkeys"
+    "url": "https://github.com/runsascoded/use-kbd"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",

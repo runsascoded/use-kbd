@@ -1,30 +1,42 @@
-# @rdub/use-hotkeys
+# use-kbd
 
-[![npm version](https://img.shields.io/npm/v/@rdub/use-hotkeys.svg)](https://www.npmjs.com/package/@rdub/use-hotkeys)
+[![npm version](https://img.shields.io/npm/v/use-kbd.svg)](https://www.npmjs.com/package/use-kbd)
 
 React library for keyboard-accessible web applications with:
 
 1. **Drop-in UI components** (`ShortcutsModal`, `Omnibar`, `SequenceModal`) at the App level
 2. **Minimal-boilerplate action registration** via `useAction` hook, colocated with handlers
 3. **CSS variables** for easy theming customization
-4. **Sensible defaults** with configuration for common patterns
 
-## Philosophy
+Try "?" or "⌘-K" at:
+- [ctbk.dev]
+- [awair.runsascoded.com]
 
-Keyboard navigation and action discoverability on the web are underutilized. This library aims to make keyboard-first UX as easy to implement as it should be—inspired by macOS's ⌘/ action search, Android's settings search, and Vimium's keyboard-driven browsing.
+## Inspiration
+- macOS (⌘-/) and GDrive (⌥-/) menu search
+- [Superhuman] omnibar
+- Android searchable settings
+- [Vimium] keyboard-driven browsing.
+
+[ctbk.dev]: https://ctbk.dev
+[awair.runsascoded.com]: https://awair.runsascoded.com
+[Superhuman]: https://superhuman.com
+[Vimium]: https://github.com/philc/vimium
 
 ## Quick Start
 
 ```tsx
-import { HotkeysProvider, ShortcutsModal, Omnibar, SequenceModal, useAction } from '@rdub/use-hotkeys'
-import '@rdub/use-hotkeys/styles.css'
+import { HotkeysProvider, ShortcutsModal, Omnibar, SequenceModal, useAction } from 'use-kbd'
+import 'use-kbd/styles.css'
 
 function App() {
   return (
     <HotkeysProvider config={{ storageKey: 'my-app' }}>
+      {/* Your page content */}
       <Dashboard />
+      {/* Drop-in "kbd" functionality */}
       <ShortcutsModal />
-      <Omnibar placeholder="Search actions..." />
+      <Omnibar />
       <SequenceModal />
     </HotkeysProvider>
   )
@@ -56,14 +68,14 @@ Press `?` to see the shortcuts modal, or `⌘K` to open the omnibar.
 ## Installation
 
 ```bash
-pnpm add @rdub/use-hotkeys
+pnpm add use-kbd
 ```
 
 ## Core Concepts
 
 ### Actions
 
-Actions are registered where they're handled using `useAction`:
+Register any function with `useAction`:
 
 ```tsx
 useAction('view:toggle-sidebar', {
@@ -147,7 +159,7 @@ Shows pending keys and available completions during sequence input. No props nee
 Import the default styles:
 
 ```tsx
-import '@rdub/use-hotkeys/styles.css'
+import 'use-kbd/styles.css'
 ```
 
 Customize with CSS variables:
@@ -194,10 +206,6 @@ const { isRecording, startRecording, display } = useRecordHotkey({
 ### `useEditableHotkeys(defaults, handlers, options?)`
 
 Wraps `useHotkeys` with localStorage persistence and conflict detection.
-
-## Examples
-
-- [runsascoded/awair](https://github.com/runsascoded/awair) – Air quality dashboard with full keyboard navigation
 
 ## License
 
