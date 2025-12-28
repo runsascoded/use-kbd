@@ -1,3 +1,4 @@
+import { max } from '@rdub/base'
 import type { KeyCombination, KeyCombinationDisplay, HotkeySequence } from './types'
 
 /**
@@ -585,7 +586,7 @@ export function searchActions(
       for (const keyword of action.keywords) {
         const kwMatch = fuzzyMatch(query, keyword)
         if (kwMatch.matched) {
-          keywordScore = Math.max(keywordScore, kwMatch.score)
+          keywordScore = max(keywordScore, kwMatch.score)
         }
       }
     }

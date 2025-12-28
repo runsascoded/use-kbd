@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { max, min } from '@rdub/base'
 import { useHotkeys, HotkeyMap, HandlerMap } from './useHotkeys'
 import { searchActions, getSequenceCompletions } from './utils'
 import type { ActionRegistry, ActionSearchResult, HotkeySequence } from './types'
@@ -208,11 +209,11 @@ export function useOmnibar(options: UseOmnibarOptions): UseOmnibarResult {
   }, [onOpen, onClose])
 
   const selectNext = useCallback(() => {
-    setSelectedIndex(prev => Math.min(prev + 1, results.length - 1))
+    setSelectedIndex(prev => min(prev + 1, results.length - 1))
   }, [results.length])
 
   const selectPrev = useCallback(() => {
-    setSelectedIndex(prev => Math.max(prev - 1, 0))
+    setSelectedIndex(prev => max(prev - 1, 0))
   }, [])
 
   const resetSelection = useCallback(() => {

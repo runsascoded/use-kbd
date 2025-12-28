@@ -55,5 +55,8 @@
   },
   "peerDependencies": {
     "react": ">=18.0.0"
+  },
+  "dependencies": {
+    "@rdub/base": "^0.8.1"
   }
 }
