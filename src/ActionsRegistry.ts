@@ -62,25 +62,56 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
     }
   })
 
+  // Helper to check if a key→action matches a default binding
+  const isDefaultBinding = useCallback((key: string, actionId: string): boolean => {
+    const action = actionsRef.current.get(actionId)
+    return action?.config.defaultBindings?.includes(key) ?? false
+  }, [])
+
+  // Filter overrides to remove redundant entries (entries that match defaults)
+  const filterRedundantOverrides = useCallback((overrides: Record<string, string | string[]>): Record<string, string | string[]> => {
+    const filtered: Record<string, string | string[]> = {}
+    for (const [key, actionOrActions] of Object.entries(overrides)) {
+      if (actionOrActions === '') {
+        // Keep explicit removals
+        filtered[key] = actionOrActions
+      } else if (Array.isArray(actionOrActions)) {
+        // For arrays, keep if any action is not default
+        const nonDefaultActions = actionOrActions.filter(a => !isDefaultBinding(key, a))
+        if (nonDefaultActions.length > 0) {
+          filtered[key] = nonDefaultActions.length === 1 ? nonDefaultActions[0] : nonDefaultActions
+        }
+      } else {
+        // Single action - keep if not default
+        if (!isDefaultBinding(key, actionOrActions)) {
+          filtered[key] = actionOrActions
+        }
+      }
+    }
+    return filtered
+  }, [isDefaultBinding])
+
   // Persist overrides - accepts either a value or an updater function
   type OverridesUpdate = Record<string, string | string[]> | ((prev: Record<string, string | string[]>) => Record<string, string | string[]>)
   const updateOverrides = useCallback((update: OverridesUpdate) => {
     setOverrides((prev) => {
       const newOverrides = typeof update === 'function' ? update(prev) : update
+      // Filter out redundant overrides before persisting
+      const filteredOverrides = filterRedundantOverrides(newOverrides)
       if (storageKey && typeof window !== 'undefined') {
         try {
-          if (Object.keys(newOverrides).length === 0) {
+          if (Object.keys(filteredOverrides).length === 0) {
             localStorage.removeItem(storageKey)
           } else {
-            localStorage.setItem(storageKey, JSON.stringify(newOverrides))
+            localStorage.setItem(storageKey, JSON.stringify(filteredOverrides))
           }
         } catch {
           // Ignore storage errors
         }
       }
-      return newOverrides
+      return filteredOverrides
     })
-  }, [storageKey])
+  }, [storageKey, filterRedundantOverrides])
 
   const register = useCallback((id: string, config: ActionConfig) => {
     actionsRef.current.set(id, {
