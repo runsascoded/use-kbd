@@ -1,5 +1,4 @@
 import { Fragment, MouseEvent, ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
-import { getActionRegistry } from './actions'
 import { useMaybeHotkeysContext } from './HotkeysProvider'
 import { ModifierIcon } from './ModifierIcons'
 import { useHotkeys } from './useHotkeys'
@@ -335,31 +334,32 @@ export function ShortcutsModal({
   // Try to get context (returns null if not within HotkeysProvider)
   const ctx = useMaybeHotkeysContext()
 
-  // Derive labels/descriptions/groups from context actions if not provided as props
+  // Derive labels/descriptions/groups from context registry if not provided as props
   const contextLabels = useMemo(() => {
-    if (!ctx?.allActions) return undefined
-    const registry = getActionRegistry(ctx.allActions)
+    const registry = ctx?.registry.actionRegistry
+    if (!registry) return undefined
     const labels: Record<string, string> = {}
     for (const [id, action] of Object.entries(registry)) {
       labels[id] = action.label
     }
     return labels
-  }, [ctx?.allActions])
+  }, [ctx?.registry.actionRegistry])
 
   const contextDescriptions = useMemo(() => {
-    if (!ctx?.allActions) return undefined
-    const registry = getActionRegistry(ctx.allActions)
+    const registry = ctx?.registry.actionRegistry
+    if (!registry) return undefined
     const descriptions: Record<string, string> = {}
     for (const [id, action] of Object.entries(registry)) {
       if (action.description) descriptions[id] = action.description
     }
     return descriptions
-  }, [ctx?.allActions])
+  }, [ctx?.registry.actionRegistry])
 
   const contextGroups = useMemo(() => {
-    if (!ctx?.allActions) return undefined
+    const registry = ctx?.registry.actionRegistry
+    if (!registry) return undefined
     const groups: Record<string, string> = {}
-    for (const action of Object.values(ctx.allActions)) {
+    for (const action of Object.values(registry)) {
       if (action.group) {
         // Map action prefix to group name
         const prefix = action.group.toLowerCase().replace(/[\s-]/g, '')
@@ -367,11 +367,11 @@ export function ShortcutsModal({
       }
     }
     return groups
-  }, [ctx?.allActions])
+  }, [ctx?.registry.actionRegistry])
 
   // Use context values with prop overrides
-  const keymap = keymapProp ?? ctx?.keymap ?? {}
-  const defaults = defaultsProp ?? ctx?.defaults
+  const keymap = keymapProp ?? ctx?.registry.keymap ?? {}
+  const defaults = defaultsProp
   const labels = labelsProp ?? contextLabels
   const descriptions = descriptionsProp ?? contextDescriptions
   const groupNames = groupNamesProp ?? contextGroups

@@ -1,5 +1,4 @@
 import { Fragment, KeyboardEvent, MouseEvent, ReactNode, RefObject, useCallback, useEffect, useMemo, useRef } from 'react'
-import { getActionRegistry } from './actions'
 import { useMaybeHotkeysContext } from './HotkeysProvider'
 import { ModifierIcon } from './ModifierIcons'
 import { useOmnibar } from './useOmnibar'
@@ -133,16 +132,9 @@ export function Omnibar({
   // Try to get context (returns null if not within HotkeysProvider)
   const ctx = useMaybeHotkeysContext()
 
-  // Derive actions from context if not provided as prop
-  const contextActions = useMemo(() => {
-    if (!ctx?.allActions) return undefined
-    return getActionRegistry(ctx.allActions)
-  }, [ctx?.allActions])
-
   // Use context values with prop overrides
-  const actions = actionsProp ?? contextActions ?? {}
-  const handlers = handlersProp ?? ctx?.handlers
-  const keymap = keymapProp ?? ctx?.keymap ?? {}
+  const actions = actionsProp ?? ctx?.registry.actionRegistry ?? {}
+  const keymap = keymapProp ?? ctx?.registry.keymap ?? {}
 
   // When using context, default enabled to false (HotkeysProvider handles the trigger)
   const enabled = enabledProp ?? !ctx
@@ -189,7 +181,7 @@ export function Omnibar({
     isAwaitingSequence,
   } = useOmnibar({
     actions,
-    handlers,
+    handlers: handlersProp,
     keymap,
     openKey,
     enabled: isOpenProp === undefined && ctx === null ? enabled : false, // Disable hotkey if controlled or using context
@@ -305,9 +297,9 @@ export function Omnibar({
                 <span className="hotkeys-omnibar-result-label">
                   {result.action.label}
                 </span>
-                {result.action.category && (
+                {result.action.group && (
                   <span className="hotkeys-omnibar-result-category">
-                    {result.action.category}
+                    {result.action.group}
                   </span>
                 )}
                 {result.bindings.length > 0 && (

@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { useDynamicHotkeysContext } from './DynamicHotkeysProvider'
+import { useHotkeysContext } from './HotkeysProvider'
 import type { SequenceCompletion } from './types'
 import { formatCombination } from './utils'
 
@@ -11,7 +11,7 @@ export function SequenceModal() {
     sequenceTimeout,
     getCompletions,
     registry,
-  } = useDynamicHotkeysContext()
+  } = useHotkeysContext()
 
   // Get completions for the current pending keys
   const completions = useMemo(() => {

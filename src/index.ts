@@ -21,45 +21,16 @@ export type {
 } from './KeybindingEditor'
 export type { ShortcutGroup, ShortcutsModalProps, ShortcutsModalRenderProps } from './ShortcutsModal'
 export type { OmnibarProps, OmnibarRenderProps } from './Omnibar'
-export type {
-  KeyboardShortcutsContextValue,
-  KeyboardShortcutsProviderProps,
-} from './KeyboardShortcutsContext'
 
-// Action types and helpers
-export type { Action, ActionMetadata, ActionMetadataRegistry, Actions, ActionsByRoute, RouteMatcher } from './actions'
-export {
-  defineActions,
-  defineActionsByRoute,
-  filterActionsByRoute,
-  getActionRegistry,
-  getDefaultKeymap,
-  getGroups,
-  getHandlers,
-  groupActions,
-  matchesRoute,
-} from './actions'
-
-// HotkeysProvider (high-level integration with static actions)
+// HotkeysProvider (high-level integration with dynamic action registration)
 export type { HotkeysConfig, HotkeysContextValue, HotkeysProviderProps } from './HotkeysProvider'
-export { HotkeysProvider, useHotkeysContext, useMaybeHotkeysContext, useHotkeysUI } from './HotkeysProvider'
+export { HotkeysProvider, useHotkeysContext, useMaybeHotkeysContext } from './HotkeysProvider'
 
-// DynamicHotkeysProvider (high-level integration with dynamic action registration)
-export type { DynamicHotkeysConfig, DynamicHotkeysContextValue, DynamicHotkeysProviderProps } from './DynamicHotkeysProvider'
-export { DynamicHotkeysProvider, useDynamicHotkeysContext, useMaybeDynamicHotkeysContext } from './DynamicHotkeysProvider'
-
-// Dynamic action registration
+// Action registration
 export type { ActionConfig } from './useAction'
 export { useAction, useActions } from './useAction'
 export type { ActionsRegistryValue, RegisteredAction } from './ActionsRegistry'
 export { ActionsRegistryContext, useActionsRegistry } from './ActionsRegistry'
-
-// Context & Provider (lower-level)
-export {
-  KeyboardShortcutsProvider,
-  useKeyboardShortcutsContext,
-  useRegisteredHotkeys,
-} from './KeyboardShortcutsContext'
 
 // Hooks
 export { useHotkeys } from './useHotkeys'

@@ -86,8 +86,8 @@ export interface ActionDefinition {
   label: string
   /** Longer description (shown in omnibar, tooltips) */
   description?: string
-  /** Category for grouping (e.g., "Metrics", "Time Range") */
-  category?: string
+  /** Group for organizing in shortcuts modal (e.g., "Metrics", "Time Range") */
+  group?: string
   /** Additional search keywords */
   keywords?: string[]
   /** Icon identifier (user provides rendering) */

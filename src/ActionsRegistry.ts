@@ -138,7 +138,7 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
     for (const [id, { config }] of actionsRef.current) {
       registry[id] = {
         label: config.label,
-        category: config.group,
+        group: config.group,
         keywords: config.keywords,
       }
     }

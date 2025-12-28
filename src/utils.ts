@@ -577,7 +577,7 @@ export function searchActions(
     // Match against multiple fields
     const labelMatch = fuzzyMatch(query, action.label)
     const descMatch = action.description ? fuzzyMatch(query, action.description) : { matched: false, score: 0, ranges: [] }
-    const categoryMatch = action.category ? fuzzyMatch(query, action.category) : { matched: false, score: 0, ranges: [] }
+    const groupMatch = action.group ? fuzzyMatch(query, action.group) : { matched: false, score: 0, ranges: [] }
     const idMatch = fuzzyMatch(query, id)
 
     // Check keywords
@@ -592,13 +592,13 @@ export function searchActions(
     }
 
     // Calculate total score (label weighted highest)
-    const matched = labelMatch.matched || descMatch.matched || categoryMatch.matched || idMatch.matched || keywordScore > 0
+    const matched = labelMatch.matched || descMatch.matched || groupMatch.matched || idMatch.matched || keywordScore > 0
     if (!matched && query) continue
 
     const score =
       (labelMatch.matched ? labelMatch.score * 3 : 0) +
       (descMatch.matched ? descMatch.score * 1.5 : 0) +
-      (categoryMatch.matched ? categoryMatch.score * 1 : 0) +
+      (groupMatch.matched ? groupMatch.score * 1 : 0) +
       (idMatch.matched ? idMatch.score * 0.5 : 0) +
       keywordScore * 2
 

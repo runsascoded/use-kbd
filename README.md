@@ -2,7 +2,56 @@
 
 [![npm version](https://img.shields.io/npm/v/@rdub/use-hotkeys.svg)](https://www.npmjs.com/package/@rdub/use-hotkeys)
 
-React hooks for keyboard shortcuts with runtime editing and key capture.
+React library for keyboard-accessible web applications with:
+
+1. **Drop-in UI components** (`ShortcutsModal`, `Omnibar`, `SequenceModal`) at the App level
+2. **Minimal-boilerplate action registration** via `useAction` hook, colocated with handlers
+3. **CSS variables** for easy theming customization
+4. **Sensible defaults** with configuration for common patterns
+
+## Philosophy
+
+Keyboard navigation and action discoverability on the web are underutilized. This library aims to make keyboard-first UX as easy to implement as it should be—inspired by macOS's ⌘/ action search, Android's settings search, and Vimium's keyboard-driven browsing.
+
+## Quick Start
+
+```tsx
+import { HotkeysProvider, ShortcutsModal, Omnibar, SequenceModal, useAction } from '@rdub/use-hotkeys'
+import '@rdub/use-hotkeys/styles.css'
+
+function App() {
+  return (
+    <HotkeysProvider config={{ storageKey: 'my-app' }}>
+      <Dashboard />
+      <ShortcutsModal />
+      <Omnibar placeholder="Search actions..." />
+      <SequenceModal />
+    </HotkeysProvider>
+  )
+}
+
+function Dashboard() {
+  const { save, exportData } = useDocument()
+
+  useAction('doc:save', {
+    label: 'Save document',
+    group: 'Document',
+    defaultBindings: ['meta+s'],
+    handler: save,
+  })
+
+  useAction('doc:export', {
+    label: 'Export data',
+    group: 'Document',
+    defaultBindings: ['meta+e'],
+    handler: exportData,
+  })
+
+  return <Editor />
+}
+```
+
+Press `?` to see the shortcuts modal, or `⌘K` to open the omnibar.
 
 ## Installation
 
@@ -10,211 +59,145 @@ React hooks for keyboard shortcuts with runtime editing and key capture.
 pnpm add @rdub/use-hotkeys
 ```
 
-## Usage
+## Core Concepts
 
-### Basic shortcuts
+### Actions
 
-```tsx
-import { useHotkeys } from '@rdub/use-hotkeys'
-
-const HOTKEYS = {
-  't': 'setTemp',
-  'c': 'setCO2',
-  'ctrl+s': 'save',
-  'shift+?': 'showHelp',
-}
-
-function App() {
-  useHotkeys(HOTKEYS, {
-    setTemp: () => setMetric('temp'),
-    setCO2: () => setMetric('co2'),
-    save: () => handleSave(),
-    showHelp: () => setShowHelp(true),
-  })
-}
-```
-
-### Recording key combinations
+Actions are registered where they're handled using `useAction`:
 
 ```tsx
-import { useRecordHotkey } from '@rdub/use-hotkeys'
-
-function KeybindingButton() {
-  const { isRecording, startRecording, display, activeKeys } = useRecordHotkey({
-    onCapture: (combo, display) => {
-      console.log(`Captured: ${display.display}`) // "⌘⇧K" on Mac
-      saveBinding(display.id) // "meta+shift+k"
-    }
-  })
-
-  return (
-    <button onClick={() => startRecording()}>
-      {isRecording
-        ? (activeKeys ? formatCombination(activeKeys).display : 'Press keys...')
-        : (display?.display ?? 'Click to set')}
-    </button>
-  )
-}
+useAction('view:toggle-sidebar', {
+  label: 'Toggle sidebar',
+  group: 'View',
+  defaultBindings: ['meta+b', 'meta+\\'],
+  keywords: ['panel', 'navigation'],
+  handler: () => setSidebarOpen(prev => !prev),
+})
 ```
 
-## API
+Actions automatically unregister when the component unmounts—no cleanup needed.
 
-### `useHotkeys(keymap, handlers, options?)`
+### Sequences
 
-Register keyboard shortcuts.
-
-- `keymap`: `Record<string, string | string[]>` - maps key combos to action names
-- `handlers`: `Record<string, (e: KeyboardEvent) => void>` - maps action names to functions
-- `options`:
-  - `enabled?: boolean` - enable/disable (default: true)
-  - `target?: HTMLElement | Window` - event target (default: window)
-  - `preventDefault?: boolean` - prevent default on match (default: true)
-  - `stopPropagation?: boolean` - stop propagation on match (default: true)
-  - `enableOnFormTags?: boolean` - fire in inputs/textareas (default: false)
-
-### `useRecordHotkey(options?)`
-
-Capture key combinations from user input.
-
-- `options`:
-  - `onCapture?: (combo, display) => void` - called when combination captured
-  - `onCancel?: () => void` - called when recording cancelled
-  - `preventDefault?: boolean` - prevent default during capture (default: true)
-
-Returns:
-- `isRecording: boolean`
-- `startRecording: () => () => void` - returns cancel function
-- `cancel: () => void`
-- `combination: KeyCombination | null`
-- `display: KeyCombinationDisplay | null`
-- `activeKeys: KeyCombination | null` - keys currently held (for live UI feedback)
-
-### `useEditableHotkeys(defaults, handlers, options?)`
-
-Wraps `useHotkeys` with editable keybindings and localStorage persistence.
+Multi-key sequences like Vim's `g g` (go to top) are supported:
 
 ```tsx
-import { useEditableHotkeys } from '@rdub/use-hotkeys'
-
-const { keymap, setBinding, reset, overrides } = useEditableHotkeys(
-  { 't': 'setTemp', 'c': 'setCO2' },
-  { setTemp: () => setMetric('temp'), setCO2: () => setMetric('co2') },
-  { storageKey: 'app-hotkeys' }
-)
+useAction('nav:top', {
+  label: 'Go to top',
+  defaultBindings: ['g g'],  // Press g, then g again
+  handler: () => scrollToTop(),
+})
 ```
 
-- `defaults`: Default keymap
-- `handlers`: Action handlers (same as `useHotkeys`)
-- `options`:
-  - `storageKey?: string` - localStorage key for persistence (omit to disable)
-  - `disableConflicts?: boolean` - disable keys with multiple actions bound (default: true)
-  - Plus all `useHotkeys` options
+The `SequenceModal` shows available completions while typing a sequence.
 
-Returns:
-- `keymap: HotkeyMap` - current merged keymap
-- `setBinding: (action, key) => void` - update a single binding
-- `setKeymap: (overrides) => void` - update multiple bindings
-- `reset: () => void` - clear all overrides
-- `overrides: Partial<HotkeyMap>` - user overrides only
-- `conflicts: Map<string, string[]>` - keys with multiple actions bound
-- `hasConflicts: boolean` - whether any conflicts exist
+### User Customization
+
+Users can edit bindings in the `ShortcutsModal`. Changes persist to localStorage using the `storageKey` you provide.
+
+## Components
+
+### `<HotkeysProvider>`
+
+Wrap your app to enable the hotkeys system:
+
+```tsx
+<HotkeysProvider config={{
+  storageKey: 'my-app',      // localStorage key for user overrides
+  modalTrigger: '?',          // Open shortcuts modal (false to disable)
+  omnibarTrigger: 'meta+k',   // Open omnibar (false to disable)
+  sequenceTimeout: 1000,      // ms before sequence times out
+}}>
+  {children}
+</HotkeysProvider>
+```
 
 ### `<ShortcutsModal>`
 
-Display keyboard shortcuts in a modal (opens with `?` by default).
+Displays all registered actions grouped by category. Users can click bindings to edit them.
 
 ```tsx
-import { ShortcutsModal } from '@rdub/use-hotkeys'
+<ShortcutsModal groups={[
+  { id: 'nav', label: 'Navigation' },
+  { id: 'edit', label: 'Editing' },
+]} />
+```
 
-<ShortcutsModal
-  keymap={HOTKEYS}
-  descriptions={{ 'metric:temp': 'Switch to temperature' }}
-  groups={{ metric: 'Metrics', time: 'Time Range' }}
+### `<Omnibar>`
+
+Command palette for searching and executing actions:
+
+```tsx
+<Omnibar
+  placeholder="Type a command..."
+  maxResults={10}
 />
 ```
 
-Props:
-- `keymap: HotkeyMap` - shortcuts to display
-- `descriptions?: Record<string, string>` - action descriptions
-- `groups?: Record<string, string>` - group prefix → display name
-- `isOpen?: boolean` - controlled visibility
-- `onClose?: () => void` - close callback
-- `openKey?: string` - key to open (default: `'?'`)
-- `autoRegisterOpen?: boolean` - auto-register open key (default: true)
-- `children?: (props) => ReactNode` - custom render function
+### `<SequenceModal>`
 
-### `<KeybindingEditor>`
-
-UI for viewing and editing keybindings with conflict detection.
+Shows pending keys and available completions during sequence input. No props needed—it reads from context.
 
 ```tsx
-import { KeybindingEditor } from '@rdub/use-hotkeys'
-
-<KeybindingEditor
-  keymap={keymap}
-  defaults={DEFAULT_KEYMAP}
-  descriptions={{ save: 'Save document' }}
-  onChange={(action, key) => setBinding(action, key)}
-  onReset={() => reset()}
-/>
+<SequenceModal />
 ```
 
-Props:
-- `keymap: HotkeyMap` - current keymap
-- `defaults: HotkeyMap` - default keymap (for reset)
-- `descriptions?: Record<string, string>` - action descriptions
-- `onChange: (action, key) => void` - binding change callback
-- `onReset?: () => void` - reset callback
-- `children?: (props) => ReactNode` - custom render function
+## Styling
 
-### Utilities
+Import the default styles:
 
 ```tsx
-import {
-  formatCombination,
-  parseCombinationId,
-  findConflicts,
-  hasConflicts,
-} from '@rdub/use-hotkeys'
-
-formatCombination({ key: 'k', modifiers: { meta: true, shift: true, ctrl: false, alt: false }})
-// → { display: "⌘⇧K", id: "meta+shift+k" } on Mac
-// → { display: "Win+Shift+K", id: "meta+shift+k" } elsewhere
-
-parseCombinationId('ctrl+shift+k')
-// → { key: 'k', modifiers: { ctrl: true, shift: true, alt: false, meta: false }}
-
-// Conflict detection
-const keymap = { 't': 'setTemp', 't': 'toggleTheme' } // same key!
-findConflicts(keymap) // → Map { 't' => ['setTemp', 'toggleTheme'] }
-hasConflicts(keymap)  // → true
+import '@rdub/use-hotkeys/styles.css'
 ```
 
-## Key format
+Customize with CSS variables:
 
-Modifier keys: `ctrl`, `alt`, `shift`, `meta` (or `cmd`/`command` on Mac)
+```css
+.hotkeys-modal,
+.hotkeys-omnibar,
+.hotkeys-sequence {
+  --hk-bg: #1f2937;
+  --hk-text: #f3f4f6;
+  --hk-border: #4b5563;
+  --hk-accent: #3b82f6;
+  --hk-kbd-bg: #374151;
+}
+```
 
-Examples:
-- `'t'` - just T key
-- `'shift+t'` - Shift+T
-- `'ctrl+shift+k'` - Ctrl+Shift+K
-- `'meta+s'` - Cmd+S on Mac, Win+S elsewhere
+Or use `[data-theme="dark"]` / `.dark` selectors for dark mode.
+
+## Low-Level Hooks
+
+For advanced use cases, the underlying hooks are also exported:
+
+### `useHotkeys(keymap, handlers, options?)`
+
+Register shortcuts directly without the provider:
+
+```tsx
+useHotkeys(
+  { 't': 'setTemp', 'meta+s': 'save' },
+  { setTemp: () => setMetric('temp'), save: handleSave }
+)
+```
+
+### `useRecordHotkey(options?)`
+
+Capture key combinations from user input:
+
+```tsx
+const { isRecording, startRecording, display } = useRecordHotkey({
+  onCapture: (sequence, display) => saveBinding(display.id),
+})
+```
+
+### `useEditableHotkeys(defaults, handlers, options?)`
+
+Wraps `useHotkeys` with localStorage persistence and conflict detection.
 
 ## Examples
 
-Projects using `@rdub/use-hotkeys`:
-
-- [runsascoded/awair] – Air quality dashboard with keyboard shortcuts for metric switching
-
-  Press `?` to see the shortcuts modal, or use single keys to switch metrics:
-  - `t` / `c` / `h` / `p` / `v` – Temperature / CO₂ / Humidity / PM2.5 / VOC
-  - `1` / `3` / `7` / `m` – 1 day / 3 days / 1 week / 1 month time range
-
-[runsascoded/awair]: https://github.com/runsascoded/awair
-
-## See also
-
-[ROADMAP.md](./ROADMAP.md) - feature overview and future ideas.
+- [runsascoded/awair](https://github.com/runsascoded/awair) – Air quality dashboard with full keyboard navigation
 
 ## License
 
