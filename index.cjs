@@ -1,11 +1,145 @@
 'use strict';
 
 var react = require('react');
+var base = require('@rdub/base');
 var jsxRuntime = require('react/jsx-runtime');
 
-// src/KeyboardShortcutsContext.tsx
-
-// src/utils.ts
+// src/HotkeysProvider.tsx
+var ActionsRegistryContext = react.createContext(null);
+function useActionsRegistry(options = {}) {
+  const { storageKey } = options;
+  const actionsRef = react.useRef(/* @__PURE__ */ new Map());
+  const [actionsVersion, setActionsVersion] = react.useState(0);
+  const [overrides, setOverrides] = react.useState(() => {
+    if (!storageKey || typeof window === "undefined") return {};
+    try {
+      const stored = localStorage.getItem(storageKey);
+      return stored ? JSON.parse(stored) : {};
+    } catch {
+      return {};
+    }
+  });
+  const updateOverrides = react.useCallback((newOverrides) => {
+    setOverrides(newOverrides);
+    if (storageKey && typeof window !== "undefined") {
+      try {
+        if (Object.keys(newOverrides).length === 0) {
+          localStorage.removeItem(storageKey);
+        } else {
+          localStorage.setItem(storageKey, JSON.stringify(newOverrides));
+        }
+      } catch {
+      }
+    }
+  }, [storageKey]);
+  const register = react.useCallback((id, config) => {
+    actionsRef.current.set(id, {
+      config,
+      registeredAt: Date.now()
+    });
+    setActionsVersion((v) => v + 1);
+  }, []);
+  const unregister = react.useCallback((id) => {
+    actionsRef.current.delete(id);
+    setActionsVersion((v) => v + 1);
+  }, []);
+  const execute = react.useCallback((id) => {
+    const action = actionsRef.current.get(id);
+    if (action && (action.config.enabled ?? true)) {
+      action.config.handler();
+    }
+  }, []);
+  const keymap = react.useMemo(() => {
+    const map = {};
+    for (const [id, { config }] of actionsRef.current) {
+      for (const binding of config.defaultBindings ?? []) {
+        if (overrides[binding] !== void 0) continue;
+        const existing = map[binding];
+        if (existing) {
+          map[binding] = Array.isArray(existing) ? [...existing, id] : [existing, id];
+        } else {
+          map[binding] = id;
+        }
+      }
+    }
+    for (const [key, actionOrActions] of Object.entries(overrides)) {
+      if (actionOrActions === "") {
+        delete map[key];
+      } else {
+        map[key] = actionOrActions;
+      }
+    }
+    return map;
+  }, [actionsVersion, overrides]);
+  const actionRegistry = react.useMemo(() => {
+    const registry = {};
+    for (const [id, { config }] of actionsRef.current) {
+      registry[id] = {
+        label: config.label,
+        group: config.group,
+        keywords: config.keywords
+      };
+    }
+    return registry;
+  }, [actionsVersion]);
+  const getBindingsForAction = react.useCallback((actionId) => {
+    const bindings = [];
+    for (const [key, action] of Object.entries(keymap)) {
+      const actions2 = Array.isArray(action) ? action : [action];
+      if (actions2.includes(actionId)) {
+        bindings.push(key);
+      }
+    }
+    return bindings;
+  }, [keymap]);
+  const setBinding = react.useCallback((actionId, key) => {
+    updateOverrides({
+      ...overrides,
+      [key]: actionId
+    });
+  }, [overrides, updateOverrides]);
+  const removeBinding = react.useCallback((key) => {
+    const action = actionsRef.current.get(overrides[key]);
+    const isDefault = action?.config.defaultBindings?.includes(key);
+    if (isDefault) {
+      updateOverrides({ ...overrides, [key]: "" });
+    } else {
+      const { [key]: _, ...rest } = overrides;
+      updateOverrides(rest);
+    }
+  }, [overrides, updateOverrides]);
+  const resetOverrides = react.useCallback(() => {
+    updateOverrides({});
+  }, [updateOverrides]);
+  const actions = react.useMemo(() => {
+    return new Map(actionsRef.current);
+  }, [actionsVersion]);
+  return react.useMemo(() => ({
+    register,
+    unregister,
+    execute,
+    actions,
+    keymap,
+    actionRegistry,
+    getBindingsForAction,
+    overrides,
+    setBinding,
+    removeBinding,
+    resetOverrides
+  }), [
+    register,
+    unregister,
+    execute,
+    actions,
+    keymap,
+    actionRegistry,
+    getBindingsForAction,
+    overrides,
+    setBinding,
+    removeBinding,
+    resetOverrides
+  ]);
+}
 function isMac() {
   if (typeof navigator === "undefined") return false;
   return /Mac|iPod|iPhone|iPad/.test(navigator.platform);
@@ -342,20 +476,20 @@ function searchActions(query, actions, keymap) {
     if (action.enabled === false) continue;
     const labelMatch = fuzzyMatch(query, action.label);
     const descMatch = action.description ? fuzzyMatch(query, action.description) : { matched: false, score: 0};
-    const categoryMatch = action.category ? fuzzyMatch(query, action.category) : { matched: false, score: 0};
+    const groupMatch = action.group ? fuzzyMatch(query, action.group) : { matched: false, score: 0};
     const idMatch = fuzzyMatch(query, id);
     let keywordScore = 0;
     if (action.keywords) {
       for (const keyword of action.keywords) {
         const kwMatch = fuzzyMatch(query, keyword);
         if (kwMatch.matched) {
-          keywordScore = Math.max(keywordScore, kwMatch.score);
+          keywordScore = base.max(keywordScore, kwMatch.score);
         }
       }
     }
-    const matched = labelMatch.matched || descMatch.matched || categoryMatch.matched || idMatch.matched || keywordScore > 0;
+    const matched = labelMatch.matched || descMatch.matched || groupMatch.matched || idMatch.matched || keywordScore > 0;
     if (!matched && query) continue;
-    const score = (labelMatch.matched ? labelMatch.score * 3 : 0) + (descMatch.matched ? descMatch.score * 1.5 : 0) + (categoryMatch.matched ? categoryMatch.score * 1 : 0) + (idMatch.matched ? idMatch.score * 0.5 : 0) + keywordScore * 2;
+    const score = (labelMatch.matched ? labelMatch.score * 3 : 0) + (descMatch.matched ? descMatch.score * 1.5 : 0) + (groupMatch.matched ? groupMatch.score * 1 : 0) + (idMatch.matched ? idMatch.score * 0.5 : 0) + keywordScore * 2;
     results.push({
       id,
       action,
@@ -611,230 +745,70 @@ function useHotkeys(keymap, handlers, options = {}) {
   ]);
   return { pendingKeys, isAwaitingSequence, cancelSequence, timeoutStartedAt, sequenceTimeout };
 }
-var KeyboardShortcutsContext = react.createContext(null);
-function KeyboardShortcutsProvider({
-  defaults,
-  actions: actionsProp = {},
-  storageKey,
-  disableConflicts = true,
+var HotkeysContext = react.createContext(null);
+var DEFAULT_CONFIG = {
+  storageKey: "hotkeys",
+  sequenceTimeout: 1e3,
+  disableConflicts: true,
+  minViewportWidth: 768,
+  enableOnTouch: false,
+  modalTrigger: "?",
+  omnibarTrigger: "meta+k"
+};
+function HotkeysProvider({
+  config: configProp = {},
   children
 }) {
-  const [overrides, setOverrides] = react.useState(() => {
-    if (!storageKey || typeof window === "undefined") return {};
-    try {
-      const stored = localStorage.getItem(storageKey);
-      return stored ? JSON.parse(stored) : {};
-    } catch {
-      return {};
-    }
-  });
+  const config = react.useMemo(() => ({
+    ...DEFAULT_CONFIG,
+    ...configProp
+  }), [configProp]);
+  const registry = useActionsRegistry({ storageKey: config.storageKey });
+  const [isEnabled, setIsEnabled] = react.useState(true);
   react.useEffect(() => {
-    if (!storageKey || typeof window === "undefined") return;
-    try {
-      if (Object.keys(overrides).length === 0) {
-        localStorage.removeItem(storageKey);
-      } else {
-        localStorage.setItem(storageKey, JSON.stringify(overrides));
+    if (typeof window === "undefined") return;
+    const checkEnabled = () => {
+      if (config.minViewportWidth !== false) {
+        if (window.innerWidth < config.minViewportWidth) {
+          setIsEnabled(false);
+          return;
+        }
       }
-    } catch {
-    }
-  }, [storageKey, overrides]);
+      if (!config.enableOnTouch) {
+        const hasHover = window.matchMedia("(hover: hover)").matches;
+        if (!hasHover) {
+          setIsEnabled(false);
+          return;
+        }
+      }
+      setIsEnabled(true);
+    };
+    checkEnabled();
+    window.addEventListener("resize", checkEnabled);
+    return () => window.removeEventListener("resize", checkEnabled);
+  }, [config.minViewportWidth, config.enableOnTouch]);
+  const [isModalOpen, setIsModalOpen] = react.useState(false);
+  const openModal = react.useCallback(() => setIsModalOpen(true), []);
+  const closeModal = react.useCallback(() => setIsModalOpen(false), []);
+  const toggleModal = react.useCallback(() => setIsModalOpen((prev) => !prev), []);
+  const [isOmnibarOpen, setIsOmnibarOpen] = react.useState(false);
+  const openOmnibar = react.useCallback(() => setIsOmnibarOpen(true), []);
+  const closeOmnibar = react.useCallback(() => setIsOmnibarOpen(false), []);
+  const toggleOmnibar = react.useCallback(() => setIsOmnibarOpen((prev) => !prev), []);
   const keymap = react.useMemo(() => {
-    const effectiveMap = {};
-    for (const [key, action] of Object.entries(defaults)) {
-      effectiveMap[key] = action;
+    const map = { ...registry.keymap };
+    if (config.modalTrigger !== false) {
+      map[config.modalTrigger] = "__hotkeys:modal";
     }
-    for (const [key, action] of Object.entries(overrides)) {
-      if (action === "") {
-        delete effectiveMap[key];
-      } else if (action !== void 0) {
-        effectiveMap[key] = action;
-      }
+    if (config.omnibarTrigger !== false) {
+      map[config.omnibarTrigger] = "__hotkeys:omnibar";
     }
-    return effectiveMap;
-  }, [defaults, overrides]);
+    return map;
+  }, [registry.keymap, config.modalTrigger, config.omnibarTrigger]);
   const conflicts = react.useMemo(() => findConflicts(keymap), [keymap]);
-  const hasConflictsValue = conflicts.size > 0;
-  const actionBindings = react.useMemo(() => getActionBindings(keymap), [keymap]);
-  const searchActionsInContext = react.useCallback(
-    (query) => searchActions(query, actionsProp, keymap),
-    [actionsProp, keymap]
-  );
-  const getCompletions = react.useCallback(
-    (pendingKeys) => getSequenceCompletions(pendingKeys, keymap),
-    [keymap]
-  );
-  const getBindingsForAction = react.useCallback(
-    (actionId) => actionBindings.get(actionId) ?? [],
-    [actionBindings]
-  );
-  const isDefaultBinding = react.useCallback(
-    (key, action) => {
-      const defaultAction = defaults[key];
-      if (!defaultAction) return false;
-      const defaultActions = Array.isArray(defaultAction) ? defaultAction : [defaultAction];
-      return defaultActions.includes(action);
-    },
-    [defaults]
-  );
-  const setBinding = react.useCallback((action, key) => {
-    setOverrides((prev) => {
-      const result = {};
-      const valuesEqual = (a, b) => {
-        if (a === void 0 && b === void 0) return true;
-        if (a === void 0 || b === void 0) return false;
-        const arrA = Array.isArray(a) ? a : [a];
-        const arrB = Array.isArray(b) ? b : [b];
-        if (arrA.length !== arrB.length) return false;
-        return arrA.every((v, i) => v === arrB[i]);
-      };
-      for (const [k, v] of Object.entries(defaults)) {
-        if (k === key) continue;
-        const defaultActions = Array.isArray(v) ? v : [v];
-        if (defaultActions.includes(action)) {
-          const remaining = defaultActions.filter((a) => a !== action);
-          if (remaining.length === 0) {
-            result[k] = "";
-          } else {
-            result[k] = remaining.length === 1 ? remaining[0] : remaining;
-          }
-        }
-      }
-      for (const [k, v] of Object.entries(prev)) {
-        if (k === key) continue;
-        if (v === "" || v === void 0) {
-          result[k] = v;
-          continue;
-        }
-        const overrideActions = Array.isArray(v) ? v : [v];
-        if (overrideActions.includes(action)) {
-          const remaining = overrideActions.filter((a) => a !== action);
-          if (remaining.length === 0) {
-            if (k in defaults) {
-              result[k] = "";
-            }
-          } else {
-            result[k] = remaining.length === 1 ? remaining[0] : remaining;
-          }
-        } else {
-          result[k] = v;
-        }
-      }
-      const existingFromOverrides = prev[key];
-      const existingFromDefaults = defaults[key];
-      let currentActions = [];
-      if (existingFromOverrides !== void 0) {
-        if (existingFromOverrides !== "") {
-          currentActions = Array.isArray(existingFromOverrides) ? [...existingFromOverrides] : [existingFromOverrides];
-        }
-      } else if (existingFromDefaults !== void 0) {
-        currentActions = Array.isArray(existingFromDefaults) ? [...existingFromDefaults] : [existingFromDefaults];
-      }
-      if (!currentActions.includes(action)) {
-        currentActions.push(action);
-      }
-      result[key] = currentActions.length === 1 ? currentActions[0] : currentActions;
-      const canonical = {};
-      for (const [k, v] of Object.entries(result)) {
-        const defaultVal = defaults[k];
-        if (v === "") {
-          if (k in defaults) {
-            canonical[k] = v;
-          }
-        } else if (!valuesEqual(v, defaultVal)) {
-          canonical[k] = v;
-        }
-      }
-      return canonical;
-    });
-  }, [defaults]);
-  const addBinding = react.useCallback((action, key) => {
-    setOverrides((prev) => {
-      return { ...prev, [key]: action };
-    });
-  }, []);
-  const removeBinding = react.useCallback((key) => {
-    setOverrides((prev) => {
-      const isDefault = key in defaults;
-      if (isDefault) {
-        return { ...prev, [key]: "" };
-      } else {
-        const { [key]: _removed, ...rest } = prev;
-        return rest;
-      }
-    });
-  }, [defaults]);
-  const removeBindingForAction = react.useCallback((action, key) => {
-    setOverrides((prev) => {
-      const overrideValue = prev[key];
-      const defaultValue = defaults[key];
-      let currentActions;
-      if (overrideValue !== void 0) {
-        if (overrideValue === "") {
-          return prev;
-        }
-        currentActions = Array.isArray(overrideValue) ? [...overrideValue] : [overrideValue];
-      } else if (defaultValue !== void 0) {
-        currentActions = Array.isArray(defaultValue) ? [...defaultValue] : [defaultValue];
-      } else {
-        return prev;
-      }
-      const remaining = currentActions.filter((a) => a !== action);
-      if (remaining.length === 0) {
-        if (key in defaults) {
-          return { ...prev, [key]: "" };
-        } else {
-          const { [key]: _removed, ...rest } = prev;
-          return rest;
-        }
-      } else if (remaining.length === currentActions.length) {
-        return prev;
-      } else {
-        return { ...prev, [key]: remaining.length === 1 ? remaining[0] : remaining };
-      }
-    });
-  }, [defaults]);
-  const setKeymap = react.useCallback((newOverrides) => {
-    setOverrides((prev) => ({ ...prev, ...newOverrides }));
-  }, []);
-  const reset = react.useCallback(() => {
-    setOverrides({});
-  }, []);
-  const value = react.useMemo(
-    () => ({
-      defaults,
-      keymap,
-      actions: actionsProp,
-      setBinding,
-      addBinding,
-      removeBinding,
-      removeBindingForAction,
-      setKeymap,
-      reset,
-      overrides,
-      conflicts,
-      hasConflicts: hasConflictsValue,
-      disableConflicts,
-      searchActions: searchActionsInContext,
-      getCompletions,
-      getBindingsForAction,
-      isDefaultBinding
-    }),
-    [defaults, keymap, actionsProp, setBinding, addBinding, removeBinding, removeBindingForAction, setKeymap, reset, overrides, conflicts, hasConflictsValue, disableConflicts, searchActionsInContext, getCompletions, getBindingsForAction, isDefaultBinding]
-  );
-  return /* @__PURE__ */ jsxRuntime.jsx(KeyboardShortcutsContext.Provider, { value, children });
-}
-function useKeyboardShortcutsContext() {
-  const context = react.useContext(KeyboardShortcutsContext);
-  if (!context) {
-    throw new Error("useKeyboardShortcutsContext must be used within a KeyboardShortcutsProvider");
-  }
-  return context;
-}
-function useRegisteredHotkeys(handlers, options = {}) {
-  const { keymap, conflicts, disableConflicts } = useKeyboardShortcutsContext();
+  const hasConflicts2 = conflicts.size > 0;
   const effectiveKeymap = react.useMemo(() => {
-    if (!disableConflicts || conflicts.size === 0) {
+    if (!config.disableConflicts || conflicts.size === 0) {
       return keymap;
     }
     const filtered = {};
@@ -844,8 +818,161 @@ function useRegisteredHotkeys(handlers, options = {}) {
       }
     }
     return filtered;
-  }, [keymap, conflicts, disableConflicts]);
-  return useHotkeys(effectiveKeymap, handlers, options);
+  }, [keymap, conflicts, config.disableConflicts]);
+  const handlers = react.useMemo(() => {
+    const map = {};
+    for (const [id, action] of registry.actions) {
+      map[id] = action.config.handler;
+    }
+    map["__hotkeys:modal"] = toggleModal;
+    map["__hotkeys:omnibar"] = toggleOmnibar;
+    return map;
+  }, [registry.actions, toggleModal, toggleOmnibar]);
+  const hotkeysEnabled = isEnabled && !isModalOpen && !isOmnibarOpen;
+  const {
+    pendingKeys,
+    isAwaitingSequence,
+    timeoutStartedAt: sequenceTimeoutStartedAt,
+    sequenceTimeout
+  } = useHotkeys(effectiveKeymap, handlers, {
+    enabled: hotkeysEnabled,
+    sequenceTimeout: config.sequenceTimeout
+  });
+  const searchActionsHelper = react.useCallback(
+    (query) => searchActions(query, registry.actionRegistry, keymap),
+    [registry.actionRegistry, keymap]
+  );
+  const getCompletions = react.useCallback(
+    (pending) => getSequenceCompletions(pending, keymap),
+    [keymap]
+  );
+  const value = react.useMemo(() => ({
+    registry,
+    isEnabled,
+    isModalOpen,
+    openModal,
+    closeModal,
+    toggleModal,
+    isOmnibarOpen,
+    openOmnibar,
+    closeOmnibar,
+    toggleOmnibar,
+    executeAction: registry.execute,
+    pendingKeys,
+    isAwaitingSequence,
+    sequenceTimeoutStartedAt,
+    sequenceTimeout,
+    conflicts,
+    hasConflicts: hasConflicts2,
+    searchActions: searchActionsHelper,
+    getCompletions
+  }), [
+    registry,
+    isEnabled,
+    isModalOpen,
+    openModal,
+    closeModal,
+    toggleModal,
+    isOmnibarOpen,
+    openOmnibar,
+    closeOmnibar,
+    toggleOmnibar,
+    pendingKeys,
+    isAwaitingSequence,
+    sequenceTimeoutStartedAt,
+    sequenceTimeout,
+    conflicts,
+    hasConflicts2,
+    searchActionsHelper,
+    getCompletions
+  ]);
+  return /* @__PURE__ */ jsxRuntime.jsx(ActionsRegistryContext.Provider, { value: registry, children: /* @__PURE__ */ jsxRuntime.jsx(HotkeysContext.Provider, { value, children }) });
+}
+function useHotkeysContext() {
+  const context = react.useContext(HotkeysContext);
+  if (!context) {
+    throw new Error("useHotkeysContext must be used within a HotkeysProvider");
+  }
+  return context;
+}
+function useMaybeHotkeysContext() {
+  return react.useContext(HotkeysContext);
+}
+function useAction(id, config) {
+  const registry = react.useContext(ActionsRegistryContext);
+  if (!registry) {
+    throw new Error("useAction must be used within a HotkeysProvider");
+  }
+  const registryRef = react.useRef(registry);
+  registryRef.current = registry;
+  const handlerRef = react.useRef(config.handler);
+  handlerRef.current = config.handler;
+  const enabledRef = react.useRef(config.enabled ?? true);
+  enabledRef.current = config.enabled ?? true;
+  react.useEffect(() => {
+    registryRef.current.register(id, {
+      ...config,
+      handler: () => {
+        if (enabledRef.current) {
+          handlerRef.current();
+        }
+      }
+    });
+    return () => {
+      registryRef.current.unregister(id);
+    };
+  }, [
+    id,
+    config.label,
+    config.group,
+    // Compare bindings by value
+    JSON.stringify(config.defaultBindings),
+    JSON.stringify(config.keywords),
+    config.priority
+  ]);
+}
+function useActions(actions) {
+  const registry = react.useContext(ActionsRegistryContext);
+  if (!registry) {
+    throw new Error("useActions must be used within a HotkeysProvider");
+  }
+  const registryRef = react.useRef(registry);
+  registryRef.current = registry;
+  const handlersRef = react.useRef({});
+  const enabledRef = react.useRef({});
+  for (const [id, config] of Object.entries(actions)) {
+    handlersRef.current[id] = config.handler;
+    enabledRef.current[id] = config.enabled ?? true;
+  }
+  react.useEffect(() => {
+    for (const [id, config] of Object.entries(actions)) {
+      registryRef.current.register(id, {
+        ...config,
+        handler: () => {
+          if (enabledRef.current[id]) {
+            handlersRef.current[id]?.();
+          }
+        }
+      });
+    }
+    return () => {
+      for (const id of Object.keys(actions)) {
+        registryRef.current.unregister(id);
+      }
+    };
+  }, [
+    // Re-register if action set changes
+    JSON.stringify(
+      Object.entries(actions).map(([id, c]) => [
+        id,
+        c.label,
+        c.group,
+        c.defaultBindings,
+        c.keywords,
+        c.priority
+      ])
+    )
+  ]);
 }
 function useEventCallback(fn) {
   const ref = react.useRef(fn);
@@ -1258,10 +1385,10 @@ function useOmnibar(options) {
     });
   }, [onOpen, onClose]);
   const selectNext = react.useCallback(() => {
-    setSelectedIndex((prev) => Math.min(prev + 1, results.length - 1));
+    setSelectedIndex((prev) => base.min(prev + 1, results.length - 1));
   }, [results.length]);
   const selectPrev = react.useCallback(() => {
-    setSelectedIndex((prev) => Math.max(prev - 1, 0));
+    setSelectedIndex((prev) => base.max(prev - 1, 0));
   }, []);
   const resetSelection = react.useCallback(() => {
     setSelectedIndex(0);
@@ -1514,153 +1641,6 @@ function KeybindingEditor({
     ] })
   ] });
 }
-function parseAction(action) {
-  const colonIndex = action.indexOf(":");
-  if (colonIndex > 0) {
-    return { group: action.slice(0, colonIndex), name: action.slice(colonIndex + 1) };
-  }
-  return { group: "General", name: action };
-}
-function organizeShortcuts(keymap, descriptions, groupNames) {
-  const groupMap = /* @__PURE__ */ new Map();
-  for (const [key, actionOrActions] of Object.entries(keymap)) {
-    const actions = Array.isArray(actionOrActions) ? actionOrActions : [actionOrActions];
-    for (const action of actions) {
-      const { group: groupKey, name } = parseAction(action);
-      const groupName = groupNames?.[groupKey] ?? groupKey;
-      if (!groupMap.has(groupName)) {
-        groupMap.set(groupName, { name: groupName, shortcuts: [] });
-      }
-      groupMap.get(groupName).shortcuts.push({
-        key,
-        action,
-        description: descriptions?.[action] ?? name
-      });
-    }
-  }
-  return Array.from(groupMap.values()).sort((a, b) => {
-    if (a.name === "General") return 1;
-    if (b.name === "General") return -1;
-    return a.name.localeCompare(b.name);
-  });
-}
-function ShortcutsModal({
-  keymap,
-  descriptions,
-  groups: groupNames,
-  isOpen: controlledIsOpen,
-  onClose,
-  openKey = "?",
-  autoRegisterOpen = true,
-  children,
-  backdropClassName,
-  modalClassName
-}) {
-  const [internalIsOpen, setInternalIsOpen] = react.useState(false);
-  const isOpen = controlledIsOpen ?? internalIsOpen;
-  const close = react.useCallback(() => {
-    setInternalIsOpen(false);
-    onClose?.();
-  }, [onClose]);
-  const open = react.useCallback(() => {
-    setInternalIsOpen(true);
-  }, []);
-  const modalKeymap = autoRegisterOpen ? { [openKey]: "openShortcuts" } : {};
-  useHotkeys(
-    { ...modalKeymap, escape: "closeShortcuts" },
-    {
-      openShortcuts: open,
-      closeShortcuts: close
-    },
-    { enabled: autoRegisterOpen || isOpen }
-  );
-  const handleBackdropClick = react.useCallback(
-    (e) => {
-      if (e.target === e.currentTarget) {
-        close();
-      }
-    },
-    [close]
-  );
-  const shortcutGroups = organizeShortcuts(keymap, descriptions, groupNames);
-  if (!isOpen) return null;
-  if (children) {
-    return /* @__PURE__ */ jsxRuntime.jsx(jsxRuntime.Fragment, { children: children({ groups: shortcutGroups, close }) });
-  }
-  return /* @__PURE__ */ jsxRuntime.jsx(
-    "div",
-    {
-      className: backdropClassName,
-      onClick: handleBackdropClick,
-      style: backdropClassName ? void 0 : {
-        position: "fixed",
-        inset: 0,
-        backgroundColor: "rgba(0, 0, 0, 0.5)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 9999
-      },
-      children: /* @__PURE__ */ jsxRuntime.jsxs(
-        "div",
-        {
-          className: modalClassName,
-          role: "dialog",
-          "aria-modal": "true",
-          "aria-label": "Keyboard shortcuts",
-          style: modalClassName ? void 0 : {
-            backgroundColor: "white",
-            borderRadius: "8px",
-            padding: "24px",
-            maxWidth: "600px",
-            maxHeight: "80vh",
-            overflow: "auto",
-            boxShadow: "0 4px 20px rgba(0, 0, 0, 0.15)"
-          },
-          children: [
-            /* @__PURE__ */ jsxRuntime.jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }, children: [
-              /* @__PURE__ */ jsxRuntime.jsx("h2", { style: { margin: 0, fontSize: "1.25rem", fontWeight: 600 }, children: "Keyboard Shortcuts" }),
-              /* @__PURE__ */ jsxRuntime.jsx(
-                "button",
-                {
-                  onClick: close,
-                  "aria-label": "Close",
-                  style: {
-                    background: "none",
-                    border: "none",
-                    fontSize: "1.5rem",
-                    cursor: "pointer",
-                    padding: "4px",
-                    lineHeight: 1
-                  },
-                  children: "\xD7"
-                }
-              )
-            ] }),
-            shortcutGroups.map((group) => /* @__PURE__ */ jsxRuntime.jsxs("div", { style: { marginBottom: "16px" }, children: [
-              /* @__PURE__ */ jsxRuntime.jsx("h3", { style: { margin: "0 0 8px", fontSize: "0.875rem", fontWeight: 600, textTransform: "uppercase", color: "#666" }, children: group.name }),
-              /* @__PURE__ */ jsxRuntime.jsx("dl", { style: { margin: 0 }, children: group.shortcuts.map(({ key, action, description }) => {
-                const combo = parseCombinationId(key);
-                const display = formatCombination(combo);
-                return /* @__PURE__ */ jsxRuntime.jsxs(
-                  "div",
-                  {
-                    style: { display: "flex", justifyContent: "space-between", padding: "4px 0", borderBottom: "1px solid #eee" },
-                    children: [
-                      /* @__PURE__ */ jsxRuntime.jsx("dt", { style: { color: "#333" }, children: description }),
-                      /* @__PURE__ */ jsxRuntime.jsx("dd", { style: { margin: 0, fontFamily: "monospace", color: "#666" }, children: /* @__PURE__ */ jsxRuntime.jsx("kbd", { style: { backgroundColor: "#f5f5f5", padding: "2px 6px", borderRadius: "4px", border: "1px solid #ddd" }, children: display.display }) })
-                    ]
-                  },
-                  action
-                );
-              }) })
-            ] }, group.name))
-          ]
-        }
-      )
-    }
-  );
-}
 var baseStyle = {
   width: "1.2em",
   height: "1.2em",
@@ -1765,14 +1745,702 @@ function ModifierIcon({ modifier, ...props }) {
   const Icon = getModifierIcon(modifier);
   return /* @__PURE__ */ jsxRuntime.jsx(Icon, { ...props });
 }
+function BindingBadge({ binding }) {
+  const sequence = parseHotkeyString(binding);
+  return /* @__PURE__ */ jsxRuntime.jsx("kbd", { className: "hotkeys-kbd", children: sequence.map((combo, i) => /* @__PURE__ */ jsxRuntime.jsxs(react.Fragment, { children: [
+    i > 0 && /* @__PURE__ */ jsxRuntime.jsx("span", { className: "hotkeys-sequence-sep", children: " " }),
+    combo.modifiers.meta && /* @__PURE__ */ jsxRuntime.jsx(ModifierIcon, { modifier: "meta", className: "hotkeys-modifier-icon" }),
+    combo.modifiers.ctrl && /* @__PURE__ */ jsxRuntime.jsx(ModifierIcon, { modifier: "ctrl", className: "hotkeys-modifier-icon" }),
+    combo.modifiers.alt && /* @__PURE__ */ jsxRuntime.jsx(ModifierIcon, { modifier: "alt", className: "hotkeys-modifier-icon" }),
+    combo.modifiers.shift && /* @__PURE__ */ jsxRuntime.jsx(ModifierIcon, { modifier: "shift", className: "hotkeys-modifier-icon" }),
+    /* @__PURE__ */ jsxRuntime.jsx("span", { children: combo.key.length === 1 ? combo.key.toUpperCase() : combo.key })
+  ] }, i)) });
+}
+function Omnibar({
+  actions: actionsProp,
+  handlers: handlersProp,
+  keymap: keymapProp,
+  openKey = "meta+k",
+  enabled: enabledProp,
+  isOpen: isOpenProp,
+  onOpen: onOpenProp,
+  onClose: onCloseProp,
+  onExecute: onExecuteProp,
+  maxResults = 10,
+  placeholder = "Type a command...",
+  children,
+  backdropClassName = "hotkeys-omnibar-backdrop",
+  omnibarClassName = "hotkeys-omnibar"
+}) {
+  const inputRef = react.useRef(null);
+  const ctx = useMaybeHotkeysContext();
+  const actions = actionsProp ?? ctx?.registry.actionRegistry ?? {};
+  const keymap = keymapProp ?? ctx?.registry.keymap ?? {};
+  const enabled = enabledProp ?? !ctx;
+  const handleExecute = react.useCallback((actionId) => {
+    if (onExecuteProp) {
+      onExecuteProp(actionId);
+    } else if (ctx?.executeAction) {
+      ctx.executeAction(actionId);
+    }
+  }, [onExecuteProp, ctx]);
+  const handleClose = react.useCallback(() => {
+    if (onCloseProp) {
+      onCloseProp();
+    } else if (ctx?.closeOmnibar) {
+      ctx.closeOmnibar();
+    }
+  }, [onCloseProp, ctx]);
+  const handleOpen = react.useCallback(() => {
+    if (onOpenProp) {
+      onOpenProp();
+    } else if (ctx?.openOmnibar) {
+      ctx.openOmnibar();
+    }
+  }, [onOpenProp, ctx]);
+  const {
+    isOpen: internalIsOpen,
+    close,
+    query,
+    setQuery,
+    results,
+    selectedIndex,
+    selectNext,
+    selectPrev,
+    execute,
+    completions,
+    pendingKeys,
+    isAwaitingSequence
+  } = useOmnibar({
+    actions,
+    handlers: handlersProp,
+    keymap,
+    openKey,
+    enabled: isOpenProp === void 0 && ctx === null ? enabled : false,
+    // Disable hotkey if controlled or using context
+    onOpen: handleOpen,
+    onClose: handleClose,
+    onExecute: handleExecute,
+    maxResults
+  });
+  const isOpen = isOpenProp ?? ctx?.isOmnibarOpen ?? internalIsOpen;
+  react.useEffect(() => {
+    if (isOpen) {
+      requestAnimationFrame(() => {
+        inputRef.current?.focus();
+      });
+    }
+  }, [isOpen]);
+  const handleKeyDown = react.useCallback(
+    (e) => {
+      switch (e.key) {
+        case "Escape":
+          e.preventDefault();
+          close();
+          break;
+        case "ArrowDown":
+          e.preventDefault();
+          selectNext();
+          break;
+        case "ArrowUp":
+          e.preventDefault();
+          selectPrev();
+          break;
+        case "Enter":
+          e.preventDefault();
+          execute();
+          break;
+      }
+    },
+    [close, selectNext, selectPrev, execute]
+  );
+  const handleBackdropClick = react.useCallback(
+    (e) => {
+      if (e.target === e.currentTarget) {
+        close();
+      }
+    },
+    [close]
+  );
+  if (!isOpen) return null;
+  if (children) {
+    return /* @__PURE__ */ jsxRuntime.jsx(jsxRuntime.Fragment, { children: children({
+      query,
+      setQuery,
+      results,
+      selectedIndex,
+      selectNext,
+      selectPrev,
+      execute,
+      close,
+      completions,
+      pendingKeys,
+      isAwaitingSequence,
+      inputRef
+    }) });
+  }
+  return /* @__PURE__ */ jsxRuntime.jsx("div", { className: backdropClassName, onClick: handleBackdropClick, children: /* @__PURE__ */ jsxRuntime.jsxs("div", { className: omnibarClassName, role: "dialog", "aria-modal": "true", "aria-label": "Command palette", children: [
+    /* @__PURE__ */ jsxRuntime.jsx(
+      "input",
+      {
+        ref: inputRef,
+        type: "text",
+        className: "hotkeys-omnibar-input",
+        value: query,
+        onChange: (e) => setQuery(e.target.value),
+        onKeyDown: handleKeyDown,
+        placeholder,
+        autoComplete: "off",
+        autoCorrect: "off",
+        autoCapitalize: "off",
+        spellCheck: false
+      }
+    ),
+    /* @__PURE__ */ jsxRuntime.jsx("div", { className: "hotkeys-omnibar-results", children: results.length === 0 ? /* @__PURE__ */ jsxRuntime.jsx("div", { className: "hotkeys-omnibar-no-results", children: query ? "No matching commands" : "Start typing to search commands..." }) : results.map((result, i) => /* @__PURE__ */ jsxRuntime.jsxs(
+      "div",
+      {
+        className: `hotkeys-omnibar-result ${i === selectedIndex ? "selected" : ""}`,
+        onClick: () => execute(result.id),
+        onMouseEnter: () => {
+        },
+        children: [
+          /* @__PURE__ */ jsxRuntime.jsx("span", { className: "hotkeys-omnibar-result-label", children: result.action.label }),
+          result.action.group && /* @__PURE__ */ jsxRuntime.jsx("span", { className: "hotkeys-omnibar-result-category", children: result.action.group }),
+          result.bindings.length > 0 && /* @__PURE__ */ jsxRuntime.jsx("div", { className: "hotkeys-omnibar-result-bindings", children: result.bindings.slice(0, 2).map((binding) => /* @__PURE__ */ jsxRuntime.jsx(BindingBadge, { binding }, binding)) })
+        ]
+      },
+      result.id
+    )) })
+  ] }) });
+}
+function SequenceModal() {
+  const {
+    pendingKeys,
+    isAwaitingSequence,
+    sequenceTimeoutStartedAt: timeoutStartedAt,
+    sequenceTimeout,
+    getCompletions,
+    registry
+  } = useHotkeysContext();
+  const completions = react.useMemo(() => {
+    if (pendingKeys.length === 0) return [];
+    return getCompletions(pendingKeys);
+  }, [getCompletions, pendingKeys]);
+  const formattedPendingKeys = react.useMemo(() => {
+    if (pendingKeys.length === 0) return "";
+    return formatCombination(pendingKeys).display;
+  }, [pendingKeys]);
+  const getActionLabel = (actionId) => {
+    const action = registry.actions.get(actionId);
+    return action?.config.label || actionId;
+  };
+  const groupedCompletions = react.useMemo(() => {
+    const byNextKey = /* @__PURE__ */ new Map();
+    for (const c of completions) {
+      const existing = byNextKey.get(c.nextKeys);
+      if (existing) {
+        existing.push(c);
+      } else {
+        byNextKey.set(c.nextKeys, [c]);
+      }
+    }
+    return byNextKey;
+  }, [completions]);
+  if (!isAwaitingSequence || pendingKeys.length === 0) {
+    return null;
+  }
+  return /* @__PURE__ */ jsxRuntime.jsx("div", { className: "hotkeys-sequence-backdrop", children: /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "hotkeys-sequence", children: [
+    /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "hotkeys-sequence-current", children: [
+      /* @__PURE__ */ jsxRuntime.jsx("kbd", { className: "hotkeys-sequence-keys", children: formattedPendingKeys }),
+      /* @__PURE__ */ jsxRuntime.jsx("span", { className: "hotkeys-sequence-ellipsis", children: "\u2026" })
+    ] }),
+    timeoutStartedAt && /* @__PURE__ */ jsxRuntime.jsx(
+      "div",
+      {
+        className: "hotkeys-sequence-timeout",
+        style: { animationDuration: `${sequenceTimeout}ms` }
+      },
+      timeoutStartedAt
+    ),
+    completions.length > 0 && /* @__PURE__ */ jsxRuntime.jsx("div", { className: "hotkeys-sequence-completions", children: Array.from(groupedCompletions.entries()).map(([nextKey, comps]) => /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "hotkeys-sequence-completion", children: [
+      /* @__PURE__ */ jsxRuntime.jsx("kbd", { className: "hotkeys-kbd", children: nextKey.toUpperCase() }),
+      /* @__PURE__ */ jsxRuntime.jsx("span", { className: "hotkeys-sequence-arrow", children: "\u2192" }),
+      /* @__PURE__ */ jsxRuntime.jsx("span", { className: "hotkeys-sequence-actions", children: comps.flatMap((c) => c.actions).map((action, i) => /* @__PURE__ */ jsxRuntime.jsxs("span", { children: [
+        i > 0 && ", ",
+        getActionLabel(action)
+      ] }, action)) })
+    ] }, nextKey)) }),
+    completions.length === 0 && /* @__PURE__ */ jsxRuntime.jsx("div", { className: "hotkeys-sequence-empty", children: "No matching shortcuts" })
+  ] }) });
+}
+function parseActionId(actionId) {
+  const colonIndex = actionId.indexOf(":");
+  if (colonIndex > 0) {
+    return { group: actionId.slice(0, colonIndex), name: actionId.slice(colonIndex + 1) };
+  }
+  return { group: "General", name: actionId };
+}
+function organizeShortcuts(keymap, labels, descriptions, groupNames, groupOrder) {
+  const actionBindings = getActionBindings(keymap);
+  const groupMap = /* @__PURE__ */ new Map();
+  for (const [actionId, bindings] of actionBindings) {
+    const { group: groupKey, name } = parseActionId(actionId);
+    const groupName = groupNames?.[groupKey] ?? groupKey;
+    if (!groupMap.has(groupName)) {
+      groupMap.set(groupName, { name: groupName, shortcuts: [] });
+    }
+    groupMap.get(groupName).shortcuts.push({
+      actionId,
+      label: labels?.[actionId] ?? name,
+      description: descriptions?.[actionId],
+      bindings
+    });
+  }
+  const groups = Array.from(groupMap.values());
+  if (groupOrder) {
+    groups.sort((a, b) => {
+      const aIdx = groupOrder.indexOf(a.name);
+      const bIdx = groupOrder.indexOf(b.name);
+      if (aIdx === -1 && bIdx === -1) return a.name.localeCompare(b.name);
+      if (aIdx === -1) return 1;
+      if (bIdx === -1) return -1;
+      return aIdx - bIdx;
+    });
+  } else {
+    groups.sort((a, b) => {
+      if (a.name === "General") return 1;
+      if (b.name === "General") return -1;
+      return a.name.localeCompare(b.name);
+    });
+  }
+  return groups;
+}
+function KeyDisplay({
+  combo,
+  className
+}) {
+  const { key, modifiers } = combo;
+  const parts = [];
+  if (modifiers.meta) {
+    parts.push(/* @__PURE__ */ jsxRuntime.jsx(ModifierIcon, { modifier: "meta", className: "hotkeys-modifier-icon" }, "meta"));
+  }
+  if (modifiers.ctrl) {
+    parts.push(/* @__PURE__ */ jsxRuntime.jsx(ModifierIcon, { modifier: "ctrl", className: "hotkeys-modifier-icon" }, "ctrl"));
+  }
+  if (modifiers.alt) {
+    parts.push(/* @__PURE__ */ jsxRuntime.jsx(ModifierIcon, { modifier: "alt", className: "hotkeys-modifier-icon" }, "alt"));
+  }
+  if (modifiers.shift) {
+    parts.push(/* @__PURE__ */ jsxRuntime.jsx(ModifierIcon, { modifier: "shift", className: "hotkeys-modifier-icon" }, "shift"));
+  }
+  const keyDisplay = key.length === 1 ? key.toUpperCase() : key.charAt(0).toUpperCase() + key.slice(1);
+  parts.push(/* @__PURE__ */ jsxRuntime.jsx("span", { children: keyDisplay }, "key"));
+  return /* @__PURE__ */ jsxRuntime.jsx("span", { className, children: parts });
+}
+function BindingDisplay({
+  binding,
+  className,
+  editable,
+  isEditing,
+  isConflict,
+  isPendingConflict,
+  isDefault,
+  onEdit,
+  onRemove,
+  pendingKeys,
+  activeKeys
+}) {
+  const sequence = parseHotkeyString(binding);
+  const display = formatCombination(sequence);
+  let kbdClassName = "hotkeys-kbd";
+  if (editable) kbdClassName += " editable";
+  if (isEditing) kbdClassName += " editing";
+  if (isConflict) kbdClassName += " conflict";
+  if (isPendingConflict) kbdClassName += " pending-conflict";
+  if (isDefault) kbdClassName += " default-binding";
+  if (className) kbdClassName += " " + className;
+  const handleClick = editable && onEdit ? onEdit : void 0;
+  if (isEditing) {
+    let content;
+    if (pendingKeys && pendingKeys.length > 0) {
+      content = /* @__PURE__ */ jsxRuntime.jsxs(jsxRuntime.Fragment, { children: [
+        pendingKeys.map((combo, i) => /* @__PURE__ */ jsxRuntime.jsxs(react.Fragment, { children: [
+          i > 0 && /* @__PURE__ */ jsxRuntime.jsx("span", { className: "hotkeys-sequence-sep", children: " " }),
+          /* @__PURE__ */ jsxRuntime.jsx(KeyDisplay, { combo })
+        ] }, i)),
+        activeKeys && activeKeys.key && /* @__PURE__ */ jsxRuntime.jsxs(jsxRuntime.Fragment, { children: [
+          /* @__PURE__ */ jsxRuntime.jsx("span", { className: "hotkeys-sequence-sep", children: " \u2192 " }),
+          /* @__PURE__ */ jsxRuntime.jsx(KeyDisplay, { combo: activeKeys })
+        ] }),
+        /* @__PURE__ */ jsxRuntime.jsx("span", { children: "..." })
+      ] });
+    } else if (activeKeys && activeKeys.key) {
+      content = /* @__PURE__ */ jsxRuntime.jsxs(jsxRuntime.Fragment, { children: [
+        /* @__PURE__ */ jsxRuntime.jsx(KeyDisplay, { combo: activeKeys }),
+        /* @__PURE__ */ jsxRuntime.jsx("span", { children: "..." })
+      ] });
+    } else {
+      content = "Press keys...";
+    }
+    return /* @__PURE__ */ jsxRuntime.jsx("kbd", { className: kbdClassName, children: content });
+  }
+  return /* @__PURE__ */ jsxRuntime.jsxs("kbd", { className: kbdClassName, onClick: handleClick, children: [
+    display.isSequence ? sequence.map((combo, i) => /* @__PURE__ */ jsxRuntime.jsxs(react.Fragment, { children: [
+      i > 0 && /* @__PURE__ */ jsxRuntime.jsx("span", { className: "hotkeys-sequence-sep", children: " " }),
+      /* @__PURE__ */ jsxRuntime.jsx(KeyDisplay, { combo })
+    ] }, i)) : /* @__PURE__ */ jsxRuntime.jsx(KeyDisplay, { combo: sequence[0] }),
+    editable && onRemove && /* @__PURE__ */ jsxRuntime.jsx(
+      "button",
+      {
+        className: "hotkeys-remove-btn",
+        onClick: (e) => {
+          e.stopPropagation();
+          onRemove();
+        },
+        "aria-label": "Remove binding",
+        children: "\xD7"
+      }
+    )
+  ] });
+}
+function ShortcutsModal({
+  keymap: keymapProp,
+  defaults: defaultsProp,
+  labels: labelsProp,
+  descriptions: descriptionsProp,
+  groups: groupNamesProp,
+  groupOrder,
+  isOpen: isOpenProp,
+  onClose: onCloseProp,
+  openKey = "?",
+  autoRegisterOpen,
+  editable = false,
+  onBindingChange,
+  onBindingAdd,
+  onBindingRemove,
+  onReset,
+  multipleBindings = true,
+  children,
+  backdropClassName = "hotkeys-backdrop",
+  modalClassName = "hotkeys-modal"
+}) {
+  const ctx = useMaybeHotkeysContext();
+  const contextLabels = react.useMemo(() => {
+    const registry = ctx?.registry.actionRegistry;
+    if (!registry) return void 0;
+    const labels2 = {};
+    for (const [id, action] of Object.entries(registry)) {
+      labels2[id] = action.label;
+    }
+    return labels2;
+  }, [ctx?.registry.actionRegistry]);
+  const contextDescriptions = react.useMemo(() => {
+    const registry = ctx?.registry.actionRegistry;
+    if (!registry) return void 0;
+    const descriptions2 = {};
+    for (const [id, action] of Object.entries(registry)) {
+      if (action.description) descriptions2[id] = action.description;
+    }
+    return descriptions2;
+  }, [ctx?.registry.actionRegistry]);
+  const contextGroups = react.useMemo(() => {
+    const registry = ctx?.registry.actionRegistry;
+    if (!registry) return void 0;
+    const groups = {};
+    for (const action of Object.values(registry)) {
+      if (action.group) {
+        const prefix = action.group.toLowerCase().replace(/[\s-]/g, "");
+        groups[prefix] = action.group;
+      }
+    }
+    return groups;
+  }, [ctx?.registry.actionRegistry]);
+  const keymap = keymapProp ?? ctx?.registry.keymap ?? {};
+  const defaults = defaultsProp;
+  const labels = labelsProp ?? contextLabels;
+  const descriptions = descriptionsProp ?? contextDescriptions;
+  const groupNames = groupNamesProp ?? contextGroups;
+  const shouldAutoRegisterOpen = autoRegisterOpen ?? !ctx;
+  const [internalIsOpen, setInternalIsOpen] = react.useState(false);
+  const isOpen = isOpenProp ?? ctx?.isModalOpen ?? internalIsOpen;
+  const [editingAction, setEditingAction] = react.useState(null);
+  const [editingBindingIndex, setEditingBindingIndex] = react.useState(null);
+  const [pendingConflict, setPendingConflict] = react.useState(null);
+  const conflicts = react.useMemo(() => findConflicts(keymap), [keymap]);
+  const actionBindings = react.useMemo(() => getActionBindings(keymap), [keymap]);
+  const close = react.useCallback(() => {
+    setInternalIsOpen(false);
+    setEditingAction(null);
+    setEditingBindingIndex(null);
+    setPendingConflict(null);
+    if (onCloseProp) {
+      onCloseProp();
+    } else if (ctx?.closeModal) {
+      ctx.closeModal();
+    }
+  }, [onCloseProp, ctx]);
+  const open = react.useCallback(() => {
+    if (ctx?.openModal) {
+      ctx.openModal();
+    } else {
+      setInternalIsOpen(true);
+    }
+  }, [ctx]);
+  const checkConflict = react.useCallback((newKey, forAction) => {
+    const existingActions = keymap[newKey];
+    if (!existingActions) return null;
+    const actions = Array.isArray(existingActions) ? existingActions : [existingActions];
+    const conflicts2 = actions.filter((a) => a !== forAction);
+    return conflicts2.length > 0 ? conflicts2 : null;
+  }, [keymap]);
+  const { isRecording, startRecording, cancel, pendingKeys, activeKeys } = useRecordHotkey({
+    onCapture: react.useCallback(
+      (sequence, display) => {
+        if (!editingAction) return;
+        const conflictActions = checkConflict(display.id, editingAction);
+        if (conflictActions && conflictActions.length > 0) {
+          setPendingConflict({
+            action: editingAction,
+            key: display.id,
+            conflictsWith: conflictActions
+          });
+          return;
+        }
+        const oldBindings = actionBindings.get(editingAction) ?? [];
+        const oldKey = editingBindingIndex !== null ? oldBindings[editingBindingIndex] : null;
+        if (editingBindingIndex !== null && oldKey) {
+          onBindingChange?.(editingAction, oldKey, display.id);
+        } else {
+          onBindingAdd?.(editingAction, display.id);
+        }
+        setEditingAction(null);
+        setEditingBindingIndex(null);
+      },
+      [editingAction, editingBindingIndex, actionBindings, checkConflict, onBindingChange, onBindingAdd]
+    ),
+    onCancel: react.useCallback(() => {
+      setEditingAction(null);
+      setEditingBindingIndex(null);
+      setPendingConflict(null);
+    }, []),
+    pauseTimeout: pendingConflict !== null
+  });
+  const startEditing = react.useCallback(
+    (action, bindingIndex) => {
+      setEditingAction(action);
+      setEditingBindingIndex(bindingIndex ?? null);
+      setPendingConflict(null);
+      startRecording();
+    },
+    [startRecording]
+  );
+  const cancelEditing = react.useCallback(() => {
+    cancel();
+    setEditingAction(null);
+    setEditingBindingIndex(null);
+    setPendingConflict(null);
+  }, [cancel]);
+  const removeBinding = react.useCallback(
+    (action, key) => {
+      onBindingRemove?.(action, key);
+    },
+    [onBindingRemove]
+  );
+  const reset = react.useCallback(() => {
+    onReset?.();
+  }, [onReset]);
+  const modalKeymap = shouldAutoRegisterOpen ? { [openKey]: "openShortcuts" } : {};
+  useHotkeys(
+    { ...modalKeymap, escape: "closeShortcuts" },
+    {
+      openShortcuts: open,
+      closeShortcuts: close
+    },
+    { enabled: shouldAutoRegisterOpen || isOpen }
+  );
+  react.useEffect(() => {
+    if (!isOpen || !editingAction) return;
+    const handleEscape = (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        cancelEditing();
+      }
+    };
+    window.addEventListener("keydown", handleEscape, true);
+    return () => window.removeEventListener("keydown", handleEscape, true);
+  }, [isOpen, editingAction, cancelEditing]);
+  const handleBackdropClick = react.useCallback(
+    (e) => {
+      if (e.target === e.currentTarget) {
+        close();
+      }
+    },
+    [close]
+  );
+  const shortcutGroups = react.useMemo(
+    () => organizeShortcuts(keymap, labels, descriptions, groupNames, groupOrder),
+    [keymap, labels, descriptions, groupNames, groupOrder]
+  );
+  if (!isOpen) return null;
+  if (children) {
+    return /* @__PURE__ */ jsxRuntime.jsx(jsxRuntime.Fragment, { children: children({
+      groups: shortcutGroups,
+      close,
+      editable,
+      editingAction,
+      editingBindingIndex,
+      pendingKeys,
+      activeKeys,
+      conflicts,
+      startEditing,
+      cancelEditing,
+      removeBinding,
+      reset
+    }) });
+  }
+  return /* @__PURE__ */ jsxRuntime.jsx("div", { className: backdropClassName, onClick: handleBackdropClick, children: /* @__PURE__ */ jsxRuntime.jsxs("div", { className: modalClassName, role: "dialog", "aria-modal": "true", "aria-label": "Keyboard shortcuts", children: [
+    /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "hotkeys-modal-header", children: [
+      /* @__PURE__ */ jsxRuntime.jsx("h2", { className: "hotkeys-modal-title", children: "Keyboard Shortcuts" }),
+      /* @__PURE__ */ jsxRuntime.jsx("button", { className: "hotkeys-modal-close", onClick: close, "aria-label": "Close", children: "\xD7" })
+    ] }),
+    shortcutGroups.map((group) => /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "hotkeys-group", children: [
+      /* @__PURE__ */ jsxRuntime.jsx("h3", { className: "hotkeys-group-title", children: group.name }),
+      group.shortcuts.map(({ actionId, label, description, bindings }) => {
+        const isEditingThisAction = editingAction === actionId;
+        return /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "hotkeys-action", children: [
+          /* @__PURE__ */ jsxRuntime.jsx("span", { className: "hotkeys-action-label", title: description, children: label }),
+          /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "hotkeys-action-bindings", children: [
+            bindings.map((binding, idx) => {
+              const conflictActions = conflicts.get(binding);
+              const isConflict = conflictActions && conflictActions.length > 1;
+              const isEditing = isEditingThisAction && editingBindingIndex === idx;
+              const isDefault = defaults ? (() => {
+                const defaultAction = defaults[binding];
+                if (!defaultAction) return false;
+                const defaultActions = Array.isArray(defaultAction) ? defaultAction : [defaultAction];
+                return defaultActions.includes(actionId);
+              })() : true;
+              return /* @__PURE__ */ jsxRuntime.jsx(
+                BindingDisplay,
+                {
+                  binding,
+                  editable,
+                  isEditing,
+                  isConflict,
+                  isDefault,
+                  onEdit: () => startEditing(actionId, idx),
+                  onRemove: editable ? () => removeBinding(actionId, binding) : void 0,
+                  pendingKeys,
+                  activeKeys
+                },
+                binding
+              );
+            }),
+            editable && multipleBindings && !isEditingThisAction && /* @__PURE__ */ jsxRuntime.jsx(
+              "button",
+              {
+                className: "hotkeys-add-btn",
+                onClick: () => startEditing(actionId),
+                disabled: isRecording && !isEditingThisAction,
+                children: "+"
+              }
+            ),
+            isEditingThisAction && editingBindingIndex === null && /* @__PURE__ */ jsxRuntime.jsx(
+              BindingDisplay,
+              {
+                binding: "",
+                isEditing: true,
+                pendingKeys,
+                activeKeys
+              }
+            )
+          ] })
+        ] }, actionId);
+      })
+    ] }, group.name)),
+    pendingConflict && /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "hotkeys-conflict-warning", style: {
+      padding: "12px",
+      marginTop: "16px",
+      backgroundColor: "var(--hk-warning-bg)",
+      borderRadius: "var(--hk-radius-sm)",
+      border: "1px solid var(--hk-warning)"
+    }, children: [
+      /* @__PURE__ */ jsxRuntime.jsxs("p", { style: { margin: "0 0 8px", color: "var(--hk-warning)" }, children: [
+        "This key is already bound to: ",
+        pendingConflict.conflictsWith.join(", ")
+      ] }),
+      /* @__PURE__ */ jsxRuntime.jsxs("div", { style: { display: "flex", gap: "8px" }, children: [
+        /* @__PURE__ */ jsxRuntime.jsx(
+          "button",
+          {
+            onClick: () => {
+              const oldBindings = actionBindings.get(pendingConflict.action) ?? [];
+              const oldKey = editingBindingIndex !== null ? oldBindings[editingBindingIndex] : null;
+              if (editingBindingIndex !== null && oldKey) {
+                onBindingChange?.(pendingConflict.action, oldKey, pendingConflict.key);
+              } else {
+                onBindingAdd?.(pendingConflict.action, pendingConflict.key);
+              }
+              setEditingAction(null);
+              setEditingBindingIndex(null);
+              setPendingConflict(null);
+            },
+            style: {
+              padding: "4px 12px",
+              backgroundColor: "var(--hk-accent)",
+              color: "white",
+              border: "none",
+              borderRadius: "var(--hk-radius-sm)",
+              cursor: "pointer"
+            },
+            children: "Override"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntime.jsx(
+          "button",
+          {
+            onClick: cancelEditing,
+            style: {
+              padding: "4px 12px",
+              backgroundColor: "var(--hk-bg-secondary)",
+              border: "1px solid var(--hk-border)",
+              borderRadius: "var(--hk-radius-sm)",
+              cursor: "pointer"
+            },
+            children: "Cancel"
+          }
+        )
+      ] })
+    ] }),
+    editable && onReset && /* @__PURE__ */ jsxRuntime.jsx("div", { style: { marginTop: "16px", textAlign: "right" }, children: /* @__PURE__ */ jsxRuntime.jsx(
+      "button",
+      {
+        onClick: reset,
+        style: {
+          padding: "6px 12px",
+          backgroundColor: "var(--hk-bg-secondary)",
+          border: "1px solid var(--hk-border)",
+          borderRadius: "var(--hk-radius-sm)",
+          cursor: "pointer",
+          color: "var(--hk-text)"
+        },
+        children: "Reset to defaults"
+      }
+    ) })
+  ] }) });
+}
 
+exports.ActionsRegistryContext = ActionsRegistryContext;
 exports.AltIcon = AltIcon;
 exports.CommandIcon = CommandIcon;
 exports.CtrlIcon = CtrlIcon;
+exports.HotkeysProvider = HotkeysProvider;
 exports.KeybindingEditor = KeybindingEditor;
-exports.KeyboardShortcutsProvider = KeyboardShortcutsProvider;
 exports.ModifierIcon = ModifierIcon;
+exports.Omnibar = Omnibar;
 exports.OptIcon = OptIcon;
+exports.SequenceModal = SequenceModal;
 exports.ShiftIcon = ShiftIcon;
 exports.ShortcutsModal = ShortcutsModal;
 exports.findConflicts = findConflicts;
@@ -1791,11 +2459,14 @@ exports.normalizeKey = normalizeKey;
 exports.parseCombinationId = parseCombinationId;
 exports.parseHotkeyString = parseHotkeyString;
 exports.searchActions = searchActions;
+exports.useAction = useAction;
+exports.useActions = useActions;
+exports.useActionsRegistry = useActionsRegistry;
 exports.useEditableHotkeys = useEditableHotkeys;
 exports.useHotkeys = useHotkeys;
-exports.useKeyboardShortcutsContext = useKeyboardShortcutsContext;
+exports.useHotkeysContext = useHotkeysContext;
+exports.useMaybeHotkeysContext = useMaybeHotkeysContext;
 exports.useOmnibar = useOmnibar;
 exports.useRecordHotkey = useRecordHotkey;
-exports.useRegisteredHotkeys = useRegisteredHotkeys;
 //# sourceMappingURL=index.cjs.map
 //# sourceMappingURL=index.cjs.map

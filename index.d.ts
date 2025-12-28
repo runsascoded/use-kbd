@@ -1,5 +1,6 @@
 import * as react_jsx_runtime from 'react/jsx-runtime';
-import React$1 from 'react';
+import * as react from 'react';
+import { ReactNode, RefObject, CSSProperties, ComponentType } from 'react';
 
 /**
  * Represents a single key press (possibly with modifiers)
@@ -84,8 +85,8 @@ interface ActionDefinition {
     label: string;
     /** Longer description (shown in omnibar, tooltips) */
     description?: string;
-    /** Category for grouping (e.g., "Metrics", "Time Range") */
-    category?: string;
+    /** Group for organizing in shortcuts modal (e.g., "Metrics", "Time Range") */
+    group?: string;
     /** Additional search keywords */
     keywords?: string[];
     /** Icon identifier (user provides rendering) */
@@ -360,7 +361,7 @@ interface KeybindingEditorProps {
     /** CSS class for the container */
     className?: string;
     /** Custom render function */
-    children?: (props: KeybindingEditorRenderProps) => React.ReactNode;
+    children?: (props: KeybindingEditorRenderProps) => ReactNode;
 }
 interface KeybindingEditorRenderProps {
     bindings: BindingInfo[];
@@ -401,192 +402,190 @@ declare function KeybindingEditor({ keymap, defaults, descriptions, onChange, on
 interface ShortcutGroup {
     name: string;
     shortcuts: Array<{
-        key: string;
-        action: string;
+        actionId: string;
+        label: string;
         description?: string;
+        bindings: string[];
     }>;
 }
 interface ShortcutsModalProps {
-    /** The hotkey map to display */
-    keymap: HotkeyMap;
-    /** Descriptions for actions (action name -> description) */
+    /**
+     * The hotkey map to display.
+     * If not provided, uses keymap from HotkeysContext.
+     */
+    keymap?: HotkeyMap;
+    /**
+     * Default keymap (for showing reset indicators).
+     * If not provided, uses defaults from HotkeysContext.
+     */
+    defaults?: HotkeyMap;
+    /** Labels for actions (action ID -> label). Falls back to action.label from context. */
+    labels?: Record<string, string>;
+    /** Descriptions for actions (action ID -> description). Falls back to action.description from context. */
     descriptions?: Record<string, string>;
-    /** Group definitions (if omitted, actions are grouped by prefix before ':') */
+    /** Group definitions: action prefix -> display name (e.g., { metric: 'Metrics' }). Falls back to action.group from context. */
     groups?: Record<string, string>;
-    /** Control visibility externally */
+    /** Ordered list of group names (if omitted, groups are sorted alphabetically) */
+    groupOrder?: string[];
+    /**
+     * Control visibility externally.
+     * If not provided, uses isModalOpen from HotkeysContext.
+     */
     isOpen?: boolean;
-    /** Called when modal should close */
+    /**
+     * Called when modal should close.
+     * If not provided, uses closeModal from HotkeysContext.
+     */
     onClose?: () => void;
-    /** Hotkey to open modal (default: '?') */
+    /** Hotkey to open modal (default: '?'). Set to empty string to disable. */
     openKey?: string;
-    /** Whether to auto-register the open hotkey (default: true) */
+    /**
+     * Whether to auto-register the open hotkey (default: true).
+     * When using HotkeysContext, the provider already handles this, so set to false.
+     */
     autoRegisterOpen?: boolean;
+    /** Enable editing mode */
+    editable?: boolean;
+    /** Called when a binding changes (required if editable) */
+    onBindingChange?: (action: string, oldKey: string | null, newKey: string) => void;
+    /** Called when a binding is added (required if editable) */
+    onBindingAdd?: (action: string, key: string) => void;
+    /** Called when a binding is removed */
+    onBindingRemove?: (action: string, key: string) => void;
+    /** Called when reset is requested */
+    onReset?: () => void;
+    /** Whether to allow multiple bindings per action (default: true) */
+    multipleBindings?: boolean;
     /** Custom render function for the modal content */
-    children?: (props: {
-        groups: ShortcutGroup[];
-        close: () => void;
-    }) => React.ReactNode;
+    children?: (props: ShortcutsModalRenderProps) => ReactNode;
     /** CSS class for the backdrop */
     backdropClassName?: string;
     /** CSS class for the modal container */
     modalClassName?: string;
 }
+interface ShortcutsModalRenderProps {
+    groups: ShortcutGroup[];
+    close: () => void;
+    editable: boolean;
+    editingAction: string | null;
+    editingBindingIndex: number | null;
+    pendingKeys: HotkeySequence;
+    activeKeys: KeyCombination | null;
+    conflicts: Map<string, string[]>;
+    startEditing: (action: string, bindingIndex?: number) => void;
+    cancelEditing: () => void;
+    removeBinding: (action: string, key: string) => void;
+    reset: () => void;
+}
 /**
- * Modal component for displaying keyboard shortcuts.
+ * Modal component for displaying and optionally editing keyboard shortcuts.
+ *
+ * Uses CSS classes from styles.css. Override via CSS custom properties:
+ * --hotkeys-bg, --hotkeys-text, --hotkeys-kbd-bg, etc.
  *
  * @example
  * ```tsx
+ * // Read-only display
  * <ShortcutsModal
  *   keymap={HOTKEYS}
- *   descriptions={{ 'metric:temp': 'Switch to temperature view' }}
+ *   labels={{ 'metric:temp': 'Temperature' }}
+ * />
+ *
+ * // Editable with callbacks
+ * <ShortcutsModal
+ *   keymap={keymap}
+ *   defaults={DEFAULT_KEYMAP}
+ *   labels={labels}
+ *   editable
+ *   onBindingChange={(action, oldKey, newKey) => updateBinding(action, newKey)}
+ *   onBindingRemove={(action, key) => removeBinding(action, key)}
  * />
  * ```
  */
-declare function ShortcutsModal({ keymap, descriptions, groups: groupNames, isOpen: controlledIsOpen, onClose, openKey, autoRegisterOpen, children, backdropClassName, modalClassName, }: ShortcutsModalProps): react_jsx_runtime.JSX.Element | null;
+declare function ShortcutsModal({ keymap: keymapProp, defaults: defaultsProp, labels: labelsProp, descriptions: descriptionsProp, groups: groupNamesProp, groupOrder, isOpen: isOpenProp, onClose: onCloseProp, openKey, autoRegisterOpen, editable, onBindingChange, onBindingAdd, onBindingRemove, onReset, multipleBindings, children, backdropClassName, modalClassName, }: ShortcutsModalProps): react_jsx_runtime.JSX.Element | null;
 
-interface KeyboardShortcutsContextValue {
-    /** Default keymap (before user overrides) */
-    defaults: HotkeyMap;
-    /** Current keymap (defaults merged with user overrides) */
-    keymap: HotkeyMap;
-    /** Registry of available actions (if provided) */
-    actions: ActionRegistry;
-    /** Update a single keybinding (replaces existing binding for the action) */
-    setBinding: (action: string, key: string) => void;
-    /** Add a new key binding for an action (keeps existing bindings) */
-    addBinding: (action: string, key: string) => void;
-    /** Remove a key binding entirely */
-    removeBinding: (key: string) => void;
-    /** Remove a specific action from a key (for resolving conflicts) */
-    removeBindingForAction: (action: string, key: string) => void;
-    /** Update multiple keybindings at once */
-    setKeymap: (overrides: Partial<HotkeyMap>) => void;
-    /** Reset all overrides to defaults */
-    reset: () => void;
-    /** User overrides only (for inspection/export) */
-    overrides: Partial<HotkeyMap>;
-    /** Map of key -> actions[] for keys with multiple actions bound */
-    conflicts: Map<string, string[]>;
-    /** Whether there are any conflicts in the current keymap */
-    hasConflicts: boolean;
-    /** When true, keys with multiple actions bound are disabled */
-    disableConflicts: boolean;
-    /** Search actions by query */
-    searchActions: (query: string) => ActionSearchResult[];
-    /** Get sequence completions for pending keys */
-    getCompletions: (pendingKeys: HotkeySequence) => SequenceCompletion[];
-    /** Get all bindings for an action */
-    getBindingsForAction: (actionId: string) => string[];
-    /** Check if a key binding is a default (not user-added) */
-    isDefaultBinding: (key: string, action: string) => boolean;
-}
-interface KeyboardShortcutsProviderProps {
-    /** Default hotkey map */
-    defaults: HotkeyMap;
-    /** Registry of available actions (for omnibar and action management) */
+interface OmnibarProps {
+    /**
+     * Registry of available actions.
+     * If not provided, uses actions from HotkeysContext.
+     */
     actions?: ActionRegistry;
-    /** localStorage key for persistence (omit to disable persistence) */
-    storageKey?: string;
-    /** When true, keys with multiple actions bound are disabled (default: true) */
-    disableConflicts?: boolean;
-    children: React$1.ReactNode;
-}
-/**
- * Provider for keyboard shortcuts context.
- * Manages the keymap, user overrides, persistence, and conflict detection.
- *
- * @example
- * ```tsx
- * <KeyboardShortcutsProvider
- *   defaults={{ 't': 'setTemp', 'c': 'setCO2' }}
- *   storageKey="app-hotkeys"
- * >
- *   <App />
- * </KeyboardShortcutsProvider>
- * ```
- */
-declare function KeyboardShortcutsProvider({ defaults, actions: actionsProp, storageKey, disableConflicts, children, }: KeyboardShortcutsProviderProps): react_jsx_runtime.JSX.Element;
-/**
- * Hook to access the keyboard shortcuts context.
- * Must be used within a KeyboardShortcutsProvider.
- *
- * @example
- * ```tsx
- * const { keymap, setBinding, conflicts } = useKeyboardShortcutsContext()
- * ```
- */
-declare function useKeyboardShortcutsContext(): KeyboardShortcutsContextValue;
-/**
- * Hook to register hotkey handlers using the keymap from context.
- * Automatically excludes conflicting keys if disableConflicts is true.
- *
- * @example
- * ```tsx
- * useRegisteredHotkeys({
- *   setTemp: () => setMetric('temp'),
- *   setCO2: () => setMetric('co2'),
- * })
- * ```
- */
-declare function useRegisteredHotkeys(handlers: HandlerMap, options?: Omit<UseHotkeysOptions, 'enabled'> & {
+    /**
+     * Handlers for actions.
+     * If not provided, uses handlers from HotkeysContext, falling back to executeAction.
+     */
+    handlers?: HandlerMap;
+    /**
+     * Current keymap (to show bindings in results).
+     * If not provided, uses keymap from HotkeysContext.
+     */
+    keymap?: HotkeyMap;
+    /** Hotkey to open omnibar (default: 'meta+k'). Set to empty string to disable. */
+    openKey?: string;
+    /**
+     * Whether omnibar hotkey is enabled.
+     * When using HotkeysContext, defaults to false (provider handles it).
+     */
     enabled?: boolean;
-}): UseHotkeysResult;
-
+    /**
+     * Control visibility externally.
+     * If not provided, uses isOmnibarOpen from HotkeysContext.
+     */
+    isOpen?: boolean;
+    /** Called when omnibar opens */
+    onOpen?: () => void;
+    /**
+     * Called when omnibar closes.
+     * If not provided, uses closeOmnibar from HotkeysContext.
+     */
+    onClose?: () => void;
+    /**
+     * Called when an action is executed.
+     * If not provided, uses executeAction from HotkeysContext.
+     */
+    onExecute?: (actionId: string) => void;
+    /** Maximum number of results to show (default: 10) */
+    maxResults?: number;
+    /** Placeholder text for input (default: 'Type a command...') */
+    placeholder?: string;
+    /** Custom render function */
+    children?: (props: OmnibarRenderProps) => ReactNode;
+    /** CSS class for the backdrop */
+    backdropClassName?: string;
+    /** CSS class for the omnibar container */
+    omnibarClassName?: string;
+}
+interface OmnibarRenderProps {
+    query: string;
+    setQuery: (query: string) => void;
+    results: ActionSearchResult[];
+    selectedIndex: number;
+    selectNext: () => void;
+    selectPrev: () => void;
+    execute: (actionId?: string) => void;
+    close: () => void;
+    completions: SequenceCompletion[];
+    pendingKeys: HotkeySequence;
+    isAwaitingSequence: boolean;
+    inputRef: RefObject<HTMLInputElement | null>;
+}
 /**
- * Hook to record a keyboard shortcut (single key or sequence) from user input.
+ * Omnibar/command palette component for searching and executing actions.
  *
- * Recording behavior:
- * - Each key press (after modifiers released) adds to the sequence
- * - Enter key submits the current sequence
- * - Timeout submits the current sequence (configurable)
- * - Escape cancels recording
+ * Uses CSS classes from styles.css. Override via CSS custom properties:
+ * --hotkeys-bg, --hotkeys-text, --hotkeys-accent, etc.
  *
  * @example
  * ```tsx
- * function KeybindingEditor() {
- *   const { isRecording, startRecording, sequence, display, pendingKeys, activeKeys } = useRecordHotkey({
- *     onCapture: (sequence, display) => {
- *       console.log('Captured:', display.display) // "2 W" or "⌘K"
- *       saveKeybinding(display.id) // "2 w" or "meta+k"
- *     },
- *     sequenceTimeout: 1000,
- *   })
- *
- *   return (
- *     <button onClick={() => startRecording()}>
- *       {isRecording
- *         ? (pendingKeys.length > 0
- *             ? formatCombination(pendingKeys).display + '...'
- *             : 'Press keys...')
- *         : (display?.display ?? 'Click to set')}
- *     </button>
- *   )
- * }
+ * <Omnibar
+ *   actions={ACTIONS}
+ *   handlers={HANDLERS}
+ *   keymap={KEYMAP}
+ *   onExecute={(id) => console.log('Executed:', id)}
+ * />
  * ```
  */
-declare function useRecordHotkey(options?: RecordHotkeyOptions): RecordHotkeyResult;
-
-interface ModifierIconProps {
-    className?: string;
-    style?: React$1.CSSProperties;
-}
-/** Command/Meta key icon (⌘) */
-declare function CommandIcon({ className, style }: ModifierIconProps): react_jsx_runtime.JSX.Element;
-/** Control key icon (^) - chevron/caret */
-declare function CtrlIcon({ className, style }: ModifierIconProps): react_jsx_runtime.JSX.Element;
-/** Shift key icon (⇧) - hollow arrow */
-declare function ShiftIcon({ className, style }: ModifierIconProps): react_jsx_runtime.JSX.Element;
-/** Option key icon (⌥) - macOS style */
-declare function OptIcon({ className, style }: ModifierIconProps): react_jsx_runtime.JSX.Element;
-/** Alt key icon (⎇) - Windows style, though "Alt" text is more common on Windows */
-declare function AltIcon({ className, style }: ModifierIconProps): react_jsx_runtime.JSX.Element;
-type ModifierType = 'meta' | 'ctrl' | 'shift' | 'alt' | 'opt';
-/** Get the appropriate icon component for a modifier key */
-declare function getModifierIcon(modifier: ModifierType): React$1.ComponentType<ModifierIconProps>;
-/** Render a modifier icon by name */
-declare function ModifierIcon({ modifier, ...props }: ModifierIconProps & {
-    modifier: ModifierType;
-}): react_jsx_runtime.JSX.Element;
+declare function Omnibar({ actions: actionsProp, handlers: handlersProp, keymap: keymapProp, openKey, enabled: enabledProp, isOpen: isOpenProp, onOpen: onOpenProp, onClose: onCloseProp, onExecute: onExecuteProp, maxResults, placeholder, children, backdropClassName, omnibarClassName, }: OmnibarProps): react_jsx_runtime.JSX.Element | null;
 
 /**
  * Detect if running on macOS
@@ -705,4 +704,268 @@ declare function fuzzyMatch(pattern: string, text: string): FuzzyMatchResult;
  */
 declare function searchActions(query: string, actions: ActionRegistry, keymap?: Record<string, string | string[]>): ActionSearchResult[];
 
-export { type ActionDefinition, type ActionRegistry, type ActionSearchResult, AltIcon, type BindingInfo, CommandIcon, CtrlIcon, type FuzzyMatchResult, type HandlerMap, type HotkeyMap, type HotkeySequence, type KeyCombination, type KeyCombinationDisplay, type KeyConflict, KeybindingEditor, type KeybindingEditorProps, type KeybindingEditorRenderProps, type KeyboardShortcutsContextValue, KeyboardShortcutsProvider, type KeyboardShortcutsProviderProps, ModifierIcon, type ModifierIconProps, type ModifierType, OptIcon, type RecordHotkeyOptions, type RecordHotkeyResult, type SequenceCompletion, ShiftIcon, type ShortcutGroup, ShortcutsModal, type ShortcutsModalProps, type UseEditableHotkeysOptions, type UseEditableHotkeysResult, type UseHotkeysOptions, type UseHotkeysResult, type UseOmnibarOptions, type UseOmnibarResult, findConflicts, formatCombination, formatKeyForDisplay, fuzzyMatch, getActionBindings, getConflictsArray, getModifierIcon, getSequenceCompletions, hasConflicts, isMac, isModifierKey, isSequence, normalizeKey, parseCombinationId, parseHotkeyString, searchActions, useEditableHotkeys, useHotkeys, useKeyboardShortcutsContext, useOmnibar, useRecordHotkey, useRegisteredHotkeys };
+interface ActionConfig {
+    /** Human-readable label for omnibar/modal */
+    label: string;
+    /** Group name for organizing in modal */
+    group?: string;
+    /** Default key bindings (user can override) */
+    defaultBindings?: string[];
+    /** Search keywords for omnibar */
+    keywords?: string[];
+    /** The action handler */
+    handler: () => void;
+    /** Whether action is currently enabled (default: true) */
+    enabled?: boolean;
+    /** Priority for conflict resolution (higher wins, default: 0) */
+    priority?: number;
+}
+/**
+ * Register an action with the hotkeys system.
+ *
+ * Actions are automatically unregistered when the component unmounts,
+ * making this ideal for colocating actions with their handlers.
+ *
+ * @example
+ * ```tsx
+ * function DataTable() {
+ *   const { prevPage, nextPage } = usePagination()
+ *
+ *   useAction('table:prev-page', {
+ *     label: 'Previous page',
+ *     group: 'Table Navigation',
+ *     defaultBindings: [','],
+ *     handler: prevPage,
+ *   })
+ *
+ *   useAction('table:next-page', {
+ *     label: 'Next page',
+ *     group: 'Table Navigation',
+ *     defaultBindings: ['.'],
+ *     handler: nextPage,
+ *   })
+ * }
+ * ```
+ */
+declare function useAction(id: string, config: ActionConfig): void;
+/**
+ * Register multiple actions at once.
+ * Useful when you have several related actions in one component.
+ *
+ * @example
+ * ```tsx
+ * useActions({
+ *   'left:temp': { label: 'Temperature', defaultBindings: ['t'], handler: () => setMetric('temp') },
+ *   'left:co2': { label: 'CO₂', defaultBindings: ['c'], handler: () => setMetric('co2') },
+ * })
+ * ```
+ */
+declare function useActions(actions: Record<string, ActionConfig>): void;
+
+interface RegisteredAction {
+    config: ActionConfig;
+    registeredAt: number;
+}
+interface ActionsRegistryValue {
+    /** Register an action. Called by useAction on mount. */
+    register: (id: string, config: ActionConfig) => void;
+    /** Unregister an action. Called by useAction on unmount. */
+    unregister: (id: string) => void;
+    /** Execute an action by ID */
+    execute: (id: string) => void;
+    /** Currently registered actions */
+    actions: Map<string, RegisteredAction>;
+    /** Computed keymap from registered actions + user overrides */
+    keymap: HotkeyMap;
+    /** Action registry for omnibar search */
+    actionRegistry: ActionRegistry;
+    /** Get all bindings for an action (defaults + overrides) */
+    getBindingsForAction: (id: string) => string[];
+    /** User's binding overrides */
+    overrides: Record<string, string | string[]>;
+    /** Set a user override for a binding */
+    setBinding: (actionId: string, key: string) => void;
+    /** Remove a binding */
+    removeBinding: (key: string) => void;
+    /** Reset all overrides */
+    resetOverrides: () => void;
+}
+declare const ActionsRegistryContext: react.Context<ActionsRegistryValue | null>;
+interface UseActionsRegistryOptions {
+    /** localStorage key for persisting user overrides */
+    storageKey?: string;
+}
+/**
+ * Hook to create an actions registry.
+ * Used internally by HotkeysProvider.
+ */
+declare function useActionsRegistry(options?: UseActionsRegistryOptions): ActionsRegistryValue;
+
+/**
+ * Configuration for the HotkeysProvider.
+ */
+interface HotkeysConfig {
+    /** Storage key for persisting user binding overrides */
+    storageKey?: string;
+    /** Timeout in ms before a sequence auto-submits (default: 1000) */
+    sequenceTimeout?: number;
+    /** When true, keys with conflicts are disabled (default: true) */
+    disableConflicts?: boolean;
+    /** Minimum viewport width to enable hotkeys (false = always enabled) */
+    minViewportWidth?: number | false;
+    /** Whether to show hotkey UI on touch-only devices (default: false) */
+    enableOnTouch?: boolean;
+    /** Key sequence to open shortcuts modal (false to disable) */
+    modalTrigger?: string | false;
+    /** Key sequence to open omnibar (false to disable) */
+    omnibarTrigger?: string | false;
+}
+/**
+ * Context value for hotkeys.
+ */
+interface HotkeysContextValue {
+    /** The actions registry */
+    registry: ActionsRegistryValue;
+    /** Whether hotkeys are enabled (based on viewport/touch) */
+    isEnabled: boolean;
+    /** Modal open state */
+    isModalOpen: boolean;
+    /** Open the shortcuts modal */
+    openModal: () => void;
+    /** Close the shortcuts modal */
+    closeModal: () => void;
+    /** Toggle the shortcuts modal */
+    toggleModal: () => void;
+    /** Omnibar open state */
+    isOmnibarOpen: boolean;
+    /** Open the omnibar */
+    openOmnibar: () => void;
+    /** Close the omnibar */
+    closeOmnibar: () => void;
+    /** Toggle the omnibar */
+    toggleOmnibar: () => void;
+    /** Execute an action by ID */
+    executeAction: (id: string) => void;
+    /** Sequence state: pending key combinations */
+    pendingKeys: HotkeySequence;
+    /** Sequence state: whether waiting for more keys */
+    isAwaitingSequence: boolean;
+    /** Sequence state: when the timeout started */
+    sequenceTimeoutStartedAt: number | null;
+    /** Sequence state: timeout duration in ms */
+    sequenceTimeout: number;
+    /** Map of key -> actions[] for keys with multiple actions bound */
+    conflicts: Map<string, string[]>;
+    /** Whether there are any conflicts */
+    hasConflicts: boolean;
+    /** Search actions by query */
+    searchActions: (query: string) => ReturnType<typeof searchActions>;
+    /** Get sequence completions for pending keys */
+    getCompletions: (pendingKeys: HotkeySequence) => ReturnType<typeof getSequenceCompletions>;
+}
+interface HotkeysProviderProps {
+    config?: HotkeysConfig;
+    children: ReactNode;
+}
+/**
+ * Provider for hotkey registration via useAction.
+ *
+ * Components register their own actions using the useAction hook.
+ *
+ * @example
+ * ```tsx
+ * function App() {
+ *   return (
+ *     <HotkeysProvider config={{ storageKey: 'my-app' }}>
+ *       <Dashboard />
+ *       <ShortcutsModal />
+ *       <Omnibar />
+ *       <SequenceModal />
+ *     </HotkeysProvider>
+ *   )
+ * }
+ *
+ * function Dashboard() {
+ *   const { save } = useDocument()
+ *
+ *   useAction('doc:save', {
+ *     label: 'Save document',
+ *     group: 'Document',
+ *     defaultBindings: ['meta+s'],
+ *     handler: save,
+ *   })
+ *
+ *   return <Editor />
+ * }
+ * ```
+ */
+declare function HotkeysProvider({ config: configProp, children, }: HotkeysProviderProps): react_jsx_runtime.JSX.Element;
+/**
+ * Hook to access the hotkeys context.
+ * Must be used within a HotkeysProvider.
+ */
+declare function useHotkeysContext(): HotkeysContextValue;
+/**
+ * Hook to optionally access hotkeys context.
+ */
+declare function useMaybeHotkeysContext(): HotkeysContextValue | null;
+
+/**
+ * Hook to record a keyboard shortcut (single key or sequence) from user input.
+ *
+ * Recording behavior:
+ * - Each key press (after modifiers released) adds to the sequence
+ * - Enter key submits the current sequence
+ * - Timeout submits the current sequence (configurable)
+ * - Escape cancels recording
+ *
+ * @example
+ * ```tsx
+ * function KeybindingEditor() {
+ *   const { isRecording, startRecording, sequence, display, pendingKeys, activeKeys } = useRecordHotkey({
+ *     onCapture: (sequence, display) => {
+ *       console.log('Captured:', display.display) // "2 W" or "⌘K"
+ *       saveKeybinding(display.id) // "2 w" or "meta+k"
+ *     },
+ *     sequenceTimeout: 1000,
+ *   })
+ *
+ *   return (
+ *     <button onClick={() => startRecording()}>
+ *       {isRecording
+ *         ? (pendingKeys.length > 0
+ *             ? formatCombination(pendingKeys).display + '...'
+ *             : 'Press keys...')
+ *         : (display?.display ?? 'Click to set')}
+ *     </button>
+ *   )
+ * }
+ * ```
+ */
+declare function useRecordHotkey(options?: RecordHotkeyOptions): RecordHotkeyResult;
+
+declare function SequenceModal(): react_jsx_runtime.JSX.Element | null;
+
+interface ModifierIconProps {
+    className?: string;
+    style?: CSSProperties;
+}
+/** Command/Meta key icon (⌘) */
+declare function CommandIcon({ className, style }: ModifierIconProps): react_jsx_runtime.JSX.Element;
+/** Control key icon (^) - chevron/caret */
+declare function CtrlIcon({ className, style }: ModifierIconProps): react_jsx_runtime.JSX.Element;
+/** Shift key icon (⇧) - hollow arrow */
+declare function ShiftIcon({ className, style }: ModifierIconProps): react_jsx_runtime.JSX.Element;
+/** Option key icon (⌥) - macOS style */
+declare function OptIcon({ className, style }: ModifierIconProps): react_jsx_runtime.JSX.Element;
+/** Alt key icon (⎇) - Windows style, though "Alt" text is more common on Windows */
+declare function AltIcon({ className, style }: ModifierIconProps): react_jsx_runtime.JSX.Element;
+type ModifierType = 'meta' | 'ctrl' | 'shift' | 'alt' | 'opt';
+/** Get the appropriate icon component for a modifier key */
+declare function getModifierIcon(modifier: ModifierType): ComponentType<ModifierIconProps>;
+/** Render a modifier icon by name */
+declare function ModifierIcon({ modifier, ...props }: ModifierIconProps & {
+    modifier: ModifierType;
+}): react_jsx_runtime.JSX.Element;
+
+export { type ActionConfig, type ActionDefinition, type ActionRegistry, type ActionSearchResult, ActionsRegistryContext, type ActionsRegistryValue, AltIcon, type BindingInfo, CommandIcon, CtrlIcon, type FuzzyMatchResult, type HandlerMap, type HotkeyMap, type HotkeySequence, type HotkeysConfig, type HotkeysContextValue, HotkeysProvider, type HotkeysProviderProps, type KeyCombination, type KeyCombinationDisplay, type KeyConflict, KeybindingEditor, type KeybindingEditorProps, type KeybindingEditorRenderProps, ModifierIcon, type ModifierIconProps, type ModifierType, Omnibar, type OmnibarProps, type OmnibarRenderProps, OptIcon, type RecordHotkeyOptions, type RecordHotkeyResult, type RegisteredAction, type SequenceCompletion, SequenceModal, ShiftIcon, type ShortcutGroup, ShortcutsModal, type ShortcutsModalProps, type ShortcutsModalRenderProps, type UseEditableHotkeysOptions, type UseEditableHotkeysResult, type UseHotkeysOptions, type UseHotkeysResult, type UseOmnibarOptions, type UseOmnibarResult, findConflicts, formatCombination, formatKeyForDisplay, fuzzyMatch, getActionBindings, getConflictsArray, getModifierIcon, getSequenceCompletions, hasConflicts, isMac, isModifierKey, isSequence, normalizeKey, parseCombinationId, parseHotkeyString, searchActions, useAction, useActions, useActionsRegistry, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useOmnibar, useRecordHotkey };
