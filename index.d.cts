@@ -408,6 +408,37 @@ interface ShortcutGroup {
         bindings: string[];
     }>;
 }
+/**
+ * Props passed to custom group renderers
+ */
+interface GroupRendererProps {
+    /** The group being rendered */
+    group: ShortcutGroup;
+    /** Render a cell for an action (handles editing state, kbd styling) */
+    renderCell: (actionId: string, keys: string[]) => ReactNode;
+    /** Render a single editable kbd element */
+    renderEditableKbd: (actionId: string, key: string, showRemove?: boolean) => ReactNode;
+    /** Render the add button for an action */
+    renderAddButton: (actionId: string) => ReactNode;
+    /** Start editing a specific binding */
+    startEditing: (actionId: string, key: string) => void;
+    /** Start adding a new binding to an action */
+    startAdding: (actionId: string) => void;
+    /** Remove a binding */
+    removeBinding: (actionId: string, key: string) => void;
+    /** Whether currently recording a hotkey */
+    isRecording: boolean;
+    /** Action currently being edited */
+    editingAction: string | null;
+    /** Key currently being edited */
+    editingKey: string | null;
+    /** Action currently being added to */
+    addingAction: string | null;
+}
+/**
+ * Custom renderer for a group. Return null to use default rendering.
+ */
+type GroupRenderer = (props: GroupRendererProps) => ReactNode;
 interface ShortcutsModalProps {
     /**
      * The hotkey map to display.
@@ -427,6 +458,12 @@ interface ShortcutsModalProps {
     groups?: Record<string, string>;
     /** Ordered list of group names (if omitted, groups are sorted alphabetically) */
     groupOrder?: string[];
+    /**
+     * Custom renderers for specific groups.
+     * Key is the group name, value is a render function.
+     * Groups without custom renderers use the default single-column layout.
+     */
+    groupRenderers?: Record<string, GroupRenderer>;
     /**
      * Control visibility externally.
      * If not provided, uses isModalOpen from HotkeysContext.
@@ -502,7 +539,7 @@ interface ShortcutsModalRenderProps {
  * />
  * ```
  */
-declare function ShortcutsModal({ keymap: keymapProp, defaults: defaultsProp, labels: labelsProp, descriptions: descriptionsProp, groups: groupNamesProp, groupOrder, isOpen: isOpenProp, onClose: onCloseProp, openKey, autoRegisterOpen, editable, onBindingChange, onBindingAdd, onBindingRemove, onReset, multipleBindings, children, backdropClassName, modalClassName, }: ShortcutsModalProps): react_jsx_runtime.JSX.Element | null;
+declare function ShortcutsModal({ keymap: keymapProp, defaults: defaultsProp, labels: labelsProp, descriptions: descriptionsProp, groups: groupNamesProp, groupOrder, groupRenderers, isOpen: isOpenProp, onClose: onCloseProp, openKey, autoRegisterOpen, editable, onBindingChange, onBindingAdd, onBindingRemove, onReset, multipleBindings, children, backdropClassName, modalClassName, }: ShortcutsModalProps): react_jsx_runtime.JSX.Element | null;
 
 interface OmnibarProps {
     /**

@@ -2140,6 +2140,7 @@ function ShortcutsModal({
   descriptions: descriptionsProp,
   groups: groupNamesProp,
   groupOrder,
+  groupRenderers,
   isOpen: isOpenProp,
   onClose: onCloseProp,
   openKey = "?",
@@ -2194,14 +2195,22 @@ function ShortcutsModal({
   const [internalIsOpen, setInternalIsOpen] = useState(false);
   const isOpen = isOpenProp ?? ctx?.isModalOpen ?? internalIsOpen;
   const [editingAction, setEditingAction] = useState(null);
-  const [editingBindingIndex, setEditingBindingIndex] = useState(null);
+  const [editingKey, setEditingKey] = useState(null);
+  const [addingAction, setAddingAction] = useState(null);
   const [pendingConflict, setPendingConflict] = useState(null);
+  const editingActionRef = useRef(null);
+  const editingKeyRef = useRef(null);
+  const addingActionRef = useRef(null);
   const conflicts = useMemo(() => findConflicts(keymap), [keymap]);
   const actionBindings = useMemo(() => getActionBindings(keymap), [keymap]);
   const close = useCallback(() => {
     setInternalIsOpen(false);
     setEditingAction(null);
-    setEditingBindingIndex(null);
+    setEditingKey(null);
+    setAddingAction(null);
+    editingActionRef.current = null;
+    editingKeyRef.current = null;
+    addingActionRef.current = null;
     setPendingConflict(null);
     if (onCloseProp) {
       onCloseProp();
@@ -2225,49 +2234,91 @@ function ShortcutsModal({
   }, [keymap]);
   const { isRecording, startRecording, cancel, pendingKeys, activeKeys } = useRecordHotkey({
     onCapture: useCallback(
-      (sequence, display) => {
-        if (!editingAction) return;
-        const conflictActions = checkConflict(display.id, editingAction);
+      (_sequence, display) => {
+        const currentAddingAction = addingActionRef.current;
+        const currentEditingAction = editingActionRef.current;
+        const currentEditingKey = editingKeyRef.current;
+        const actionToUpdate = currentAddingAction || currentEditingAction;
+        if (!actionToUpdate) return;
+        const conflictActions = checkConflict(display.id, actionToUpdate);
         if (conflictActions && conflictActions.length > 0) {
           setPendingConflict({
-            action: editingAction,
+            action: actionToUpdate,
             key: display.id,
             conflictsWith: conflictActions
           });
           return;
         }
-        const oldBindings = actionBindings.get(editingAction) ?? [];
-        const oldKey = editingBindingIndex !== null ? oldBindings[editingBindingIndex] : null;
-        if (editingBindingIndex !== null && oldKey) {
-          onBindingChange?.(editingAction, oldKey, display.id);
-        } else {
-          onBindingAdd?.(editingAction, display.id);
+        if (currentAddingAction) {
+          onBindingAdd?.(currentAddingAction, display.id);
+        } else if (currentEditingAction && currentEditingKey) {
+          onBindingChange?.(currentEditingAction, currentEditingKey, display.id);
         }
+        editingActionRef.current = null;
+        editingKeyRef.current = null;
+        addingActionRef.current = null;
         setEditingAction(null);
-        setEditingBindingIndex(null);
+        setEditingKey(null);
+        setAddingAction(null);
       },
-      [editingAction, editingBindingIndex, actionBindings, checkConflict, onBindingChange, onBindingAdd]
+      [checkConflict, onBindingChange, onBindingAdd]
     ),
     onCancel: useCallback(() => {
+      editingActionRef.current = null;
+      editingKeyRef.current = null;
+      addingActionRef.current = null;
       setEditingAction(null);
-      setEditingBindingIndex(null);
+      setEditingKey(null);
+      setAddingAction(null);
       setPendingConflict(null);
     }, []),
     pauseTimeout: pendingConflict !== null
   });
-  const startEditing = useCallback(
-    (action, bindingIndex) => {
+  const startEditingBinding = useCallback(
+    (action, key) => {
+      addingActionRef.current = null;
+      editingActionRef.current = action;
+      editingKeyRef.current = key;
+      setAddingAction(null);
       setEditingAction(action);
-      setEditingBindingIndex(bindingIndex ?? null);
+      setEditingKey(key);
       setPendingConflict(null);
       startRecording();
     },
     [startRecording]
   );
+  const startAddingBinding = useCallback(
+    (action) => {
+      editingActionRef.current = null;
+      editingKeyRef.current = null;
+      addingActionRef.current = action;
+      setEditingAction(null);
+      setEditingKey(null);
+      setAddingAction(action);
+      setPendingConflict(null);
+      startRecording();
+    },
+    [startRecording]
+  );
+  const startEditing = useCallback(
+    (action, bindingIndex) => {
+      const bindings = actionBindings.get(action) ?? [];
+      if (bindingIndex !== void 0 && bindings[bindingIndex]) {
+        startEditingBinding(action, bindings[bindingIndex]);
+      } else {
+        startAddingBinding(action);
+      }
+    },
+    [actionBindings, startEditingBinding, startAddingBinding]
+  );
   const cancelEditing = useCallback(() => {
     cancel();
+    editingActionRef.current = null;
+    editingKeyRef.current = null;
+    addingActionRef.current = null;
     setEditingAction(null);
-    setEditingBindingIndex(null);
+    setEditingKey(null);
+    setAddingAction(null);
     setPendingConflict(null);
   }, [cancel]);
   const removeBinding = useCallback(
@@ -2279,6 +2330,82 @@ function ShortcutsModal({
   const reset = useCallback(() => {
     onReset?.();
   }, [onReset]);
+  const renderEditableKbd = useCallback(
+    (actionId, key, showRemove = false) => {
+      const isEditingThis = editingAction === actionId && editingKey === key && !addingAction;
+      const conflictActions = conflicts.get(key);
+      const isConflict = conflictActions && conflictActions.length > 1;
+      const isDefault = defaults ? (() => {
+        const defaultAction = defaults[key];
+        if (!defaultAction) return false;
+        const defaultActions = Array.isArray(defaultAction) ? defaultAction : [defaultAction];
+        return defaultActions.includes(actionId);
+      })() : true;
+      return /* @__PURE__ */ jsx(
+        BindingDisplay,
+        {
+          binding: key,
+          editable,
+          isEditing: isEditingThis,
+          isConflict,
+          isDefault,
+          onEdit: () => startEditingBinding(actionId, key),
+          onRemove: editable && showRemove ? () => removeBinding(actionId, key) : void 0,
+          pendingKeys,
+          activeKeys
+        },
+        key
+      );
+    },
+    [editingAction, editingKey, addingAction, conflicts, defaults, editable, startEditingBinding, removeBinding, pendingKeys, activeKeys]
+  );
+  const renderAddButton = useCallback(
+    (actionId) => {
+      const isAddingThis = addingAction === actionId;
+      if (isAddingThis) {
+        return /* @__PURE__ */ jsx(
+          BindingDisplay,
+          {
+            binding: "",
+            isEditing: true,
+            pendingKeys,
+            activeKeys
+          }
+        );
+      }
+      return /* @__PURE__ */ jsx(
+        "button",
+        {
+          className: "hotkeys-add-btn",
+          onClick: () => startAddingBinding(actionId),
+          disabled: isRecording && !isAddingThis,
+          children: "+"
+        }
+      );
+    },
+    [addingAction, pendingKeys, activeKeys, startAddingBinding, isRecording]
+  );
+  const renderCell = useCallback(
+    (actionId, keys) => {
+      return /* @__PURE__ */ jsxs("span", { className: "hotkeys-action-bindings", children: [
+        keys.map((key) => /* @__PURE__ */ jsx(Fragment$1, { children: renderEditableKbd(actionId, key, true) }, key)),
+        editable && multipleBindings && renderAddButton(actionId)
+      ] });
+    },
+    [renderEditableKbd, renderAddButton, editable, multipleBindings]
+  );
+  const groupRendererProps = useMemo(() => ({
+    renderCell,
+    renderEditableKbd,
+    renderAddButton,
+    startEditing: startEditingBinding,
+    startAdding: startAddingBinding,
+    removeBinding,
+    isRecording,
+    editingAction,
+    editingKey,
+    addingAction
+  }), [renderCell, renderEditableKbd, renderAddButton, startEditingBinding, startAddingBinding, removeBinding, isRecording, editingAction, editingKey, addingAction]);
   const modalKeymap = shouldAutoRegisterOpen ? { [openKey]: "openShortcuts" } : {};
   useHotkeys(
     { ...modalKeymap, escape: "closeShortcuts" },
@@ -2289,7 +2416,7 @@ function ShortcutsModal({
     { enabled: shouldAutoRegisterOpen || isOpen }
   );
   useEffect(() => {
-    if (!isOpen || !editingAction) return;
+    if (!isOpen || !editingAction && !addingAction) return;
     const handleEscape = (e) => {
       if (e.key === "Escape") {
         e.preventDefault();
@@ -2299,7 +2426,7 @@ function ShortcutsModal({
     };
     window.addEventListener("keydown", handleEscape, true);
     return () => window.removeEventListener("keydown", handleEscape, true);
-  }, [isOpen, editingAction, cancelEditing]);
+  }, [isOpen, editingAction, addingAction, cancelEditing]);
   const handleBackdropClick = useCallback(
     (e) => {
       if (e.target === e.currentTarget) {
@@ -2319,7 +2446,8 @@ function ShortcutsModal({
       close,
       editable,
       editingAction,
-      editingBindingIndex,
+      editingBindingIndex: null,
+      // deprecated, use editingKey
       pendingKeys,
       activeKeys,
       conflicts,
@@ -2329,6 +2457,16 @@ function ShortcutsModal({
       reset
     }) });
   }
+  const renderGroup = (group) => {
+    const customRenderer = groupRenderers?.[group.name];
+    if (customRenderer) {
+      return customRenderer({ group, ...groupRendererProps });
+    }
+    return group.shortcuts.map(({ actionId, label, description, bindings }) => /* @__PURE__ */ jsxs("div", { className: "hotkeys-action", children: [
+      /* @__PURE__ */ jsx("span", { className: "hotkeys-action-label", title: description, children: label }),
+      renderCell(actionId, bindings)
+    ] }, actionId));
+  };
   return /* @__PURE__ */ jsx("div", { className: backdropClassName, onClick: handleBackdropClick, children: /* @__PURE__ */ jsxs("div", { className: modalClassName, role: "dialog", "aria-modal": "true", "aria-label": "Keyboard shortcuts", children: [
     /* @__PURE__ */ jsxs("div", { className: "hotkeys-modal-header", children: [
       /* @__PURE__ */ jsx("h2", { className: "hotkeys-modal-title", children: "Keyboard Shortcuts" }),
@@ -2336,58 +2474,7 @@ function ShortcutsModal({
     ] }),
     shortcutGroups.map((group) => /* @__PURE__ */ jsxs("div", { className: "hotkeys-group", children: [
       /* @__PURE__ */ jsx("h3", { className: "hotkeys-group-title", children: group.name }),
-      group.shortcuts.map(({ actionId, label, description, bindings }) => {
-        const isEditingThisAction = editingAction === actionId;
-        return /* @__PURE__ */ jsxs("div", { className: "hotkeys-action", children: [
-          /* @__PURE__ */ jsx("span", { className: "hotkeys-action-label", title: description, children: label }),
-          /* @__PURE__ */ jsxs("div", { className: "hotkeys-action-bindings", children: [
-            bindings.map((binding, idx) => {
-              const conflictActions = conflicts.get(binding);
-              const isConflict = conflictActions && conflictActions.length > 1;
-              const isEditing = isEditingThisAction && editingBindingIndex === idx;
-              const isDefault = defaults ? (() => {
-                const defaultAction = defaults[binding];
-                if (!defaultAction) return false;
-                const defaultActions = Array.isArray(defaultAction) ? defaultAction : [defaultAction];
-                return defaultActions.includes(actionId);
-              })() : true;
-              return /* @__PURE__ */ jsx(
-                BindingDisplay,
-                {
-                  binding,
-                  editable,
-                  isEditing,
-                  isConflict,
-                  isDefault,
-                  onEdit: () => startEditing(actionId, idx),
-                  onRemove: editable ? () => removeBinding(actionId, binding) : void 0,
-                  pendingKeys,
-                  activeKeys
-                },
-                binding
-              );
-            }),
-            editable && multipleBindings && !isEditingThisAction && /* @__PURE__ */ jsx(
-              "button",
-              {
-                className: "hotkeys-add-btn",
-                onClick: () => startEditing(actionId),
-                disabled: isRecording && !isEditingThisAction,
-                children: "+"
-              }
-            ),
-            isEditingThisAction && editingBindingIndex === null && /* @__PURE__ */ jsx(
-              BindingDisplay,
-              {
-                binding: "",
-                isEditing: true,
-                pendingKeys,
-                activeKeys
-              }
-            )
-          ] })
-        ] }, actionId);
-      })
+      renderGroup(group)
     ] }, group.name)),
     pendingConflict && /* @__PURE__ */ jsxs("div", { className: "hotkeys-conflict-warning", style: {
       padding: "12px",
@@ -2405,15 +2492,17 @@ function ShortcutsModal({
           "button",
           {
             onClick: () => {
-              const oldBindings = actionBindings.get(pendingConflict.action) ?? [];
-              const oldKey = editingBindingIndex !== null ? oldBindings[editingBindingIndex] : null;
-              if (editingBindingIndex !== null && oldKey) {
-                onBindingChange?.(pendingConflict.action, oldKey, pendingConflict.key);
-              } else {
+              if (addingActionRef.current) {
                 onBindingAdd?.(pendingConflict.action, pendingConflict.key);
+              } else if (editingKeyRef.current) {
+                onBindingChange?.(pendingConflict.action, editingKeyRef.current, pendingConflict.key);
               }
+              editingActionRef.current = null;
+              editingKeyRef.current = null;
+              addingActionRef.current = null;
               setEditingAction(null);
-              setEditingBindingIndex(null);
+              setEditingKey(null);
+              setAddingAction(null);
               setPendingConflict(null);
             },
             style: {
