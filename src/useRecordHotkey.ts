@@ -163,6 +163,47 @@ export function useRecordHotkey(options: RecordHotkeyOptions = {}): RecordHotkey
     if (!isRecording) return
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Handle Tab BEFORE preventDefault - let browser handle focus navigation
+      // This enables native tab order through focusable kbd elements
+      if (e.key === 'Tab') {
+        clearTimeout_()
+
+        // Read pending keys from ref (synchronous, unaffected by React batching)
+        // Also include any key currently being held (Tab might fire before keyup)
+        const pendingSeq = [...pendingKeysRef.current]
+        if (hasNonModifierRef.current && currentComboRef.current) {
+          pendingSeq.push(currentComboRef.current)
+        }
+
+        // Clear all state
+        pendingKeysRef.current = []
+        setPendingKeys([])
+        pressedKeysRef.current.clear()
+        hasNonModifierRef.current = false
+        currentComboRef.current = null
+        setActiveKeys(null)
+        setIsRecording(false)
+
+        // Call onCapture with pending keys (if any)
+        if (pendingSeq.length > 0) {
+          const display = formatCombination(pendingSeq)
+          onCapture?.(pendingSeq, display)
+        }
+
+        // Call legacy onTab/onShiftTab if provided (for backwards compat)
+        if (!e.shiftKey && onTab) {
+          e.preventDefault()
+          e.stopPropagation()
+          onTab()
+        } else if (e.shiftKey && onShiftTab) {
+          e.preventDefault()
+          e.stopPropagation()
+          onShiftTab()
+        }
+        // Otherwise let browser handle focus navigation naturally
+        return
+      }
+
       if (preventDefault) {
         e.preventDefault()
         e.stopPropagation()
@@ -185,68 +226,6 @@ export function useRecordHotkey(options: RecordHotkeyOptions = {}): RecordHotkey
       // Escape cancels
       if (e.key === 'Escape') {
         cancel()
-        return
-      }
-
-      // Tab advances to next field (if handler provided)
-      if (e.key === 'Tab' && !e.shiftKey && onTab) {
-        // Clear timeout first to prevent race condition
-        clearTimeout_()
-
-        // Read pending keys from ref (synchronous, unaffected by React batching)
-        // Also include any key currently being held (Tab might fire before keyup)
-        const pendingSeq = [...pendingKeysRef.current]
-        if (hasNonModifierRef.current && currentComboRef.current) {
-          pendingSeq.push(currentComboRef.current)
-        }
-
-        // Clear all state
-        pendingKeysRef.current = []
-        setPendingKeys([])
-        pressedKeysRef.current.clear()
-        hasNonModifierRef.current = false
-        currentComboRef.current = null
-        setActiveKeys(null)
-
-        // Call onCapture BEFORE onTab (so callback sees current action, not next)
-        if (pendingSeq.length > 0) {
-          const display = formatCombination(pendingSeq)
-          onCapture?.(pendingSeq, display)
-        }
-
-        // Now move to next action
-        onTab()
-        return
-      }
-
-      // Shift+Tab goes to previous field (if handler provided)
-      if (e.key === 'Tab' && e.shiftKey && onShiftTab) {
-        // Clear timeout first to prevent race condition
-        clearTimeout_()
-
-        // Read pending keys from ref (synchronous, unaffected by React batching)
-        // Also include any key currently being held (Shift+Tab might fire before keyup)
-        const pendingSeq = [...pendingKeysRef.current]
-        if (hasNonModifierRef.current && currentComboRef.current) {
-          pendingSeq.push(currentComboRef.current)
-        }
-
-        // Clear all state
-        pendingKeysRef.current = []
-        setPendingKeys([])
-        pressedKeysRef.current.clear()
-        hasNonModifierRef.current = false
-        currentComboRef.current = null
-        setActiveKeys(null)
-
-        // Call onCapture BEFORE onShiftTab (so callback sees current action, not prev)
-        if (pendingSeq.length > 0) {
-          const display = formatCombination(pendingSeq)
-          onCapture?.(pendingSeq, display)
-        }
-
-        // Now move to previous action
-        onShiftTab()
         return
       }
 
