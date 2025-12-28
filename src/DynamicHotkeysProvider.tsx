@@ -1,9 +1,9 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { ActionsRegistryContext, useActionsRegistry } from './ActionsRegistry'
-import type { ActionsRegistryValue } from './ActionsRegistry'
-import type { HotkeySequence } from './types'
 import { useHotkeys } from './useHotkeys'
 import { findConflicts, getSequenceCompletions, searchActions } from './utils'
+import type { ActionsRegistryValue } from './ActionsRegistry'
+import type { HotkeySequence } from './types'
 
 /**
  * Configuration for the dynamic hotkeys provider.

@@ -1,4 +1,4 @@
-import React, { type CSSProperties, type ComponentType } from 'react'
+import { type CSSProperties, type ComponentType } from 'react'
 
 export interface ModifierIconProps {
   className?: string

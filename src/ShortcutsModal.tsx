@@ -1,12 +1,12 @@
-import {Fragment, MouseEvent, ReactNode, useCallback, useEffect, useMemo, useState} from 'react'
+import { Fragment, MouseEvent, ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
 import { getActionRegistry } from './actions'
 import { useMaybeHotkeysContext } from './HotkeysProvider'
-import type { HotkeySequence, KeyCombination, KeyCombinationDisplay } from './types'
-import type { HotkeyMap } from './useHotkeys'
+import { ModifierIcon } from './ModifierIcons'
 import { useHotkeys } from './useHotkeys'
 import { useRecordHotkey } from './useRecordHotkey'
 import { findConflicts, formatCombination, getActionBindings, parseHotkeyString } from './utils'
-import { ModifierIcon } from './ModifierIcons'
+import type { HotkeySequence, KeyCombination, KeyCombinationDisplay } from './types'
+import type { HotkeyMap } from './useHotkeys'
 
 export interface ShortcutGroup {
   name: string
@@ -593,11 +593,11 @@ export function ShortcutsModal({
                       const isEditing = isEditingThisAction && editingBindingIndex === idx
                       const isDefault = defaults
                         ? (() => {
-                            const defaultAction = defaults[binding]
-                            if (!defaultAction) return false
-                            const defaultActions = Array.isArray(defaultAction) ? defaultAction : [defaultAction]
-                            return defaultActions.includes(actionId)
-                          })()
+                          const defaultAction = defaults[binding]
+                          if (!defaultAction) return false
+                          const defaultActions = Array.isArray(defaultAction) ? defaultAction : [defaultAction]
+                          return defaultActions.includes(actionId)
+                        })()
                         : true
 
                       return (

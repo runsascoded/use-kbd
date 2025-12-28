@@ -1,13 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { KeyCombination, HotkeySequence } from './types'
 import {
   isModifierKey,
   isShiftedChar,
   normalizeKey,
   parseHotkeyString,
-  isSequence,
-  formatCombination,
 } from './utils'
+import type { KeyCombination, HotkeySequence } from './types'
 
 /**
  * Hotkey definition - maps key combinations/sequences to action names

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { KeyCombination, HotkeySequence, RecordHotkeyOptions, RecordHotkeyResult } from './types'
 import { formatCombination, isModifierKey, normalizeKey } from './utils'
+import type { KeyCombination, HotkeySequence, RecordHotkeyOptions, RecordHotkeyResult } from './types'
 
 /** Store callback in ref to avoid effect re-runs when callback changes */
 function useEventCallback<T extends (...args: never[]) => unknown>(fn: T | undefined): T | undefined {

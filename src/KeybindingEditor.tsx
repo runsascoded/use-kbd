@@ -1,8 +1,8 @@
-import {ReactNode, useCallback, useMemo, useState} from 'react'
-import type { HotkeyMap } from './useHotkeys'
-import type { HotkeySequence, KeyCombination, KeyCombinationDisplay } from './types'
+import { ReactNode, useCallback, useMemo, useState } from 'react'
 import { useRecordHotkey } from './useRecordHotkey'
 import { findConflicts, formatCombination, parseCombinationId } from './utils'
+import type { HotkeySequence, KeyCombination, KeyCombinationDisplay } from './types'
+import type { HotkeyMap } from './useHotkeys'
 
 export interface KeybindingEditorProps {
   /** Current keymap */

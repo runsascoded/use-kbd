@@ -1,6 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import type { Actions, RouteMatcher } from './actions'
-import type { HotkeySequence } from './types'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   filterActionsByRoute,
   getActionRegistry,
@@ -8,10 +6,11 @@ import {
   getGroups,
   getHandlers,
   groupActions,
-  matchesRoute,
 } from './actions'
 import { KeyboardShortcutsProvider, useKeyboardShortcutsContext, useRegisteredHotkeys } from './KeyboardShortcutsContext'
+import type { Actions } from './actions'
 import type { KeyboardShortcutsContextValue } from './KeyboardShortcutsContext'
+import type { HotkeySequence } from './types'
 
 /**
  * Configuration for hotkeys behavior and appearance.

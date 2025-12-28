@@ -1,7 +1,7 @@
-import {createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState} from 'react'
-import type { ActionRegistry, ActionSearchResult, HotkeySequence, SequenceCompletion } from './types'
+import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { useHotkeys, HotkeyMap, HandlerMap, UseHotkeysOptions, UseHotkeysResult } from './useHotkeys'
 import { findConflicts, searchActions, getSequenceCompletions, getActionBindings } from './utils'
+import type { ActionRegistry, ActionSearchResult, HotkeySequence, SequenceCompletion } from './types'
 
 export interface KeyboardShortcutsContextValue {
   /** Default keymap (before user overrides) */

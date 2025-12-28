@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { HotkeySequence } from './types'
 import { useHotkeys, HotkeyMap, HandlerMap, UseHotkeysOptions } from './useHotkeys'
 import { findConflicts } from './utils'
+import type { HotkeySequence } from './types'
 
 export interface UseEditableHotkeysOptions extends UseHotkeysOptions {
   /** localStorage key for persistence (omit to disable persistence) */

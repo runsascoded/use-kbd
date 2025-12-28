@@ -1,11 +1,11 @@
-import {Fragment, KeyboardEvent, MouseEvent, ReactNode, RefObject, useCallback, useEffect, useMemo, useRef} from 'react'
-import {getActionRegistry} from './actions'
-import {useMaybeHotkeysContext} from './HotkeysProvider'
-import type {ActionRegistry, ActionSearchResult, HotkeySequence, SequenceCompletion} from './types'
-import type {HandlerMap, HotkeyMap} from './useHotkeys'
-import {useOmnibar} from './useOmnibar'
-import {parseHotkeyString} from './utils'
-import {ModifierIcon} from './ModifierIcons'
+import { Fragment, KeyboardEvent, MouseEvent, ReactNode, RefObject, useCallback, useEffect, useMemo, useRef } from 'react'
+import { getActionRegistry } from './actions'
+import { useMaybeHotkeysContext } from './HotkeysProvider'
+import { ModifierIcon } from './ModifierIcons'
+import { useOmnibar } from './useOmnibar'
+import { parseHotkeyString } from './utils'
+import type { ActionRegistry, ActionSearchResult, HotkeySequence, SequenceCompletion } from './types'
+import type { HandlerMap, HotkeyMap } from './useHotkeys'
 
 export interface OmnibarProps {
   /**

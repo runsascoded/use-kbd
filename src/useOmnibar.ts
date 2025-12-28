@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ActionRegistry, ActionSearchResult, HotkeySequence } from './types'
 import { useHotkeys, HotkeyMap, HandlerMap } from './useHotkeys'
-import { searchActions, getSequenceCompletions, formatCombination } from './utils'
+import { searchActions, getSequenceCompletions } from './utils'
+import type { ActionRegistry, ActionSearchResult, HotkeySequence } from './types'
 import type { SequenceCompletion } from './types'
 
 export interface UseOmnibarOptions {

@@ -1,6 +1,6 @@
 import { createContext, useCallback, useMemo, useRef, useState } from 'react'
-import type { ActionConfig } from './useAction'
 import type { ActionRegistry } from './types'
+import type { ActionConfig } from './useAction'
 import type { HotkeyMap } from './useHotkeys'
 
 export interface RegisteredAction {
