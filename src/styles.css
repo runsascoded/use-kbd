@@ -332,11 +332,155 @@
   font-size: 0.875rem;
 }
 
+/* === Sequence Modal === */
+.hotkeys-sequence-backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 20vh;
+  z-index: 9998;
+  background-color: rgba(0, 0, 0, 0.2);
+  animation: hotkeys-fade-in 0.1s ease;
+}
+
+@keyframes hotkeys-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.hotkeys-sequence {
+  /* Inherit CSS custom properties */
+  --hk-bg: var(--hotkeys-bg, #ffffff);
+  --hk-bg-secondary: var(--hotkeys-bg-secondary, #f9fafb);
+  --hk-text: var(--hotkeys-text, #1f2937);
+  --hk-text-secondary: var(--hotkeys-text-secondary, #6b7280);
+  --hk-border: var(--hotkeys-border, #e5e7eb);
+  --hk-kbd-bg: var(--hotkeys-kbd-bg, #f3f4f6);
+  --hk-kbd-border: var(--hotkeys-kbd-border, #d1d5db);
+  --hk-kbd-text: var(--hotkeys-kbd-text, #374151);
+  --hk-radius: var(--hotkeys-radius, 8px);
+  --hk-accent: var(--hotkeys-accent, #3b82f6);
+
+  background-color: var(--hk-bg);
+  border: 1px solid var(--hk-border);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  min-width: 280px;
+  max-width: 400px;
+  overflow: hidden;
+  animation: hotkeys-slide-down 0.15s ease;
+  color: var(--hk-text);
+}
+
+@keyframes hotkeys-slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.hotkeys-sequence-current {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--hk-border);
+  background-color: var(--hk-bg-secondary);
+}
+
+.hotkeys-sequence-keys {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+  font-size: 1.25rem;
+  font-weight: 600;
+  background-color: var(--hk-bg);
+  border: 1px solid var(--hk-border);
+  border-radius: 6px;
+  color: var(--hk-text);
+}
+
+.hotkeys-sequence-ellipsis {
+  font-size: 1.5rem;
+  color: var(--hk-text-secondary);
+  animation: hotkeys-ellipsis-pulse 0.8s ease-in-out infinite;
+}
+
+@keyframes hotkeys-ellipsis-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.hotkeys-sequence-timeout {
+  height: 3px;
+  background: linear-gradient(90deg, var(--hk-accent), #60a5fa);
+  transform-origin: left;
+  animation: hotkeys-shrink linear forwards;
+}
+
+@keyframes hotkeys-shrink {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+
+.hotkeys-sequence-completions {
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.hotkeys-sequence-completion {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background-color: var(--hk-bg-secondary);
+  border-radius: 6px;
+  transition: background-color 0.1s ease;
+}
+
+.hotkeys-sequence-completion:hover {
+  background-color: var(--hk-bg);
+}
+
+.hotkeys-sequence-arrow {
+  color: var(--hk-text-secondary);
+  font-size: 0.9rem;
+}
+
+.hotkeys-sequence-actions {
+  flex: 1;
+  font-size: 0.9rem;
+  color: var(--hk-text);
+}
+
+.hotkeys-sequence-empty {
+  padding: 16px;
+  text-align: center;
+  color: var(--hk-text-secondary);
+  font-style: italic;
+  font-size: 0.9rem;
+}
+
 /* === Dark mode preset === */
 [data-theme="dark"] .hotkeys-modal,
 [data-theme="dark"] .hotkeys-omnibar,
+[data-theme="dark"] .hotkeys-sequence,
 .dark .hotkeys-modal,
-.dark .hotkeys-omnibar {
+.dark .hotkeys-omnibar,
+.dark .hotkeys-sequence {
   --hk-bg: var(--hotkeys-bg, #1f2937);
   --hk-bg-secondary: var(--hotkeys-bg-secondary, #374151);
   --hk-text: var(--hotkeys-text, #f3f4f6);

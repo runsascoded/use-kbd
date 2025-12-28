@@ -69,8 +69,9 @@ export { useOmnibar } from './useOmnibar'
 
 // Components
 export { KeybindingEditor } from './KeybindingEditor'
-export { ShortcutsModal } from './ShortcutsModal'
 export { Omnibar } from './Omnibar'
+export { SequenceModal } from './SequenceModal'
+export { ShortcutsModal } from './ShortcutsModal'
 export {
   CommandIcon,
   CtrlIcon,
