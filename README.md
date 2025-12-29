@@ -31,10 +31,10 @@ import 'use-kbd/styles.css'
 
 function App() {
   return (
-    <HotkeysProvider config={{ storageKey: 'my-app' }}>
-      {/* Your page content */}
+    <HotkeysProvider>
+      {/* Your app content */}
       <Dashboard />
-      {/* Drop-in "kbd" functionality */}
+      {/* Drop-in UI components */}
       <ShortcutsModal />
       <Omnibar />
       <SequenceModal />
@@ -115,10 +115,10 @@ Wrap your app to enable the hotkeys system:
 
 ```tsx
 <HotkeysProvider config={{
-  storageKey: 'my-app',      // localStorage key for user overrides
-  modalTrigger: '?',          // Open shortcuts modal (false to disable)
-  omnibarTrigger: 'meta+k',   // Open omnibar (false to disable)
-  sequenceTimeout: 1000,      // ms before sequence times out
+  storageKey: 'use-kbd',      // localStorage key for user overrides (default)
+  modalTrigger: '?',          // Open shortcuts modal (default; false to disable)
+  omnibarTrigger: 'meta+k',   // Open omnibar (default; false to disable)
+  sequenceTimeout: 1000,      // ms before sequence times out (default)
 }}>
   {children}
 </HotkeysProvider>
@@ -165,18 +165,22 @@ import 'use-kbd/styles.css'
 Customize with CSS variables:
 
 ```css
-.hotkeys-modal,
-.hotkeys-omnibar,
-.hotkeys-sequence {
-  --hk-bg: #1f2937;
-  --hk-text: #f3f4f6;
-  --hk-border: #4b5563;
-  --hk-accent: #3b82f6;
-  --hk-kbd-bg: #374151;
+.kbd-modal,
+.kbd-omnibar,
+.kbd-sequence {
+  --kbd-bg: #1f2937;
+  --kbd-text: #f3f4f6;
+  --kbd-border: #4b5563;
+  --kbd-accent: #3b82f6;
+  --kbd-kbd-bg: #374151;
 }
 ```
 
-Or use `[data-theme="dark"]` / `.dark` selectors for dark mode.
+Dark mode is automatically applied via `[data-theme="dark"]` or `.dark` selectors.
+
+See [awair's use-kbd-demo branch] for a real-world integration example.
+
+[awair's use-kbd-demo branch]: https://github.com/runsascoded/awair/compare/use-kbd-demo~1...use-kbd-demo
 
 ## Low-Level Hooks
 
