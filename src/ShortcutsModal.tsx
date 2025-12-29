@@ -160,10 +160,21 @@ function organizeShortcuts(
   const groupMap = new Map<string, ShortcutGroup>()
   const includedActions = new Set<string>()
 
+  // Helper to get group name for an action (consistent logic for both paths)
+  const getGroupName = (actionId: string): string => {
+    // First, check if action has a registered group in the registry
+    const registeredGroup = actionRegistry?.[actionId]?.group
+    if (registeredGroup) return registeredGroup
+
+    // Fall back to parsing actionId prefix and looking up in groupNames
+    const { group: groupKey } = parseActionId(actionId)
+    return groupNames?.[groupKey] ?? groupKey
+  }
+
   for (const [actionId, bindings] of actionBindings) {
     includedActions.add(actionId)
-    const { group: groupKey, name } = parseActionId(actionId)
-    const groupName = groupNames?.[groupKey] ?? groupKey
+    const { name } = parseActionId(actionId)
+    const groupName = getGroupName(actionId)
 
     if (!groupMap.has(groupName)) {
       groupMap.set(groupName, { name: groupName, shortcuts: [] })
@@ -171,7 +182,7 @@ function organizeShortcuts(
 
     groupMap.get(groupName)!.shortcuts.push({
       actionId,
-      label: labels?.[actionId] ?? name,
+      label: labels?.[actionId] ?? actionRegistry?.[actionId]?.label ?? name,
       description: descriptions?.[actionId],
       bindings,
     })
@@ -182,8 +193,8 @@ function organizeShortcuts(
     for (const [actionId, action] of Object.entries(actionRegistry)) {
       if (includedActions.has(actionId)) continue
 
-      const { group: groupKey, name } = parseActionId(actionId)
-      const groupName = action.group ?? groupNames?.[groupKey] ?? groupKey
+      const { name } = parseActionId(actionId)
+      const groupName = getGroupName(actionId)
 
       if (!groupMap.has(groupName)) {
         groupMap.set(groupName, { name: groupName, shortcuts: [] })

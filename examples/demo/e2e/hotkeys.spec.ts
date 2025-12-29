@@ -172,33 +172,36 @@ test.describe('Full Demo - Sequences and Editing', () => {
     await page.keyboard.press('?')
     await page.waitForSelector('.kbd-modal', { timeout: 5000 })
 
-    // Find an action and remove all its bindings
-    const editAction = page.locator('.kbd-action', { hasText: 'Edit' })
-    const editKbd = editAction.locator('.kbd-kbd.editable').first()
-    await expect(editKbd).toBeVisible()
+    // Find the "Due in 1 day" action in the "Due Date" group
+    const dueGroup = page.locator('.kbd-group', { hasText: 'DUE DATE' })
+    const dueAction = dueGroup.locator('.kbd-action', { hasText: 'Due in 1 day' })
+    await expect(dueAction).toBeVisible()
 
     // Remove the binding
-    await editKbd.hover()
-    const removeBtn = editKbd.locator('.kbd-remove-btn')
+    const dueKbd = dueAction.locator('.kbd-kbd.editable').first()
+    await dueKbd.hover()
+    const removeBtn = dueKbd.locator('.kbd-remove-btn')
     await removeBtn.click()
     await page.waitForTimeout(200)
 
-    // Action should still be visible with add button
-    await expect(editAction).toBeVisible()
-    await expect(editAction.locator('.kbd-add-btn')).toBeVisible()
+    // Action should STILL be in the same group with add button
+    const dueGroupAfter = page.locator('.kbd-group', { hasText: 'DUE DATE' })
+    const dueActionAfter = dueGroupAfter.locator('.kbd-action', { hasText: 'Due in 1 day' })
+    await expect(dueActionAfter).toBeVisible()
+    await expect(dueActionAfter.locator('.kbd-add-btn')).toBeVisible()
 
     // Should have no kbd elements
-    await expect(editAction.locator('.kbd-kbd.editable')).toHaveCount(0)
+    await expect(dueActionAfter.locator('.kbd-kbd.editable')).toHaveCount(0)
 
     // Can add a new binding
-    const addBtn = editAction.locator('.kbd-add-btn')
+    const addBtn = dueActionAfter.locator('.kbd-add-btn')
     await addBtn.click()
     await page.waitForTimeout(100)
     await page.keyboard.press('z')
     await page.waitForTimeout(1200)
 
-    // Should have the new binding
-    await expect(editAction.locator('.kbd-kbd.editable', { hasText: 'Z' })).toBeVisible()
+    // Should have the new binding, still in the same group
+    await expect(dueActionAfter.locator('.kbd-kbd.editable', { hasText: 'Z' })).toBeVisible()
   })
 })
 
