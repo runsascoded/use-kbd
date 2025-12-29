@@ -41,6 +41,8 @@ export { useEditableHotkeys } from './useEditableHotkeys'
 export { useOmnibar } from './useOmnibar'
 
 // Components
+export { Kbd } from './Kbd'
+export type { KbdProps } from './Kbd'
 export { KeybindingEditor } from './KeybindingEditor'
 export { Omnibar } from './Omnibar'
 export { SequenceModal } from './SequenceModal'
@@ -59,6 +61,7 @@ export type { ModifierIconProps, ModifierType } from './ModifierIcons'
 // Utilities
 export {
   findConflicts,
+  formatBinding,
   formatCombination,
   formatKeyForDisplay,
   fuzzyMatch,

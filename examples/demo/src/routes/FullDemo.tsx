@@ -1,29 +1,12 @@
 import { useCallback, useState } from 'react'
 import {
   HotkeysProvider,
+  Kbd,
   ShortcutsModal,
   useAction,
   useHotkeysContext,
-  parseHotkeyString,
-  formatCombination,
 } from 'use-kbd'
 import 'use-kbd/styles.css'
-
-/** Display the current binding(s) for an action */
-function Kbd({ action }: { action: string }) {
-  const ctx = useHotkeysContext()
-  const bindings = ctx.registry.getBindingsForAction(action)
-
-  if (bindings.length === 0) return null
-
-  // Format each binding for display
-  const formatted = bindings.map(b => {
-    const parsed = parseHotkeyString(b)
-    return formatCombination(parsed).display
-  })
-
-  return <kbd>{formatted.join(' / ')}</kbd>
-}
 
 interface Todo {
   id: number

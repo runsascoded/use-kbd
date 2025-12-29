@@ -23,6 +23,8 @@ export interface ActionsRegistryValue {
   actionRegistry: ActionRegistry
   /** Get all bindings for an action (defaults + overrides) */
   getBindingsForAction: (id: string) => string[]
+  /** Get the first binding for an action (convenience for display) */
+  getFirstBindingForAction: (id: string) => string | undefined
   /** User's binding overrides */
   overrides: Record<string, string | string[]>
   /** Set a user override for a binding */
@@ -249,6 +251,10 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
     return bindings
   }, [keymap])
 
+  const getFirstBindingForAction = useCallback((actionId: string) => {
+    return getBindingsForAction(actionId)[0]
+  }, [getBindingsForAction])
+
   const setBinding = useCallback((actionId: string, key: string) => {
     // If this binding is a default for this action, just remove it from removedDefaults
     // (no need to store in overrides since it will come from defaults)
@@ -324,6 +330,7 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
     keymap,
     actionRegistry,
     getBindingsForAction,
+    getFirstBindingForAction,
     overrides,
     setBinding,
     removeBinding,
@@ -336,6 +343,7 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
     keymap,
     actionRegistry,
     getBindingsForAction,
+    getFirstBindingForAction,
     overrides,
     setBinding,
     removeBinding,

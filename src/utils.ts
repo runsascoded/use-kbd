@@ -151,6 +151,20 @@ export function formatCombination(input: KeyCombination | HotkeySequence): KeyCo
 }
 
 /**
+ * Format a binding string for display.
+ * Takes a binding like "meta+k" or "2 w" and returns a display string like "⌘K" or "2 W".
+ *
+ * @example
+ * formatBinding('meta+k') // "⌘K" on Mac, "Ctrl+K" on Windows
+ * formatBinding('2 w')    // "2 W"
+ * formatBinding('?')      // "?"
+ */
+export function formatBinding(binding: string): string {
+  const parsed = parseHotkeyString(binding)
+  return formatCombination(parsed).display
+}
+
+/**
  * Check if a key is a modifier key
  */
 export function isModifierKey(key: string): boolean {
