@@ -229,20 +229,30 @@
   background: none;
   border: none;
   padding: 0;
-  margin-left: 2px;
-  font-size: 0.875rem;
-  color: var(--kbd-text-secondary);
+  margin-left: 4px;
+  font-size: 0.75rem;
+  line-height: 1;
+  color: var(--kbd-conflict);
   cursor: pointer;
+  /* Hidden by default - use width/max-width for smooth transition */
   opacity: 0;
-  transition: opacity var(--kbd-transition);
+  max-width: 0;
+  overflow: hidden;
+  transition:
+    opacity var(--kbd-transition),
+    max-width var(--kbd-transition),
+    margin var(--kbd-transition);
 }
 
-.kbd-kbd:hover .kbd-remove-btn {
+.kbd-kbd:hover .kbd-remove-btn,
+.kbd-kbd:focus-within .kbd-remove-btn {
   opacity: 1;
+  max-width: 1em;
 }
 
 .kbd-remove-btn:hover {
   color: var(--kbd-conflict);
+  transform: scale(1.1);
 }
 
 /* === Timeout bar === */
