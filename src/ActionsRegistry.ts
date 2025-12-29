@@ -52,10 +52,22 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
   const [actionsVersion, setActionsVersion] = useState(0)
 
   // User overrides (persisted)
+  // Format: { bindings: { key: action }, removedDefaults: { action: [keys] } }
   const [overrides, setOverrides] = useState<Record<string, string | string[]>>(() => {
     if (!storageKey || typeof window === 'undefined') return {}
     try {
       const stored = localStorage.getItem(storageKey)
+      return stored ? JSON.parse(stored) : {}
+    } catch {
+      return {}
+    }
+  })
+
+  // Track which default bindings have been removed from specific actions
+  const [removedDefaults, setRemovedDefaults] = useState<Record<string, string[]>>(() => {
+    if (!storageKey || typeof window === 'undefined') return {}
+    try {
+      const stored = localStorage.getItem(`${storageKey}-removed`)
       return stored ? JSON.parse(stored) : {}
     } catch {
       return {}
@@ -73,8 +85,8 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
     const filtered: Record<string, string | string[]> = {}
     for (const [key, actionOrActions] of Object.entries(overrides)) {
       if (actionOrActions === '') {
-        // Keep explicit removals
-        filtered[key] = actionOrActions
+        // Legacy empty marker - skip (now handled by removedDefaults)
+        continue
       } else if (Array.isArray(actionOrActions)) {
         // For arrays, keep if any action is not default
         const nonDefaultActions = actionOrActions.filter(a => !isDefaultBinding(key, a))
@@ -112,6 +124,34 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
       return filteredOverrides
     })
   }, [storageKey, filterRedundantOverrides])
+
+  // Persist removedDefaults
+  type RemovedDefaultsUpdate = Record<string, string[]> | ((prev: Record<string, string[]>) => Record<string, string[]>)
+  const updateRemovedDefaults = useCallback((update: RemovedDefaultsUpdate) => {
+    setRemovedDefaults((prev) => {
+      const newRemoved = typeof update === 'function' ? update(prev) : update
+      // Filter out empty arrays
+      const filtered: Record<string, string[]> = {}
+      for (const [action, keys] of Object.entries(newRemoved)) {
+        if (keys.length > 0) {
+          filtered[action] = keys
+        }
+      }
+      if (storageKey && typeof window !== 'undefined') {
+        try {
+          const key = `${storageKey}-removed`
+          if (Object.keys(filtered).length === 0) {
+            localStorage.removeItem(key)
+          } else {
+            localStorage.setItem(key, JSON.stringify(filtered))
+          }
+        } catch {
+          // Ignore storage errors
+        }
+      }
+      return filtered
+    })
+  }, [storageKey])
 
   const register = useCallback((id: string, config: ActionConfig) => {
     actionsRef.current.set(id, {
@@ -152,11 +192,12 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
     }
 
     // First, add all default bindings from registered actions
-    // (but skip if explicitly removed via override)
+    // (but skip if explicitly removed for this action)
     for (const [id, { config }] of actionsRef.current) {
       for (const binding of config.defaultBindings ?? []) {
-        // Check if this binding was explicitly removed
-        if (overrides[binding] === '') continue
+        // Check if this default was explicitly removed for this action
+        const removedForAction = removedDefaults[id] ?? []
+        if (removedForAction.includes(binding)) continue
 
         addToKey(binding, id)
       }
@@ -165,7 +206,7 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
     // Then apply user overrides (merge with defaults to create conflicts)
     for (const [key, actionOrActions] of Object.entries(overrides)) {
       if (actionOrActions === '') {
-        // Removed binding - already handled above
+        // Legacy empty marker - skip
         continue
       } else {
         // Add the override binding (may merge with existing default)
@@ -178,7 +219,7 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
 
     return map
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [actionsVersion, overrides])
+  }, [actionsVersion, overrides, removedDefaults])
 
   // Build action registry for omnibar
   const actionRegistry = useMemo(() => {
@@ -216,30 +257,39 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
   }, [updateOverrides])
 
   const removeBinding = useCallback((key: string) => {
-    // Check if this key is a default binding for any action
-    let isDefault = false
-    for (const { config } of actionsRef.current.values()) {
+    // Find which actions have this as a default binding
+    const actionsWithDefault: string[] = []
+    for (const [id, { config }] of actionsRef.current) {
       if (config.defaultBindings?.includes(key)) {
-        isDefault = true
-        break
+        actionsWithDefault.push(id)
       }
     }
 
+    // Mark as removed for each action that has it as a default
+    if (actionsWithDefault.length > 0) {
+      updateRemovedDefaults((prev) => {
+        const next = { ...prev }
+        for (const actionId of actionsWithDefault) {
+          const existing = next[actionId] ?? []
+          if (!existing.includes(key)) {
+            next[actionId] = [...existing, key]
+          }
+        }
+        return next
+      })
+    }
+
+    // Also remove from overrides if it was a user-added binding
     updateOverrides((prev) => {
-      if (isDefault) {
-        // Mark as explicitly removed (set to '' in overrides)
-        return { ...prev, [key]: '' }
-      } else {
-        // Just remove from overrides
-        const { [key]: _, ...rest } = prev
-        return rest
-      }
+      const { [key]: _, ...rest } = prev
+      return rest
     })
-  }, [updateOverrides])
+  }, [updateOverrides, updateRemovedDefaults])
 
   const resetOverrides = useCallback(() => {
     updateOverrides({})
-  }, [updateOverrides])
+    updateRemovedDefaults({})
+  }, [updateOverrides, updateRemovedDefaults])
 
   // Create a snapshot of the map for consumers
   const actions = useMemo(() => {
