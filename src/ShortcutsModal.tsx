@@ -671,14 +671,31 @@ export function ShortcutsModal({
           isEditing={isEditingThis}
           isConflict={isConflict}
           isDefault={isDefault}
-          onEdit={() => startEditingBinding(actionId, key)}
+          onEdit={() => {
+            // If recording another element, commit pending keys first
+            if (isRecording && !(editingAction === actionId && editingKey === key)) {
+              if (pendingKeys.length > 0) {
+                const display = formatCombination(pendingKeys)
+                const currentAddingAction = addingActionRef.current
+                const currentEditingAction = editingActionRef.current
+                const currentEditingKey = editingKeyRef.current
+                if (currentAddingAction) {
+                  handleBindingAdd?.(currentAddingAction, display.id)
+                } else if (currentEditingAction && currentEditingKey) {
+                  handleBindingChange?.(currentEditingAction, currentEditingKey, display.id)
+                }
+              }
+              cancel()
+            }
+            startEditingBinding(actionId, key)
+          }}
           onRemove={editable && showRemove ? () => removeBinding(actionId, key) : undefined}
           pendingKeys={pendingKeys}
           activeKeys={activeKeys}
         />
       )
     },
-    [editingAction, editingKey, addingAction, conflicts, defaults, editable, startEditingBinding, removeBinding, pendingKeys, activeKeys],
+    [editingAction, editingKey, addingAction, conflicts, defaults, editable, startEditingBinding, removeBinding, pendingKeys, activeKeys, isRecording, cancel, handleBindingAdd, handleBindingChange],
   )
 
   // Helper: render add button for an action
@@ -700,14 +717,31 @@ export function ShortcutsModal({
       return (
         <button
           className="kbd-add-btn"
-          onClick={() => startAddingBinding(actionId)}
-          disabled={isRecording && !isAddingThis}
+          onClick={() => {
+            // If recording another element, commit pending keys first
+            if (isRecording && !isAddingThis) {
+              if (pendingKeys.length > 0) {
+                // Commit the pending keys before switching
+                const display = formatCombination(pendingKeys)
+                const currentAddingAction = addingActionRef.current
+                const currentEditingAction = editingActionRef.current
+                const currentEditingKey = editingKeyRef.current
+                if (currentAddingAction) {
+                  handleBindingAdd?.(currentAddingAction, display.id)
+                } else if (currentEditingAction && currentEditingKey) {
+                  handleBindingChange?.(currentEditingAction, currentEditingKey, display.id)
+                }
+              }
+              cancel()
+            }
+            startAddingBinding(actionId)
+          }}
         >
           +
         </button>
       )
     },
-    [addingAction, pendingKeys, activeKeys, startAddingBinding, isRecording],
+    [addingAction, pendingKeys, activeKeys, startAddingBinding, isRecording, cancel, handleBindingAdd, handleBindingChange],
   )
 
   // Helper: render a cell with all bindings for an action
