@@ -151,11 +151,15 @@ export function useRecordHotkey(options: RecordHotkeyOptions = {}): RecordHotkey
         timeoutRef.current = null
       }
     } else if (isRecording && pendingKeysRef.current.length > 0 && !timeoutRef.current) {
-      // Resume: start a new timeout if we have pending keys and no timeout running
+      // Resume: submit immediately if timeout is 0, otherwise start a new timeout
       const currentSequence = pendingKeysRef.current
-      timeoutRef.current = setTimeout(() => {
+      if (sequenceTimeout === 0) {
         submit(currentSequence)
-      }, sequenceTimeout)
+      } else {
+        timeoutRef.current = setTimeout(() => {
+          submit(currentSequence)
+        }, sequenceTimeout)
+      }
     }
   }, [pauseTimeout, isRecording, sequenceTimeout, submit])
 
@@ -307,9 +311,12 @@ export function useRecordHotkey(options: RecordHotkeyOptions = {}): RecordHotkey
         pendingKeysRef.current = newSequence
         setPendingKeys(newSequence)
 
-        // Set timeout to submit (unless paused)
+        // Submit immediately if timeout is 0 (no sequences mode)
+        // Otherwise set timeout to submit (unless paused)
         clearTimeout_()
-        if (!pauseTimeoutRef.current) {
+        if (sequenceTimeout === 0) {
+          submit(newSequence)
+        } else if (!pauseTimeoutRef.current) {
           timeoutRef.current = setTimeout(() => {
             submit(newSequence)
           }, sequenceTimeout)
