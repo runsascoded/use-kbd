@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { DEFAULT_SEQUENCE_TIMEOUT } from './constants'
 import {
   isModifierKey,
   isShiftedChar,
@@ -28,7 +29,7 @@ export interface UseHotkeysOptions {
   stopPropagation?: boolean
   /** Enable hotkeys even when focused on input/textarea/select (default: false) */
   enableOnFormTags?: boolean
-  /** Timeout in ms for sequences (default: 1000) */
+  /** Timeout in ms for sequences (default: DEFAULT_SEQUENCE_TIMEOUT) */
   sequenceTimeout?: number
   /** What happens on timeout: 'submit' executes current sequence, 'cancel' resets (default: 'submit') */
   onTimeout?: 'submit' | 'cancel'
@@ -146,8 +147,7 @@ function sequencesMatch(a: HotkeySequence, b: HotkeySequence): boolean {
  * // Sequences
  * const { pendingKeys, isAwaitingSequence } = useHotkeys(
  *   { '2 w': 'twoWeeks', '2 d': 'twoDays' },
- *   { twoWeeks: () => setRange('2w'), twoDays: () => setRange('2d') },
- *   { sequenceTimeout: 1000 }
+ *   { twoWeeks: () => setRange('2w'), twoDays: () => setRange('2d') }
  * )
  * ```
  */
@@ -162,7 +162,7 @@ export function useHotkeys(
     preventDefault = true,
     stopPropagation = true,
     enableOnFormTags = false,
-    sequenceTimeout = 1000,
+    sequenceTimeout = DEFAULT_SEQUENCE_TIMEOUT,
     onTimeout = 'submit',
     onSequenceStart,
     onSequenceProgress,

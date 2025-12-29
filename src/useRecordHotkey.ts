@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { DEFAULT_SEQUENCE_TIMEOUT } from './constants'
 import { formatCombination, isModifierKey, normalizeKey } from './utils'
 import type { KeyCombination, HotkeySequence, RecordHotkeyOptions, RecordHotkeyResult } from './types'
 
@@ -26,7 +27,7 @@ function useEventCallback<T extends (...args: never[]) => unknown>(fn: T | undef
  *       console.log('Captured:', display.display) // "2 W" or "⌘K"
  *       saveKeybinding(display.id) // "2 w" or "meta+k"
  *     },
- *     sequenceTimeout: 1000,
+ *     sequenceTimeout: 800, // custom timeout
  *   })
  *
  *   return (
@@ -48,7 +49,7 @@ export function useRecordHotkey(options: RecordHotkeyOptions = {}): RecordHotkey
     onTab: onTabProp,
     onShiftTab: onShiftTabProp,
     preventDefault = true,
-    sequenceTimeout = 1000,
+    sequenceTimeout = DEFAULT_SEQUENCE_TIMEOUT,
     pauseTimeout = false,
   } = options
 

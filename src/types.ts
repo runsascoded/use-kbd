@@ -74,7 +74,7 @@ export interface RecordHotkeyOptions {
   onShiftTab?: () => void
   /** Prevent default on captured keys (default: true) */
   preventDefault?: boolean
-  /** Timeout in ms before sequence is submitted (default: 1000).
+  /** Timeout in ms before sequence is submitted (default: DEFAULT_SEQUENCE_TIMEOUT).
    * Set to 0 for immediate submit (no sequences - first key press is captured). */
   sequenceTimeout?: number
   /** When true, pause the auto-submit timeout (useful for conflict warnings). Default: false */

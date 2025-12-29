@@ -76,3 +76,6 @@ export {
 } from './utils'
 
 export type { FuzzyMatchResult, KeyConflict } from './utils'
+
+// Constants
+export { DEFAULT_SEQUENCE_TIMEOUT } from './constants'

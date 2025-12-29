@@ -1,4 +1,5 @@
 import { Fragment, MouseEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { DEFAULT_SEQUENCE_TIMEOUT } from './constants'
 import { useMaybeHotkeysContext } from './HotkeysProvider'
 import { ModifierIcon } from './ModifierIcons'
 import { useHotkeys } from './useHotkeys'
@@ -287,7 +288,7 @@ function BindingDisplay({
   onRemove,
   pendingKeys,
   activeKeys,
-  timeoutDuration = 1000,
+  timeoutDuration = DEFAULT_SEQUENCE_TIMEOUT,
 }: {
   binding: string
   className?: string

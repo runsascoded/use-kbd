@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { ActionsRegistryContext, useActionsRegistry } from './ActionsRegistry'
+import { DEFAULT_SEQUENCE_TIMEOUT } from './constants'
 import { useHotkeys } from './useHotkeys'
 import { findConflicts, getSequenceCompletions, searchActions } from './utils'
 import type { ActionsRegistryValue } from './ActionsRegistry'
@@ -12,7 +13,7 @@ export interface HotkeysConfig {
   /** Storage key for persisting user binding overrides */
   storageKey?: string
 
-  /** Timeout in ms before a sequence auto-submits (default: 1000) */
+  /** Timeout in ms before a sequence auto-submits (default: DEFAULT_SEQUENCE_TIMEOUT) */
   sequenceTimeout?: number
 
   /** When true, keys with conflicts are disabled (default: true) */
@@ -79,7 +80,7 @@ const HotkeysContext = createContext<HotkeysContextValue | null>(null)
 
 const DEFAULT_CONFIG: Required<HotkeysConfig> = {
   storageKey: 'use-kbd',
-  sequenceTimeout: 1000,
+  sequenceTimeout: DEFAULT_SEQUENCE_TIMEOUT,
   disableConflicts: true,
   minViewportWidth: 768,
   enableOnTouch: false,
