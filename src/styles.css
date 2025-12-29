@@ -3,47 +3,47 @@
  * Override these CSS custom properties to customize the appearance:
  *
  * :root {
- *   --hotkeys-bg: #1f2937;
- *   --hotkeys-text: #f3f4f6;
+ *   --kbd-bg: #1f2937;
+ *   --kbd-text: #f3f4f6;
  *   ...
  * }
  */
 
 /* === CSS Custom Properties === */
-.hotkeys-modal,
-.hotkeys-omnibar {
+.kbd-modal,
+.kbd-omnibar {
   /* Colors */
-  --hk-bg: var(--hotkeys-bg, #ffffff);
-  --hk-bg-secondary: var(--hotkeys-bg-secondary, #f9fafb);
-  --hk-text: var(--hotkeys-text, #1f2937);
-  --hk-text-secondary: var(--hotkeys-text-secondary, #6b7280);
-  --hk-border: var(--hotkeys-border, #e5e7eb);
-  --hk-accent: var(--hotkeys-accent, #3b82f6);
-  --hk-accent-hover: var(--hotkeys-accent-hover, #2563eb);
+  --kbd-bg: var(--kbd-bg, #ffffff);
+  --kbd-bg-secondary: var(--kbd-bg-secondary, #f9fafb);
+  --kbd-text: var(--kbd-text, #1f2937);
+  --kbd-text-secondary: var(--kbd-text-secondary, #6b7280);
+  --kbd-border: var(--kbd-border, #e5e7eb);
+  --kbd-accent: var(--kbd-accent, #3b82f6);
+  --kbd-accent-hover: var(--kbd-accent-hover, #2563eb);
 
   /* Conflict/warning colors */
-  --hk-conflict: var(--hotkeys-conflict, #ef4444);
-  --hk-conflict-bg: var(--hotkeys-conflict-bg, #fef2f2);
-  --hk-warning: var(--hotkeys-warning, #f59e0b);
-  --hk-warning-bg: var(--hotkeys-warning-bg, #fef3c7);
+  --kbd-conflict: var(--kbd-conflict, #ef4444);
+  --kbd-conflict-bg: var(--kbd-conflict-bg, #fef2f2);
+  --kbd-warning: var(--kbd-warning, #f59e0b);
+  --kbd-warning-bg: var(--kbd-warning-bg, #fef3c7);
 
   /* Kbd element */
-  --hk-kbd-bg: var(--hotkeys-kbd-bg, #f3f4f6);
-  --hk-kbd-border: var(--hotkeys-kbd-border, #d1d5db);
-  --hk-kbd-text: var(--hotkeys-kbd-text, #374151);
+  --kbd-kbd-bg: var(--kbd-kbd-bg, #f3f4f6);
+  --kbd-kbd-border: var(--kbd-kbd-border, #d1d5db);
+  --kbd-kbd-text: var(--kbd-kbd-text, #374151);
 
   /* Spacing & sizing */
-  --hk-radius: var(--hotkeys-radius, 8px);
-  --hk-radius-sm: var(--hotkeys-radius-sm, 4px);
-  --hk-gap: var(--hotkeys-gap, 8px);
-  --hk-padding: var(--hotkeys-padding, 16px);
+  --kbd-radius: var(--kbd-radius, 8px);
+  --kbd-radius-sm: var(--kbd-radius-sm, 4px);
+  --kbd-gap: var(--kbd-gap, 8px);
+  --kbd-padding: var(--kbd-padding, 16px);
 
   /* Animation */
-  --hk-transition: var(--hotkeys-transition, 150ms ease);
+  --kbd-transition: var(--kbd-transition, 150ms ease);
 }
 
 /* === Backdrop === */
-.hotkeys-backdrop {
+.kbd-backdrop {
   position: fixed;
   inset: 0;
   background-color: rgba(0, 0, 0, 0.5);
@@ -54,80 +54,80 @@
 }
 
 /* === Modal === */
-.hotkeys-modal {
-  background-color: var(--hk-bg);
-  border-radius: var(--hk-radius);
-  padding: var(--hk-padding);
+.kbd-modal {
+  background-color: var(--kbd-bg);
+  border-radius: var(--kbd-radius);
+  padding: var(--kbd-padding);
   width: 85vw;
   max-width: 480px;
   max-height: 80vh;
   overflow: auto;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-  color: var(--hk-text);
+  color: var(--kbd-text);
 }
 
-.hotkeys-modal-header {
+.kbd-modal-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: var(--hk-gap);
+  margin-bottom: var(--kbd-gap);
 }
 
-.hotkeys-modal-title {
+.kbd-modal-title {
   margin: 0;
   font-size: 1.125rem;
   font-weight: 600;
 }
 
-.hotkeys-modal-close {
+.kbd-modal-close {
   background: none;
   border: none;
   font-size: 1.5rem;
   cursor: pointer;
   padding: 4px;
   line-height: 1;
-  color: var(--hk-text-secondary);
-  transition: color var(--hk-transition);
+  color: var(--kbd-text-secondary);
+  transition: color var(--kbd-transition);
 }
 
-.hotkeys-modal-close:hover {
-  color: var(--hk-text);
+.kbd-modal-close:hover {
+  color: var(--kbd-text);
 }
 
 /* === Groups === */
-.hotkeys-group {
-  margin-bottom: var(--hk-padding);
+.kbd-group {
+  margin-bottom: var(--kbd-padding);
 }
 
-.hotkeys-group-title {
-  margin: 0 0 var(--hk-gap);
+.kbd-group-title {
+  margin: 0 0 var(--kbd-gap);
   font-size: 0.75rem;
   font-weight: 600;
   text-transform: uppercase;
-  color: var(--hk-text-secondary);
+  color: var(--kbd-text-secondary);
   letter-spacing: 0.05em;
 }
 
 /* === Action rows === */
-.hotkeys-action {
+.kbd-action {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 6px 0;
-  border-bottom: 1px solid var(--hk-border);
-  gap: var(--hk-gap);
+  border-bottom: 1px solid var(--kbd-border);
+  gap: var(--kbd-gap);
 }
 
-.hotkeys-action:last-child {
+.kbd-action:last-child {
   border-bottom: none;
 }
 
-.hotkeys-action-label {
+.kbd-action-label {
   flex: 1;
   font-size: 0.875rem;
 }
 
-.hotkeys-action-bindings {
+.kbd-action-bindings {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
@@ -135,128 +135,134 @@
 }
 
 /* === Kbd element === */
-.hotkeys-kbd {
+.kbd-kbd {
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  background-color: var(--hk-kbd-bg);
-  border: 1px solid var(--hk-kbd-border);
-  border-radius: var(--hk-radius-sm);
+  background-color: var(--kbd-kbd-bg);
+  border: 1px solid var(--kbd-kbd-border);
+  border-radius: var(--kbd-radius-sm);
   padding: 3px 6px;
   font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
   font-size: 0.75rem;
-  color: var(--hk-kbd-text);
+  color: var(--kbd-kbd-text);
   min-height: 24px;
   white-space: nowrap;
 }
 
-.hotkeys-kbd.editable {
+.kbd-kbd.editable {
   cursor: pointer;
-  transition: all var(--hk-transition);
+  transition: all var(--kbd-transition);
 }
 
-.hotkeys-kbd.editable:hover {
-  border-color: var(--hk-accent);
-  background-color: var(--hk-bg-secondary);
+.kbd-kbd.editable:hover,
+.kbd-kbd.editable:focus {
+  border-color: var(--kbd-accent);
+  background-color: var(--kbd-bg-secondary);
+  outline: none;
 }
 
-.hotkeys-kbd.editing {
-  border-color: var(--hk-accent);
+.kbd-kbd.editable:focus-visible {
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+}
+
+.kbd-kbd.editing {
+  border-color: var(--kbd-accent);
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
 }
 
-.hotkeys-kbd.conflict {
-  border-color: var(--hk-conflict);
-  background-color: var(--hk-conflict-bg);
-  color: var(--hk-conflict);
+.kbd-kbd.conflict {
+  border-color: var(--kbd-conflict);
+  background-color: var(--kbd-conflict-bg);
+  color: var(--kbd-conflict);
 }
 
-.hotkeys-kbd.pending-conflict {
-  border-color: var(--hk-warning);
-  background-color: var(--hk-warning-bg);
+.kbd-kbd.pending-conflict {
+  border-color: var(--kbd-warning);
+  background-color: var(--kbd-warning-bg);
   color: #92400e;
-  animation: hotkeys-pulse 1s ease-in-out infinite;
+  animation: kbd-pulse 1s ease-in-out infinite;
 }
 
-.hotkeys-kbd.default-binding {
-  border-bottom: 1px solid var(--hk-text-secondary);
+.kbd-kbd.default-binding {
+  border-bottom: 1px solid var(--kbd-text-secondary);
   border-bottom-left-radius: 0;
   border-bottom-right-radius: 0;
 }
 
-@keyframes hotkeys-pulse {
+@keyframes kbd-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.7; }
 }
 
 /* === Modifier icons === */
-.hotkeys-modifier-icon {
+.kbd-modifier-icon {
   width: 12px;
   height: 12px;
   flex-shrink: 0;
 }
 
 /* === Sequence separator === */
-.hotkeys-sequence-sep {
-  color: var(--hk-text-secondary);
+.kbd-sequence-sep {
+  color: var(--kbd-text-secondary);
   margin: 0 1px;
 }
 
 /* === Add binding button === */
-.hotkeys-add-btn {
+.kbd-add-btn {
   background: none;
-  border: 1px dashed var(--hk-border);
-  border-radius: var(--hk-radius-sm);
+  border: 1px dashed var(--kbd-border);
+  border-radius: var(--kbd-radius-sm);
   padding: 3px 8px;
   font-size: 0.875rem;
-  color: var(--hk-text-secondary);
+  color: var(--kbd-text-secondary);
   cursor: pointer;
-  transition: all var(--hk-transition);
+  transition: all var(--kbd-transition);
 }
 
-.hotkeys-add-btn:hover {
-  border-color: var(--hk-accent);
-  color: var(--hk-accent);
+.kbd-add-btn:hover {
+  border-color: var(--kbd-accent);
+  color: var(--kbd-accent);
 }
 
 /* === Remove binding button === */
-.hotkeys-remove-btn {
+.kbd-remove-btn {
   background: none;
   border: none;
   padding: 0;
   margin-left: 2px;
   font-size: 0.875rem;
-  color: var(--hk-text-secondary);
+  color: var(--kbd-text-secondary);
   cursor: pointer;
   opacity: 0;
-  transition: opacity var(--hk-transition);
+  transition: opacity var(--kbd-transition);
 }
 
-.hotkeys-kbd:hover .hotkeys-remove-btn {
+.kbd-kbd:hover .kbd-remove-btn {
   opacity: 1;
 }
 
-.hotkeys-remove-btn:hover {
-  color: var(--hk-conflict);
+.kbd-remove-btn:hover {
+  color: var(--kbd-conflict);
 }
 
 /* === Timeout bar === */
-.hotkeys-timeout-bar {
+.kbd-timeout-bar {
   position: absolute;
   bottom: 0;
   left: 0;
   height: 2px;
-  background-color: var(--hk-accent);
-  animation: hotkeys-timeout linear forwards;
+  background-color: var(--kbd-accent);
+  animation: kbd-timeout linear forwards;
 }
 
-@keyframes hotkeys-timeout {
+@keyframes kbd-timeout {
   from { width: 100%; }
   to { width: 0%; }
 }
 
 /* === Omnibar === */
-.hotkeys-omnibar-backdrop {
+.kbd-omnibar-backdrop {
   position: fixed;
   inset: 0;
   background-color: rgba(0, 0, 0, 0.5);
@@ -267,73 +273,73 @@
   z-index: 9999;
 }
 
-.hotkeys-omnibar {
-  background-color: var(--hk-bg);
-  border-radius: var(--hk-radius);
+.kbd-omnibar {
+  background-color: var(--kbd-bg);
+  border-radius: var(--kbd-radius);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
   width: 90vw;
   max-width: 500px;
   overflow: hidden;
 }
 
-.hotkeys-omnibar-input {
+.kbd-omnibar-input {
   width: 100%;
-  padding: 12px var(--hk-padding);
+  padding: 12px var(--kbd-padding);
   border: none;
-  border-bottom: 1px solid var(--hk-border);
+  border-bottom: 1px solid var(--kbd-border);
   font-size: 1rem;
-  background-color: var(--hk-bg);
-  color: var(--hk-text);
+  background-color: var(--kbd-bg);
+  color: var(--kbd-text);
   outline: none;
 }
 
-.hotkeys-omnibar-input::placeholder {
-  color: var(--hk-text-secondary);
+.kbd-omnibar-input::placeholder {
+  color: var(--kbd-text-secondary);
 }
 
-.hotkeys-omnibar-results {
+.kbd-omnibar-results {
   max-height: 300px;
   overflow-y: auto;
 }
 
-.hotkeys-omnibar-result {
+.kbd-omnibar-result {
   display: flex;
   align-items: center;
-  padding: 10px var(--hk-padding);
+  padding: 10px var(--kbd-padding);
   cursor: pointer;
-  gap: var(--hk-gap);
-  transition: background-color var(--hk-transition);
+  gap: var(--kbd-gap);
+  transition: background-color var(--kbd-transition);
 }
 
-.hotkeys-omnibar-result:hover,
-.hotkeys-omnibar-result.selected {
-  background-color: var(--hk-bg-secondary);
+.kbd-omnibar-result:hover,
+.kbd-omnibar-result.selected {
+  background-color: var(--kbd-bg-secondary);
 }
 
-.hotkeys-omnibar-result-label {
+.kbd-omnibar-result-label {
   flex: 1;
   font-size: 0.875rem;
 }
 
-.hotkeys-omnibar-result-category {
+.kbd-omnibar-result-category {
   font-size: 0.75rem;
-  color: var(--hk-text-secondary);
+  color: var(--kbd-text-secondary);
 }
 
-.hotkeys-omnibar-result-bindings {
+.kbd-omnibar-result-bindings {
   display: flex;
   gap: 4px;
 }
 
-.hotkeys-omnibar-no-results {
-  padding: var(--hk-padding);
+.kbd-omnibar-no-results {
+  padding: var(--kbd-padding);
   text-align: center;
-  color: var(--hk-text-secondary);
+  color: var(--kbd-text-secondary);
   font-size: 0.875rem;
 }
 
 /* === Sequence Modal === */
-.hotkeys-sequence-backdrop {
+.kbd-sequence-backdrop {
   position: fixed;
   inset: 0;
   display: flex;
@@ -342,39 +348,39 @@
   padding-top: 20vh;
   z-index: 9998;
   background-color: rgba(0, 0, 0, 0.2);
-  animation: hotkeys-fade-in 0.1s ease;
+  animation: kbd-fade-in 0.1s ease;
 }
 
-@keyframes hotkeys-fade-in {
+@keyframes kbd-fade-in {
   from { opacity: 0; }
   to { opacity: 1; }
 }
 
-.hotkeys-sequence {
+.kbd-sequence {
   /* Inherit CSS custom properties */
-  --hk-bg: var(--hotkeys-bg, #ffffff);
-  --hk-bg-secondary: var(--hotkeys-bg-secondary, #f9fafb);
-  --hk-text: var(--hotkeys-text, #1f2937);
-  --hk-text-secondary: var(--hotkeys-text-secondary, #6b7280);
-  --hk-border: var(--hotkeys-border, #e5e7eb);
-  --hk-kbd-bg: var(--hotkeys-kbd-bg, #f3f4f6);
-  --hk-kbd-border: var(--hotkeys-kbd-border, #d1d5db);
-  --hk-kbd-text: var(--hotkeys-kbd-text, #374151);
-  --hk-radius: var(--hotkeys-radius, 8px);
-  --hk-accent: var(--hotkeys-accent, #3b82f6);
+  --kbd-bg: var(--kbd-bg, #ffffff);
+  --kbd-bg-secondary: var(--kbd-bg-secondary, #f9fafb);
+  --kbd-text: var(--kbd-text, #1f2937);
+  --kbd-text-secondary: var(--kbd-text-secondary, #6b7280);
+  --kbd-border: var(--kbd-border, #e5e7eb);
+  --kbd-kbd-bg: var(--kbd-kbd-bg, #f3f4f6);
+  --kbd-kbd-border: var(--kbd-kbd-border, #d1d5db);
+  --kbd-kbd-text: var(--kbd-kbd-text, #374151);
+  --kbd-radius: var(--kbd-radius, 8px);
+  --kbd-accent: var(--kbd-accent, #3b82f6);
 
-  background-color: var(--hk-bg);
-  border: 1px solid var(--hk-border);
+  background-color: var(--kbd-bg);
+  border: 1px solid var(--kbd-border);
   border-radius: 12px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
   min-width: 280px;
   max-width: 400px;
   overflow: hidden;
-  animation: hotkeys-slide-down 0.15s ease;
-  color: var(--hk-text);
+  animation: kbd-slide-down 0.15s ease;
+  color: var(--kbd-text);
 }
 
-@keyframes hotkeys-slide-down {
+@keyframes kbd-slide-down {
   from {
     opacity: 0;
     transform: translateY(-10px);
@@ -385,17 +391,17 @@
   }
 }
 
-.hotkeys-sequence-current {
+.kbd-sequence-current {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 4px;
   padding: 16px 20px;
-  border-bottom: 1px solid var(--hk-border);
-  background-color: var(--hk-bg-secondary);
+  border-bottom: 1px solid var(--kbd-border);
+  background-color: var(--kbd-bg-secondary);
 }
 
-.hotkeys-sequence-keys {
+.kbd-sequence-keys {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -403,36 +409,36 @@
   font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
   font-size: 1.25rem;
   font-weight: 600;
-  background-color: var(--hk-bg);
-  border: 1px solid var(--hk-border);
+  background-color: var(--kbd-bg);
+  border: 1px solid var(--kbd-border);
   border-radius: 6px;
-  color: var(--hk-text);
+  color: var(--kbd-text);
 }
 
-.hotkeys-sequence-ellipsis {
+.kbd-sequence-ellipsis {
   font-size: 1.5rem;
-  color: var(--hk-text-secondary);
-  animation: hotkeys-ellipsis-pulse 0.8s ease-in-out infinite;
+  color: var(--kbd-text-secondary);
+  animation: kbd-ellipsis-pulse 0.8s ease-in-out infinite;
 }
 
-@keyframes hotkeys-ellipsis-pulse {
+@keyframes kbd-ellipsis-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
 }
 
-.hotkeys-sequence-timeout {
+.kbd-sequence-timeout {
   height: 3px;
-  background: linear-gradient(90deg, var(--hk-accent), #60a5fa);
+  background: linear-gradient(90deg, var(--kbd-accent), #60a5fa);
   transform-origin: left;
-  animation: hotkeys-shrink linear forwards;
+  animation: kbd-shrink linear forwards;
 }
 
-@keyframes hotkeys-shrink {
+@keyframes kbd-shrink {
   from { transform: scaleX(1); }
   to { transform: scaleX(0); }
 }
 
-.hotkeys-sequence-completions {
+.kbd-sequence-completions {
   padding: 12px 16px;
   display: flex;
   flex-direction: column;
@@ -441,52 +447,52 @@
   overflow-y: auto;
 }
 
-.hotkeys-sequence-completion {
+.kbd-sequence-completion {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  background-color: var(--hk-bg-secondary);
+  background-color: var(--kbd-bg-secondary);
   border-radius: 6px;
   transition: background-color 0.1s ease;
 }
 
-.hotkeys-sequence-completion:hover {
-  background-color: var(--hk-bg);
+.kbd-sequence-completion:hover {
+  background-color: var(--kbd-bg);
 }
 
-.hotkeys-sequence-arrow {
-  color: var(--hk-text-secondary);
+.kbd-sequence-arrow {
+  color: var(--kbd-text-secondary);
   font-size: 0.9rem;
 }
 
-.hotkeys-sequence-actions {
+.kbd-sequence-actions {
   flex: 1;
   font-size: 0.9rem;
-  color: var(--hk-text);
+  color: var(--kbd-text);
 }
 
-.hotkeys-sequence-empty {
+.kbd-sequence-empty {
   padding: 16px;
   text-align: center;
-  color: var(--hk-text-secondary);
+  color: var(--kbd-text-secondary);
   font-style: italic;
   font-size: 0.9rem;
 }
 
 /* === Dark mode preset === */
-[data-theme="dark"] .hotkeys-modal,
-[data-theme="dark"] .hotkeys-omnibar,
-[data-theme="dark"] .hotkeys-sequence,
-.dark .hotkeys-modal,
-.dark .hotkeys-omnibar,
-.dark .hotkeys-sequence {
-  --hk-bg: var(--hotkeys-bg, #1f2937);
-  --hk-bg-secondary: var(--hotkeys-bg-secondary, #374151);
-  --hk-text: var(--hotkeys-text, #f3f4f6);
-  --hk-text-secondary: var(--hotkeys-text-secondary, #9ca3af);
-  --hk-border: var(--hotkeys-border, #4b5563);
-  --hk-kbd-bg: var(--hotkeys-kbd-bg, #374151);
-  --hk-kbd-border: var(--hotkeys-kbd-border, #4b5563);
-  --hk-kbd-text: var(--hotkeys-kbd-text, #e5e7eb);
+[data-theme="dark"] .kbd-modal,
+[data-theme="dark"] .kbd-omnibar,
+[data-theme="dark"] .kbd-sequence,
+.dark .kbd-modal,
+.dark .kbd-omnibar,
+.dark .kbd-sequence {
+  --kbd-bg: var(--kbd-bg, #1f2937);
+  --kbd-bg-secondary: var(--kbd-bg-secondary, #374151);
+  --kbd-text: var(--kbd-text, #f3f4f6);
+  --kbd-text-secondary: var(--kbd-text-secondary, #9ca3af);
+  --kbd-border: var(--kbd-border, #4b5563);
+  --kbd-kbd-bg: var(--kbd-kbd-bg, #374151);
+  --kbd-kbd-border: var(--kbd-kbd-border, #4b5563);
+  --kbd-kbd-text: var(--kbd-kbd-text, #e5e7eb);
 }

@@ -499,6 +499,10 @@ interface ShortcutsModalProps {
     backdropClassName?: string;
     /** CSS class for the modal container */
     modalClassName?: string;
+    /** Modal title (default: "Keyboard Shortcuts") */
+    title?: string;
+    /** Hint text shown below title (e.g., "Click any key to customize") */
+    hint?: string;
 }
 interface ShortcutsModalRenderProps {
     groups: ShortcutGroup[];
@@ -518,7 +522,7 @@ interface ShortcutsModalRenderProps {
  * Modal component for displaying and optionally editing keyboard shortcuts.
  *
  * Uses CSS classes from styles.css. Override via CSS custom properties:
- * --hotkeys-bg, --hotkeys-text, --hotkeys-kbd-bg, etc.
+ * --kbd-bg, --kbd-text, --kbd-kbd-bg, etc.
  *
  * @example
  * ```tsx
@@ -539,7 +543,59 @@ interface ShortcutsModalRenderProps {
  * />
  * ```
  */
-declare function ShortcutsModal({ keymap: keymapProp, defaults: defaultsProp, labels: labelsProp, descriptions: descriptionsProp, groups: groupNamesProp, groupOrder, groupRenderers, isOpen: isOpenProp, onClose: onCloseProp, openKey, autoRegisterOpen, editable, onBindingChange, onBindingAdd, onBindingRemove, onReset, multipleBindings, children, backdropClassName, modalClassName, }: ShortcutsModalProps): react_jsx_runtime.JSX.Element | null;
+declare function ShortcutsModal({ keymap: keymapProp, defaults: defaultsProp, labels: labelsProp, descriptions: descriptionsProp, groups: groupNamesProp, groupOrder, groupRenderers, isOpen: isOpenProp, onClose: onCloseProp, openKey, autoRegisterOpen, editable, onBindingChange, onBindingAdd, onBindingRemove, onReset, multipleBindings, children, backdropClassName, modalClassName, title, hint, }: ShortcutsModalProps): react_jsx_runtime.JSX.Element | null;
+
+/**
+ * Configuration for a row in a two-column table
+ */
+interface TwoColumnRow {
+    /** Label for the row (first column) */
+    label: ReactNode;
+    /** Action ID for the left/first column */
+    leftAction: string;
+    /** Action ID for the right/second column */
+    rightAction: string;
+}
+/**
+ * Configuration for creating a two-column group renderer
+ */
+interface TwoColumnConfig {
+    /** Column headers: [label, left, right] */
+    headers: [string, string, string];
+    /**
+     * Extract rows from the group's shortcuts.
+     * Return array of { label, leftAction, rightAction }.
+     */
+    getRows: (group: ShortcutGroup) => TwoColumnRow[];
+}
+/**
+ * Create a GroupRenderer that displays shortcuts in a two-column table.
+ *
+ * @example
+ * ```tsx
+ * // Pair actions by suffix (left:temp/right:temp)
+ * const YAxisRenderer = createTwoColumnRenderer({
+ *   headers: ['Metric', 'Left', 'Right'],
+ *   getRows: (group) => {
+ *     const metrics = ['temp', 'co2', 'humid']
+ *     return metrics.map(m => ({
+ *       label: m,
+ *       leftAction: `left:${m}`,
+ *       rightAction: `right:${m}`,
+ *     }))
+ *   },
+ * })
+ *
+ * // Explicit pairs
+ * const NavRenderer = createTwoColumnRenderer({
+ *   headers: ['Navigation', 'Back', 'Forward'],
+ *   getRows: () => [
+ *     { label: 'Page', leftAction: 'nav:prev', rightAction: 'nav:next' },
+ *   ],
+ * })
+ * ```
+ */
+declare function createTwoColumnRenderer(config: TwoColumnConfig): ({ group, renderCell }: GroupRendererProps) => ReactNode;
 
 interface OmnibarProps {
     /**
@@ -610,7 +666,7 @@ interface OmnibarRenderProps {
  * Omnibar/command palette component for searching and executing actions.
  *
  * Uses CSS classes from styles.css. Override via CSS custom properties:
- * --hotkeys-bg, --hotkeys-text, --hotkeys-accent, etc.
+ * --kbd-bg, --kbd-text, --kbd-accent, etc.
  *
  * @example
  * ```tsx
@@ -1005,4 +1061,4 @@ declare function ModifierIcon({ modifier, ...props }: ModifierIconProps & {
     modifier: ModifierType;
 }): react_jsx_runtime.JSX.Element;
 
-export { type ActionConfig, type ActionDefinition, type ActionRegistry, type ActionSearchResult, ActionsRegistryContext, type ActionsRegistryValue, AltIcon, type BindingInfo, CommandIcon, CtrlIcon, type FuzzyMatchResult, type HandlerMap, type HotkeyMap, type HotkeySequence, type HotkeysConfig, type HotkeysContextValue, HotkeysProvider, type HotkeysProviderProps, type KeyCombination, type KeyCombinationDisplay, type KeyConflict, KeybindingEditor, type KeybindingEditorProps, type KeybindingEditorRenderProps, ModifierIcon, type ModifierIconProps, type ModifierType, Omnibar, type OmnibarProps, type OmnibarRenderProps, OptIcon, type RecordHotkeyOptions, type RecordHotkeyResult, type RegisteredAction, type SequenceCompletion, SequenceModal, ShiftIcon, type ShortcutGroup, ShortcutsModal, type ShortcutsModalProps, type ShortcutsModalRenderProps, type UseEditableHotkeysOptions, type UseEditableHotkeysResult, type UseHotkeysOptions, type UseHotkeysResult, type UseOmnibarOptions, type UseOmnibarResult, findConflicts, formatCombination, formatKeyForDisplay, fuzzyMatch, getActionBindings, getConflictsArray, getModifierIcon, getSequenceCompletions, hasConflicts, isMac, isModifierKey, isSequence, normalizeKey, parseCombinationId, parseHotkeyString, searchActions, useAction, useActions, useActionsRegistry, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useOmnibar, useRecordHotkey };
+export { type ActionConfig, type ActionDefinition, type ActionRegistry, type ActionSearchResult, ActionsRegistryContext, type ActionsRegistryValue, AltIcon, type BindingInfo, CommandIcon, CtrlIcon, type FuzzyMatchResult, type GroupRenderer, type GroupRendererProps, type HandlerMap, type HotkeyMap, type HotkeySequence, type HotkeysConfig, type HotkeysContextValue, HotkeysProvider, type HotkeysProviderProps, type KeyCombination, type KeyCombinationDisplay, type KeyConflict, KeybindingEditor, type KeybindingEditorProps, type KeybindingEditorRenderProps, ModifierIcon, type ModifierIconProps, type ModifierType, Omnibar, type OmnibarProps, type OmnibarRenderProps, OptIcon, type RecordHotkeyOptions, type RecordHotkeyResult, type RegisteredAction, type SequenceCompletion, SequenceModal, ShiftIcon, type ShortcutGroup, ShortcutsModal, type ShortcutsModalProps, type ShortcutsModalRenderProps, type TwoColumnConfig, type TwoColumnRow, type UseEditableHotkeysOptions, type UseEditableHotkeysResult, type UseHotkeysOptions, type UseHotkeysResult, type UseOmnibarOptions, type UseOmnibarResult, createTwoColumnRenderer, findConflicts, formatCombination, formatKeyForDisplay, fuzzyMatch, getActionBindings, getConflictsArray, getModifierIcon, getSequenceCompletions, hasConflicts, isMac, isModifierKey, isSequence, normalizeKey, parseCombinationId, parseHotkeyString, searchActions, useAction, useActions, useActionsRegistry, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useOmnibar, useRecordHotkey };
