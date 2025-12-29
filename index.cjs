@@ -857,7 +857,7 @@ function useHotkeys(keymap, handlers, options = {}) {
 }
 var HotkeysContext = react.createContext(null);
 var DEFAULT_CONFIG = {
-  storageKey: "hotkeys",
+  storageKey: "use-kbd",
   sequenceTimeout: 1e3,
   disableConflicts: true,
   minViewportWidth: 768,

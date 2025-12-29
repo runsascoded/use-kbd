@@ -316,6 +316,11 @@
   background-color: var(--kbd-bg-secondary);
 }
 
+.kbd-omnibar-result.selected {
+  border-left: 3px solid var(--kbd-accent);
+  padding-left: calc(var(--kbd-padding) - 3px);
+}
+
 .kbd-omnibar-result-label {
   flex: 1;
   font-size: 0.875rem;
@@ -478,6 +483,29 @@
   color: var(--kbd-text-secondary);
   font-style: italic;
   font-size: 0.9rem;
+}
+
+/* === Table layout for two-column group renderers === */
+.kbd-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.kbd-table th,
+.kbd-table td {
+  padding: 6px var(--kbd-gap);
+  text-align: left;
+  border-bottom: 1px solid var(--kbd-border);
+}
+
+.kbd-table th {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--kbd-text-secondary);
+}
+
+.kbd-table td:not(:first-child) {
+  text-align: center;
 }
 
 /* === Dark mode preset === */
