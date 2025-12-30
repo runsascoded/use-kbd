@@ -29,8 +29,8 @@ export interface ActionsRegistryValue {
   overrides: Record<string, string | string[]>
   /** Set a user override for a binding */
   setBinding: (actionId: string, key: string) => void
-  /** Remove a binding */
-  removeBinding: (key: string) => void
+  /** Remove a binding for a specific action */
+  removeBinding: (actionId: string, key: string) => void
   /** Reset all overrides */
   resetOverrides: () => void
 }
@@ -280,33 +280,37 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
     }
   }, [updateOverrides, updateRemovedDefaults, isDefaultBinding])
 
-  const removeBinding = useCallback((key: string) => {
-    // Find which actions have this as a default binding
-    const actionsWithDefault: string[] = []
-    for (const [id, { config }] of actionsRef.current) {
-      if (config.defaultBindings?.includes(key)) {
-        actionsWithDefault.push(id)
-      }
-    }
+  const removeBinding = useCallback((actionId: string, key: string) => {
+    // Check if this is a default binding for this specific action
+    const action = actionsRef.current.get(actionId)
+    const isDefault = action?.config.defaultBindings?.includes(key)
 
-    // Mark as removed for each action that has it as a default
-    if (actionsWithDefault.length > 0) {
+    if (isDefault) {
+      // Mark as removed for this specific action only
       updateRemovedDefaults((prev) => {
-        const next = { ...prev }
-        for (const actionId of actionsWithDefault) {
-          const existing = next[actionId] ?? []
-          if (!existing.includes(key)) {
-            next[actionId] = [...existing, key]
-          }
-        }
-        return next
+        const existing = prev[actionId] ?? []
+        if (existing.includes(key)) return prev
+        return { ...prev, [actionId]: [...existing, key] }
       })
     }
 
-    // Also remove from overrides if it was a user-added binding
+    // Also remove from overrides if this key was bound to this action
     updateOverrides((prev) => {
-      const { [key]: _, ...rest } = prev
-      return rest
+      const boundAction = prev[key]
+      // Only remove if bound to this specific action (or array containing it)
+      if (boundAction === actionId) {
+        const { [key]: _, ...rest } = prev
+        return rest
+      }
+      if (Array.isArray(boundAction) && boundAction.includes(actionId)) {
+        const newActions = boundAction.filter(a => a !== actionId)
+        if (newActions.length === 0) {
+          const { [key]: _, ...rest } = prev
+          return rest
+        }
+        return { ...prev, [key]: newActions.length === 1 ? newActions[0] : newActions }
+      }
+      return prev
     })
   }, [updateOverrides, updateRemovedDefaults])
 

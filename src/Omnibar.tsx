@@ -204,6 +204,23 @@ export function Omnibar({
     }
   }, [isOpen])
 
+  // Global ESC handler to close omnibar (works even if input loses focus)
+  useEffect(() => {
+    if (!isOpen) return
+
+    const handleGlobalKeyDown = (e: globalThis.KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        e.stopPropagation()
+        close()
+      }
+    }
+
+    // Use capture phase to catch ESC before other handlers
+    document.addEventListener('keydown', handleGlobalKeyDown, true)
+    return () => document.removeEventListener('keydown', handleGlobalKeyDown, true)
+  }, [isOpen, close])
+
   // Handle input keydown
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {

@@ -116,6 +116,8 @@ export interface ShortcutsModalProps {
   title?: string
   /** Hint text shown below title (e.g., "Click any key to customize") */
   hint?: string
+  /** Whether to show actions with no bindings (default: true in editable mode, false otherwise) */
+  showUnbound?: boolean
 }
 
 export interface ShortcutsModalRenderProps {
@@ -156,6 +158,7 @@ function organizeShortcuts(
   groupNames?: Record<string, string>,
   groupOrder?: string[],
   actionRegistry?: ActionRegistry,
+  showUnbound = true,
 ): ShortcutGroup[] {
   // Build action -> bindings map
   const actionBindings = getActionBindings(keymap)
@@ -190,8 +193,8 @@ function organizeShortcuts(
     })
   }
 
-  // Add actions from registry that have no bindings
-  if (actionRegistry) {
+  // Add actions from registry that have no bindings (if showUnbound is true)
+  if (actionRegistry && showUnbound) {
     for (const [actionId, action] of Object.entries(actionRegistry)) {
       if (includedActions.has(actionId)) continue
 
@@ -436,6 +439,7 @@ export function ShortcutsModal({
   modalClassName = 'kbd-modal',
   title = 'Keyboard Shortcuts',
   hint,
+  showUnbound,
 }: ShortcutsModalProps) {
   // Try to get context (returns null if not within HotkeysProvider)
   const ctx = useMaybeHotkeysContext()
@@ -484,14 +488,14 @@ export function ShortcutsModal({
 
   // Editing callbacks - fall back to context registry if not provided
   const handleBindingChange = onBindingChange ?? (ctx ? (action, oldKey, newKey) => {
-    if (oldKey) ctx.registry.removeBinding(oldKey)
+    if (oldKey) ctx.registry.removeBinding(action, oldKey)
     ctx.registry.setBinding(action, newKey)
   } : undefined)
   const handleBindingAdd = onBindingAdd ?? (ctx ? (action, key) => {
     ctx.registry.setBinding(action, key)
   } : undefined)
-  const handleBindingRemove = onBindingRemove ?? (ctx ? (_action, key) => {
-    ctx.registry.removeBinding(key)
+  const handleBindingRemove = onBindingRemove ?? (ctx ? (action, key) => {
+    ctx.registry.removeBinding(action, key)
   } : undefined)
   const handleReset = onReset ?? (ctx ? () => {
     ctx.registry.resetOverrides()
@@ -938,6 +942,23 @@ export function ShortcutsModal({
     return () => window.removeEventListener('keydown', handleEscape, true)
   }, [isOpen, editingAction, addingAction, cancelEditing])
 
+  // Close modal and open omnibar on meta+k
+  useEffect(() => {
+    if (!isOpen || !ctx) return
+
+    const handleMetaK = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        e.stopPropagation()
+        close()
+        ctx.openOmnibar()
+      }
+    }
+
+    window.addEventListener('keydown', handleMetaK, true)
+    return () => window.removeEventListener('keydown', handleMetaK, true)
+  }, [isOpen, ctx, close])
+
   // Close on backdrop click
   const handleBackdropClick = useCallback(
     (e: MouseEvent) => {
@@ -965,9 +986,11 @@ export function ShortcutsModal({
   )
 
   // Organize shortcuts into groups (include actionRegistry to show actions with no bindings)
+  // Default showUnbound to true in editable mode, false otherwise
+  const effectiveShowUnbound = showUnbound ?? editable
   const shortcutGroups = useMemo(
-    () => organizeShortcuts(keymap, labels, descriptions, groupNames, groupOrder, ctx?.registry.actionRegistry),
-    [keymap, labels, descriptions, groupNames, groupOrder, ctx?.registry.actionRegistry],
+    () => organizeShortcuts(keymap, labels, descriptions, groupNames, groupOrder, ctx?.registry.actionRegistry, effectiveShowUnbound),
+    [keymap, labels, descriptions, groupNames, groupOrder, ctx?.registry.actionRegistry, effectiveShowUnbound],
   )
 
   if (!isOpen) return null

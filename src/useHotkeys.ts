@@ -263,11 +263,14 @@ export function useHotkeys(
     const targetElement = target ?? window
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Skip if focused on form element (unless enabled)
+      // Skip if focused on text-like form element (unless enabled)
       if (!enableOnFormTags) {
         const eventTarget = e.target as HTMLElement
+        // Check if it's a text-like input (not checkbox, radio, button, etc.)
+        const isTextInput = eventTarget instanceof HTMLInputElement &&
+          ['text', 'email', 'password', 'search', 'tel', 'url', 'number', 'date', 'datetime-local', 'month', 'time', 'week'].includes(eventTarget.type)
         if (
-          eventTarget instanceof HTMLInputElement ||
+          isTextInput ||
           eventTarget instanceof HTMLTextAreaElement ||
           eventTarget instanceof HTMLSelectElement ||
           eventTarget.isContentEditable

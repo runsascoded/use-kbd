@@ -1,5 +1,9 @@
+import { Fragment, ReactNode } from 'react'
 import { useMaybeHotkeysContext } from './HotkeysProvider'
-import { formatBinding } from './utils'
+import { getKeyIcon } from './KeyIcons'
+import { ModifierIcon } from './ModifierIcons'
+import { formatKeyForDisplay, parseHotkeyString } from './utils'
+import type { KeyCombination } from './types'
 
 export interface KbdProps {
   /** Action ID to display binding(s) for */
@@ -15,9 +19,59 @@ export interface KbdProps {
 }
 
 /**
+ * Render a single key combination with SVG icons for modifiers and special keys
+ */
+function KeyCombo({ combo }: { combo: KeyCombination }) {
+  const { key, modifiers } = combo
+  const parts: ReactNode[] = []
+
+  if (modifiers.meta) {
+    parts.push(<ModifierIcon key="meta" modifier="meta" className="kbd-modifier-icon" />)
+  }
+  if (modifiers.ctrl) {
+    parts.push(<ModifierIcon key="ctrl" modifier="ctrl" className="kbd-modifier-icon" />)
+  }
+  if (modifiers.alt) {
+    parts.push(<ModifierIcon key="alt" modifier="alt" className="kbd-modifier-icon" />)
+  }
+  if (modifiers.shift) {
+    parts.push(<ModifierIcon key="shift" modifier="shift" className="kbd-modifier-icon" />)
+  }
+
+  // Use SVG icon if available, otherwise formatted text
+  const KeyIcon = getKeyIcon(key)
+  if (KeyIcon) {
+    parts.push(<KeyIcon key="key" className="kbd-key-icon" />)
+  } else {
+    parts.push(<span key="key">{formatKeyForDisplay(key)}</span>)
+  }
+
+  return <>{parts}</>
+}
+
+/**
+ * Render a binding string (possibly a sequence) with icons
+ */
+function BindingDisplay({ binding }: { binding: string }) {
+  const sequence = parseHotkeyString(binding)
+
+  return (
+    <>
+      {sequence.map((combo, i) => (
+        <Fragment key={i}>
+          {i > 0 && <span className="kbd-sequence-sep"> </span>}
+          <KeyCombo combo={combo} />
+        </Fragment>
+      ))}
+    </>
+  )
+}
+
+/**
  * Display the current binding(s) for an action.
  *
  * Automatically updates when users customize their bindings.
+ * Uses SVG icons for modifiers (⌘, ⌥, ⇧, ⌃) and special keys (arrows, enter, etc.)
  *
  * @example
  * ```tsx
@@ -56,7 +110,14 @@ export function Kbd({
     return <>{fallback}</>
   }
 
-  const formatted = bindings.map(formatBinding)
-
-  return <kbd className={className}>{formatted.join(separator)}</kbd>
+  return (
+    <kbd className={className}>
+      {bindings.map((binding, i) => (
+        <Fragment key={binding}>
+          {i > 0 && separator}
+          <BindingDisplay binding={binding} />
+        </Fragment>
+      ))}
+    </kbd>
+  )
 }
