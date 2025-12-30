@@ -4,7 +4,7 @@ import { useMaybeHotkeysContext } from './HotkeysProvider'
 import { ModifierIcon } from './ModifierIcons'
 import { useHotkeys } from './useHotkeys'
 import { useRecordHotkey } from './useRecordHotkey'
-import { findConflicts, formatCombination, getActionBindings, parseHotkeyString } from './utils'
+import { findConflicts, formatCombination, formatKeyForDisplay, getActionBindings, parseHotkeyString } from './utils'
 import type { ActionRegistry, HotkeySequence, KeyCombination, KeyCombinationDisplay } from './types'
 import type { HotkeyMap } from './useHotkeys'
 
@@ -266,9 +266,8 @@ function KeyDisplay({
     parts.push(<ModifierIcon key="shift" modifier="shift" className="kbd-modifier-icon" />)
   }
 
-  // Display key (uppercase for single chars)
-  const keyDisplay = key.length === 1 ? key.toUpperCase() : key.charAt(0).toUpperCase() + key.slice(1)
-  parts.push(<span key="key">{keyDisplay}</span>)
+  // Display key using formatKeyForDisplay for proper icons (↑, ↓, etc.)
+  parts.push(<span key="key">{formatKeyForDisplay(key)}</span>)
 
   return <span className={className}>{parts}</span>
 }
@@ -508,6 +507,8 @@ export function ShortcutsModal({
     key: string
     conflictsWith: string[]
   } | null>(null)
+  // Track if current pending keys have a conflict (for pausing timeout)
+  const [hasPendingConflictState, setHasPendingConflictState] = useState(false)
 
   // Refs to avoid stale closures in onCapture callback
   const editingActionRef = useRef<string | null>(null)
@@ -551,6 +552,35 @@ export function ShortcutsModal({
     const conflicts = actions.filter(a => a !== forAction)
     return conflicts.length > 0 ? conflicts : null
   }, [keymap])
+
+  // Check if two KeyCombinations are equal
+  const combinationsEqual = useCallback((a: KeyCombination, b: KeyCombination): boolean => {
+    return (
+      a.key === b.key &&
+      a.modifiers.ctrl === b.modifiers.ctrl &&
+      a.modifiers.alt === b.modifiers.alt &&
+      a.modifiers.shift === b.modifiers.shift &&
+      a.modifiers.meta === b.modifiers.meta
+    )
+  }, [])
+
+  // Check if sequence A is a prefix of sequence B
+  const isSequencePrefix = useCallback((a: HotkeySequence, b: HotkeySequence): boolean => {
+    if (a.length >= b.length) return false
+    for (let i = 0; i < a.length; i++) {
+      if (!combinationsEqual(a[i], b[i])) return false
+    }
+    return true
+  }, [combinationsEqual])
+
+  // Check if two sequences are equal
+  const sequencesEqual = useCallback((a: HotkeySequence, b: HotkeySequence): boolean => {
+    if (a.length !== b.length) return false
+    for (let i = 0; i < a.length; i++) {
+      if (!combinationsEqual(a[i], b[i])) return false
+    }
+    return true
+  }, [combinationsEqual])
 
   // Recording hook - uses refs to avoid stale closures
   const { isRecording, startRecording, cancel, pendingKeys, activeKeys, sequenceTimeout } = useRecordHotkey({
@@ -626,7 +656,7 @@ export function ShortcutsModal({
         prev.click()
       }
     }, []),
-    pauseTimeout: pendingConflict !== null,
+    pauseTimeout: pendingConflict !== null || hasPendingConflictState,
   })
 
   // Start editing a specific existing binding
@@ -698,6 +728,50 @@ export function ShortcutsModal({
     handleReset?.()
   }, [handleReset])
 
+  // Compute which existing bindings would conflict with current pendingKeys
+  // A conflict occurs when:
+  // 1. pendingKeys exactly matches an existing binding (and it's not the one being edited)
+  // 2. pendingKeys is a prefix of an existing binding
+  // 3. An existing binding is a prefix of pendingKeys
+  const pendingConflictInfo = useMemo(() => {
+    if (!isRecording || pendingKeys.length === 0) {
+      return { hasConflict: false, conflictingKeys: new Set<string>() }
+    }
+
+    const conflictingKeys = new Set<string>()
+
+    for (const key of Object.keys(keymap)) {
+      // Skip the key we're currently editing (it will be replaced)
+      if (editingKey && key.toLowerCase() === editingKey.toLowerCase()) continue
+
+      const keySequence = parseHotkeyString(key)
+
+      // Exact match conflict
+      if (sequencesEqual(pendingKeys, keySequence)) {
+        conflictingKeys.add(key)
+        continue
+      }
+
+      // Prefix conflict: pending is a prefix of existing key
+      if (isSequencePrefix(pendingKeys, keySequence)) {
+        conflictingKeys.add(key)
+        continue
+      }
+
+      // Prefix conflict: existing key is a prefix of pending
+      if (isSequencePrefix(keySequence, pendingKeys)) {
+        conflictingKeys.add(key)
+      }
+    }
+
+    return { hasConflict: conflictingKeys.size > 0, conflictingKeys }
+  }, [isRecording, pendingKeys, keymap, editingKey, sequencesEqual, isSequencePrefix])
+
+  // Update hasPendingConflictState when pendingConflictInfo changes
+  useEffect(() => {
+    setHasPendingConflictState(pendingConflictInfo.hasConflict)
+  }, [pendingConflictInfo.hasConflict])
+
   // Helper: render a single editable kbd element
   const renderEditableKbd = useCallback(
     (actionId: string, key: string, showRemove = false) => {
@@ -712,6 +786,8 @@ export function ShortcutsModal({
           return defaultActions.includes(actionId)
         })()
         : true
+      // Check if this binding would conflict with current pending input
+      const isPendingConflict = pendingConflictInfo.conflictingKeys.has(key)
 
       return (
         <BindingDisplay
@@ -720,6 +796,7 @@ export function ShortcutsModal({
           editable={editable}
           isEditing={isEditingThis}
           isConflict={isConflict}
+          isPendingConflict={isPendingConflict}
           isDefault={isDefault}
           onEdit={() => {
             // If recording another element, commit pending keys first
@@ -742,11 +819,11 @@ export function ShortcutsModal({
           onRemove={editable && showRemove ? () => removeBinding(actionId, key) : undefined}
           pendingKeys={pendingKeys}
           activeKeys={activeKeys}
-          timeoutDuration={sequenceTimeout}
+          timeoutDuration={pendingConflictInfo.hasConflict ? Infinity : sequenceTimeout}
         />
       )
     },
-    [editingAction, editingKey, addingAction, conflicts, defaults, editable, startEditingBinding, removeBinding, pendingKeys, activeKeys, isRecording, cancel, handleBindingAdd, handleBindingChange, sequenceTimeout],
+    [editingAction, editingKey, addingAction, conflicts, defaults, editable, startEditingBinding, removeBinding, pendingKeys, activeKeys, isRecording, cancel, handleBindingAdd, handleBindingChange, sequenceTimeout, pendingConflictInfo],
   )
 
   // Helper: render add button for an action
@@ -759,9 +836,10 @@ export function ShortcutsModal({
           <BindingDisplay
             binding=""
             isEditing
+            isPendingConflict={pendingConflictInfo.hasConflict}
             pendingKeys={pendingKeys}
             activeKeys={activeKeys}
-            timeoutDuration={sequenceTimeout}
+            timeoutDuration={pendingConflictInfo.hasConflict ? Infinity : sequenceTimeout}
           />
         )
       }
@@ -793,7 +871,7 @@ export function ShortcutsModal({
         </button>
       )
     },
-    [addingAction, pendingKeys, activeKeys, startAddingBinding, isRecording, cancel, handleBindingAdd, handleBindingChange, sequenceTimeout],
+    [addingAction, pendingKeys, activeKeys, startAddingBinding, isRecording, cancel, handleBindingAdd, handleBindingChange, sequenceTimeout, pendingConflictInfo],
   )
 
   // Helper: render a cell with all bindings for an action
