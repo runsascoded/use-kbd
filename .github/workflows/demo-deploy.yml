@@ -1,0 +1,90 @@
+name: Demo CI & Deploy
+on:
+  push:
+    branches: [main]
+    paths: ['examples/demo/**', '.github/workflows/demo-deploy.yml', 'src/**']
+  pull_request:
+    branches: [main]
+    paths: ['examples/demo/**', '.github/workflows/demo-deploy.yml', 'src/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install root dependencies
+        run: pnpm install
+
+      - name: Build library
+        run: pnpm run build
+
+      - name: Install demo dependencies
+        working-directory: ./examples/demo
+        run: pnpm install
+
+      - name: Lint demo
+        working-directory: ./examples/demo
+        run: pnpm run lint
+
+      - name: Build demo
+        working-directory: ./examples/demo
+        run: pnpm run build
+
+      - name: Install Playwright browsers
+        working-directory: ./examples/demo
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        working-directory: ./examples/demo
+        run: pnpm run test
+
+      - name: Upload test report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: examples/demo/playwright-report/
+          retention-days: 7
+
+      - name: Setup Pages
+        if: github.ref == 'refs/heads/main'
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        if: github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./examples/demo/dist
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
