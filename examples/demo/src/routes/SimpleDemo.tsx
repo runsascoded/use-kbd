@@ -1,109 +1,199 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import {
+  createTwoColumnRenderer,
   HotkeysProvider,
+  Kbd,
   ShortcutsModal,
   useAction,
   useHotkeysContext,
 } from 'use-kbd'
 import 'use-kbd/styles.css'
 
-interface Todo {
+interface DataRow {
   id: number
-  text: string
-  done: boolean
+  name: string
+  status: 'active' | 'pending' | 'inactive'
+  value: number
 }
 
-function TodoList() {
+const INITIAL_DATA: DataRow[] = [
+  { id: 1, name: 'Alpha', status: 'active', value: 120 },
+  { id: 2, name: 'Beta', status: 'pending', value: 85 },
+  { id: 3, name: 'Gamma', status: 'active', value: 200 },
+  { id: 4, name: 'Delta', status: 'inactive', value: 45 },
+  { id: 5, name: 'Epsilon', status: 'pending', value: 160 },
+]
+
+type SortDirection = 'asc' | 'desc' | null
+type SortColumn = 'name' | 'status' | 'value'
+
+function DataTable() {
   const ctx = useHotkeysContext()
 
-  const [todos, setTodos] = useState<Todo[]>([
-    { id: 1, text: 'Learn use-kbd', done: false },
-    { id: 2, text: 'Try simple mode', done: false },
-    { id: 3, text: 'Enjoy instant response', done: false },
-  ])
+  const [data] = useState<DataRow[]>(INITIAL_DATA)
   const [selectedId, setSelectedId] = useState<number | null>(1)
-  const [isEditing, setIsEditing] = useState(false)
-  const [editText, setEditText] = useState('')
-  const [nextId, setNextId] = useState(4)
+  const [sortColumn, setSortColumn] = useState<SortColumn | null>(null)
+  const [sortDirection, setSortDirection] = useState<SortDirection>(null)
 
-  const selectedIndex = todos.findIndex(t => t.id === selectedId)
+  // Sorted data
+  const sortedData = useMemo(() => {
+    if (!sortColumn || !sortDirection) return data
+    return [...data].sort((a, b) => {
+      const aVal = a[sortColumn]
+      const bVal = b[sortColumn]
+      const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0
+      return sortDirection === 'asc' ? cmp : -cmp
+    })
+  }, [data, sortColumn, sortDirection])
 
-  // Register actions (simple: one key per action)
-  useAction('new', {
-    label: 'New todo',
-    group: 'Todo',
-    defaultBindings: ['n'],
-    handler: useCallback(() => {
-      const newTodo = { id: nextId, text: 'New todo', done: false }
-      setTodos(prev => [...prev, newTodo])
-      setSelectedId(nextId)
-      setNextId(prev => prev + 1)
-      setIsEditing(true)
-      setEditText('New todo')
-    }, [nextId]),
-  })
+  const selectedIndex = sortedData.findIndex(r => r.id === selectedId)
 
-  useAction('edit', {
-    label: 'Edit',
-    group: 'Todo',
-    defaultBindings: ['e'],
-    handler: useCallback(() => {
-      const todo = todos.find(t => t.id === selectedId)
-      if (todo) {
-        setIsEditing(true)
-        setEditText(todo.text)
-      }
-    }, [todos, selectedId]),
-  })
+  // Sort handlers
+  const sortNameAsc = useCallback(() => {
+    setSortColumn('name')
+    setSortDirection('asc')
+  }, [])
+  const sortNameDesc = useCallback(() => {
+    setSortColumn('name')
+    setSortDirection('desc')
+  }, [])
+  const sortStatusAsc = useCallback(() => {
+    setSortColumn('status')
+    setSortDirection('asc')
+  }, [])
+  const sortStatusDesc = useCallback(() => {
+    setSortColumn('status')
+    setSortDirection('desc')
+  }, [])
+  const sortValueAsc = useCallback(() => {
+    setSortColumn('value')
+    setSortDirection('asc')
+  }, [])
+  const sortValueDesc = useCallback(() => {
+    setSortColumn('value')
+    setSortDirection('desc')
+  }, [])
+  const sortClear = useCallback(() => {
+    setSortColumn(null)
+    setSortDirection(null)
+  }, [])
 
-  useAction('delete', {
-    label: 'Delete',
-    group: 'Todo',
-    defaultBindings: ['d'],
-    handler: useCallback(() => {
-      if (selectedId) {
-        setTodos(prev => prev.filter(t => t.id !== selectedId))
-        const newTodos = todos.filter(t => t.id !== selectedId)
-        setSelectedId(newTodos[selectedIndex]?.id ?? newTodos[selectedIndex - 1]?.id ?? null)
-      }
-    }, [selectedId, todos, selectedIndex]),
-  })
-
-  useAction('toggle', {
-    label: 'Toggle done',
-    group: 'Todo',
-    defaultBindings: ['Enter'],
-    handler: useCallback(() => {
-      if (selectedId) {
-        setTodos(prev => prev.map(t =>
-          t.id === selectedId ? { ...t, done: !t.done } : t
-        ))
-      }
-    }, [selectedId]),
-  })
-
-  useAction('next', {
-    label: 'Next',
+  // Navigation actions
+  useAction('nav:up', {
+    label: 'Up',
     group: 'Navigation',
-    defaultBindings: ['j'],
-    handler: useCallback(() => {
-      if (selectedIndex < todos.length - 1) {
-        setSelectedId(todos[selectedIndex + 1].id)
-      }
-    }, [todos, selectedIndex]),
-  })
-
-  useAction('prev', {
-    label: 'Previous',
-    group: 'Navigation',
-    defaultBindings: ['k'],
+    defaultBindings: ['k', 'arrowup'],
     handler: useCallback(() => {
       if (selectedIndex > 0) {
-        setSelectedId(todos[selectedIndex - 1].id)
+        setSelectedId(sortedData[selectedIndex - 1].id)
       }
-    }, [todos, selectedIndex]),
+    }, [sortedData, selectedIndex]),
   })
 
+  useAction('nav:down', {
+    label: 'Down',
+    group: 'Navigation',
+    defaultBindings: ['j', 'arrowdown'],
+    handler: useCallback(() => {
+      if (selectedIndex < sortedData.length - 1) {
+        setSelectedId(sortedData[selectedIndex + 1].id)
+      }
+    }, [sortedData, selectedIndex]),
+  })
+
+  useAction('nav:first', {
+    label: 'First',
+    group: 'Navigation',
+    defaultBindings: ['meta+arrowup', 'ctrl+arrowup'],
+    handler: useCallback(() => {
+      if (sortedData.length > 0) {
+        setSelectedId(sortedData[0].id)
+      }
+    }, [sortedData]),
+  })
+
+  useAction('nav:last', {
+    label: 'Last',
+    group: 'Navigation',
+    defaultBindings: ['meta+arrowdown', 'ctrl+arrowdown'],
+    handler: useCallback(() => {
+      if (sortedData.length > 0) {
+        setSelectedId(sortedData[sortedData.length - 1].id)
+      }
+    }, [sortedData]),
+  })
+
+  useAction('nav:pageup', {
+    label: 'Page up',
+    group: 'Navigation',
+    defaultBindings: ['alt+arrowup'],
+    handler: useCallback(() => {
+      const newIndex = Math.max(0, selectedIndex - 3)
+      setSelectedId(sortedData[newIndex].id)
+    }, [sortedData, selectedIndex]),
+  })
+
+  useAction('nav:pagedown', {
+    label: 'Page down',
+    group: 'Navigation',
+    defaultBindings: ['alt+arrowdown'],
+    handler: useCallback(() => {
+      const newIndex = Math.min(sortedData.length - 1, selectedIndex + 3)
+      setSelectedId(sortedData[newIndex].id)
+    }, [sortedData, selectedIndex]),
+  })
+
+  // Sort actions - paired asc/desc for each column (single keys for instant response)
+  useAction('sort:name:asc', {
+    label: 'Name ↑',
+    group: 'Sort',
+    defaultBindings: ['n'],
+    handler: sortNameAsc,
+  })
+
+  useAction('sort:name:desc', {
+    label: 'Name ↓',
+    group: 'Sort',
+    defaultBindings: ['shift+n'],
+    handler: sortNameDesc,
+  })
+
+  useAction('sort:status:asc', {
+    label: 'Status ↑',
+    group: 'Sort',
+    defaultBindings: ['s'],
+    handler: sortStatusAsc,
+  })
+
+  useAction('sort:status:desc', {
+    label: 'Status ↓',
+    group: 'Sort',
+    defaultBindings: ['shift+s'],
+    handler: sortStatusDesc,
+  })
+
+  useAction('sort:value:asc', {
+    label: 'Value ↑',
+    group: 'Sort',
+    defaultBindings: ['v'],
+    handler: sortValueAsc,
+  })
+
+  useAction('sort:value:desc', {
+    label: 'Value ↓',
+    group: 'Sort',
+    defaultBindings: ['shift+v'],
+    handler: sortValueDesc,
+  })
+
+  useAction('sort:clear', {
+    label: 'Clear',
+    group: 'Sort',
+    defaultBindings: ['c'],
+    handler: sortClear,
+  })
+
+  // General actions
   useAction('help', {
     label: 'Show shortcuts',
     group: 'General',
@@ -111,73 +201,67 @@ function TodoList() {
     handler: () => ctx.toggleModal(),
   })
 
-  useAction('cancel', {
-    label: 'Cancel',
-    group: 'General',
-    defaultBindings: ['Escape'],
-    handler: () => {
-      setIsEditing(false)
-      setEditText('')
-      ctx.closeModal()
-    },
-  })
+  // Two-column renderer for Sort group
+  const SortRenderer = useMemo(() => createTwoColumnRenderer({
+    headers: ['', 'Asc', 'Desc'],
+    getRows: () => [
+      { label: 'Name', leftAction: 'sort:name:asc', rightAction: 'sort:name:desc' },
+      { label: 'Status', leftAction: 'sort:status:asc', rightAction: 'sort:status:desc' },
+      { label: 'Value', leftAction: 'sort:value:asc', rightAction: 'sort:value:desc' },
+    ],
+  }), [])
 
-  const handleEditSubmit = () => {
-    if (selectedId && editText.trim()) {
-      setTodos(prev => prev.map(t =>
-        t.id === selectedId ? { ...t, text: editText.trim() } : t
-      ))
-    }
-    setIsEditing(false)
-    setEditText('')
+  // Two-column renderer for Navigation group
+  const NavRenderer = useMemo(() => createTwoColumnRenderer({
+    headers: ['', 'Up', 'Down'],
+    getRows: () => [
+      { label: 'Single', leftAction: 'nav:up', rightAction: 'nav:down' },
+      { label: 'Page', leftAction: 'nav:pageup', rightAction: 'nav:pagedown' },
+      { label: 'Ends', leftAction: 'nav:first', rightAction: 'nav:last' },
+    ],
+  }), [])
+
+  const getSortIndicator = (column: SortColumn) => {
+    if (sortColumn !== column) return null
+    return sortDirection === 'asc' ? ' ↑' : ' ↓'
   }
 
-  const handleToggle = useCallback(() => {
-    if (selectedId) {
-      setTodos(prev => prev.map(t =>
-        t.id === selectedId ? { ...t, done: !t.done } : t
-      ))
-    }
-  }, [selectedId])
-
   return (
-    <div className="todo-app">
-      <h1>Simple Demo - Single Key Mode</h1>
+    <div className="data-table-app">
+      <h1>Data Table Demo</h1>
       <p className="hint">
         Uses <code>sequenceTimeout: 0</code> for instant response.
-        Press <kbd>?</kbd> to see shortcuts.
+        Press <Kbd action="help" /> for shortcuts.
+        Sort by name: <Kbd action="sort:name:asc" first /> / <Kbd action="sort:name:desc" first />
       </p>
 
-      <ul className="todo-list">
-        {todos.map(todo => (
-          <li
-            key={todo.id}
-            className={`todo-item ${todo.id === selectedId ? 'selected' : ''} ${todo.done ? 'done' : ''}`}
-            onClick={() => setSelectedId(todo.id)}
-          >
-            <span className="checkbox" onClick={(e) => { e.stopPropagation(); handleToggle() }}>
-              {todo.done ? '✓' : '○'}
-            </span>
-            {isEditing && todo.id === selectedId ? (
-              <input
-                type="text"
-                value={editText}
-                onChange={e => setEditText(e.target.value)}
-                onBlur={handleEditSubmit}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') handleEditSubmit()
-                  if (e.key === 'Escape') { setIsEditing(false); setEditText('') }
-                }}
-                autoFocus
-              />
-            ) : (
-              <span className="text">{todo.text}</span>
-            )}
-          </li>
-        ))}
-      </ul>
+      <table className="data-table">
+        <thead>
+          <tr>
+            <th>Name{getSortIndicator('name')}</th>
+            <th>Status{getSortIndicator('status')}</th>
+            <th>Value{getSortIndicator('value')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sortedData.map(row => (
+            <tr
+              key={row.id}
+              className={row.id === selectedId ? 'selected' : ''}
+              onClick={() => setSelectedId(row.id)}
+            >
+              <td>{row.name}</td>
+              <td><span className={`status-badge ${row.status}`}>{row.status}</span></td>
+              <td>{row.value}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
 
-      <ShortcutsModal editable />
+      <ShortcutsModal
+        editable
+        groupRenderers={{ Sort: SortRenderer, Navigation: NavRenderer }}
+      />
     </div>
   )
 }
@@ -190,7 +274,7 @@ export function SimpleDemo() {
         sequenceTimeout: 0,
       }}
     >
-      <TodoList />
+      <DataTable />
     </HotkeysProvider>
   )
 }

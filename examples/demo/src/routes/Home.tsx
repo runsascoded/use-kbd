@@ -21,15 +21,16 @@ export function Home() {
         </section>
 
         <section>
-          <h2><Link to="/simple">Simple Demo</Link></h2>
+          <h2><Link to="/simple">Data Table Demo</Link></h2>
           <p>
-            Simplified mode with single-key shortcuts (no sequences).
-            Uses <code>sequenceTimeout: 0</code> for instant response.
+            Data table with sortable columns and keyboard navigation.
+            Uses <code>sequenceTimeout: 0</code> and two-column shortcut rendering.
           </p>
           <ul>
-            <li>One key per action</li>
-            <li>Immediate execution on keypress</li>
-            <li>No timeout waiting</li>
+            <li>Instant response (no sequences)</li>
+            <li>Two-column table layout for shortcuts</li>
+            <li>Paired actions (sort asc/desc, nav up/down)</li>
+            <li>Modifier key rendering (<kbd>⌘↑</kbd> <kbd>⌥↓</kbd>)</li>
           </ul>
         </section>
 

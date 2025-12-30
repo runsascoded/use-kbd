@@ -205,7 +205,7 @@ test.describe('Full Demo - Sequences and Editing', () => {
   })
 })
 
-test.describe('Simple Demo - Immediate Response', () => {
+test.describe('Data Table Demo - Immediate Response', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
       localStorage.removeItem('use-kbd-demo-simple')
@@ -217,8 +217,8 @@ test.describe('Simple Demo - Immediate Response', () => {
   test('hotkeys respond immediately without timeout', async ({ page }) => {
     await page.locator('body').click({ position: { x: 10, y: 10 } })
 
-    const items = page.locator('.todo-item')
-    await expect(items.first()).toHaveClass(/selected/)
+    const rows = page.locator('.data-table tbody tr')
+    await expect(rows.first()).toHaveClass(/selected/)
 
     // Press j - should move immediately
     const startTime = Date.now()
@@ -226,19 +226,41 @@ test.describe('Simple Demo - Immediate Response', () => {
 
     // Check immediately (within 100ms, not waiting for 1000ms timeout)
     await page.waitForTimeout(50)
-    await expect(items.nth(1)).toHaveClass(/selected/)
+    await expect(rows.nth(1)).toHaveClass(/selected/)
 
     const elapsed = Date.now() - startTime
     expect(elapsed).toBeLessThan(500) // Should be much faster than sequence timeout
   })
 
-  test('can open and close shortcuts modal', async ({ page }) => {
+  test('can sort columns with single keys', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    // Get first row name before sort
+    const firstCell = page.locator('.data-table tbody tr:first-child td:first-child')
+    await expect(firstCell).toHaveText('Alpha')
+
+    // Press 'n' to sort by name ascending (already ascending, so same order)
+    await page.keyboard.press('n')
+    await page.waitForTimeout(100)
+    await expect(firstCell).toHaveText('Alpha')
+
+    // Press Shift+N to sort by name descending
+    await page.keyboard.press('Shift+n')
+    await page.waitForTimeout(100)
+    await expect(firstCell).toHaveText('Gamma')
+  })
+
+  test('can open and close shortcuts modal with two-column layout', async ({ page }) => {
     await page.locator('body').click({ position: { x: 10, y: 10 } })
 
     // Open
     await page.keyboard.press('?')
     await page.waitForSelector('.kbd-modal', { timeout: 5000 })
     await expect(page.locator('.kbd-modal')).toBeVisible()
+
+    // Verify two-column tables exist for Sort and Navigation groups
+    const tables = page.locator('.kbd-table')
+    await expect(tables).toHaveCount(2)
 
     // Close with Escape
     await page.keyboard.press('Escape')

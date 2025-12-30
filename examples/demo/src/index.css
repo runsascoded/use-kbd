@@ -311,6 +311,67 @@ code {
   color: white;
 }
 
+/* Data table styles */
+.data-table-app {
+  max-width: 600px;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1rem;
+}
+
+.data-table th,
+.data-table td {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid #333;
+}
+
+.data-table th {
+  font-weight: 600;
+  color: #888;
+  font-size: 0.9em;
+}
+
+.data-table tbody tr {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.data-table tbody tr:hover {
+  background: #2a2a2a;
+}
+
+.data-table tbody tr.selected {
+  background: #252545;
+  border-left: 3px solid #646cff;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 0.2em 0.6em;
+  border-radius: 4px;
+  font-size: 0.85em;
+  font-weight: 500;
+}
+
+.status-badge.active {
+  background: #065f46;
+  color: #10b981;
+}
+
+.status-badge.pending {
+  background: #78350f;
+  color: #fbbf24;
+}
+
+.status-badge.inactive {
+  background: #374151;
+  color: #9ca3af;
+}
+
 /* Light mode */
 @media (prefers-color-scheme: light) {
   :root {
@@ -355,5 +416,18 @@ code {
   .todo-item .due-date,
   .project-item .status {
     background: #ddd;
+  }
+
+  .data-table th,
+  .data-table td {
+    border-color: #ddd;
+  }
+
+  .data-table tbody tr:hover {
+    background: #f0f0f0;
+  }
+
+  .data-table tbody tr.selected {
+    background: #e8e8ff;
   }
 }
