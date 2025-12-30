@@ -57,6 +57,16 @@ export {
   getModifierIcon,
 } from './ModifierIcons'
 export type { ModifierIconProps, ModifierType } from './ModifierIcons'
+export {
+  ArrowUpIcon,
+  ArrowDownIcon,
+  ArrowLeftIcon,
+  ArrowRightIcon,
+  EnterIcon,
+  BackspaceIcon,
+  getKeyIcon,
+} from './KeyIcons'
+export type { KeyIconProps, KeyIconType } from './KeyIcons'
 
 // Utilities
 export {

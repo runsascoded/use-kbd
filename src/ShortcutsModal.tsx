@@ -1,6 +1,7 @@
 import { Fragment, MouseEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DEFAULT_SEQUENCE_TIMEOUT } from './constants'
 import { useMaybeHotkeysContext } from './HotkeysProvider'
+import { getKeyIcon } from './KeyIcons'
 import { ModifierIcon } from './ModifierIcons'
 import { useHotkeys } from './useHotkeys'
 import { useRecordHotkey } from './useRecordHotkey'
@@ -266,8 +267,13 @@ function KeyDisplay({
     parts.push(<ModifierIcon key="shift" modifier="shift" className="kbd-modifier-icon" />)
   }
 
-  // Display key using formatKeyForDisplay for proper icons (↑, ↓, etc.)
-  parts.push(<span key="key">{formatKeyForDisplay(key)}</span>)
+  // Display key using SVG icon if available, otherwise formatted text
+  const KeyIcon = getKeyIcon(key)
+  if (KeyIcon) {
+    parts.push(<KeyIcon key="key" className="kbd-key-icon" />)
+  } else {
+    parts.push(<span key="key">{formatKeyForDisplay(key)}</span>)
+  }
 
   return <span className={className}>{parts}</span>
 }

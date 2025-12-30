@@ -205,6 +205,13 @@
   flex-shrink: 0;
 }
 
+/* === Key icons (arrows, enter, etc.) === */
+.kbd-key-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
 /* === Sequence separator === */
 .kbd-sequence-sep {
   color: var(--kbd-text-secondary);
