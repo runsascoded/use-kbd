@@ -18,11 +18,23 @@ interface DataRow {
 const NAMES = ['Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon', 'Zeta', 'Eta', 'Theta', 'Iota', 'Kappa', 'Lambda', 'Mu', 'Nu', 'Xi', 'Omicron', 'Pi', 'Rho', 'Sigma', 'Tau', 'Upsilon']
 const STATUSES: DataRow['status'][] = ['active', 'pending', 'inactive']
 
+// Mulberry32 PRNG - deterministic pseudo-random number generator
+function mulberry32(seed: number): () => number {
+  return function() {
+    let t = seed += 0x6D2B79F5
+    t = Math.imul(t ^ t >>> 15, t | 1)
+    t ^= t + Math.imul(t ^ t >>> 7, t | 61)
+    return ((t ^ t >>> 14) >>> 0) / 4294967296
+  }
+}
+
+const rng = mulberry32(42) // Fixed seed for deterministic data
+
 const INITIAL_DATA: DataRow[] = Array.from({ length: 1000 }, (_, i) => ({
   id: i + 1,
   name: `${NAMES[i % NAMES.length]}-${Math.floor(i / NAMES.length) + 1}`,
   status: STATUSES[i % 3],
-  value: Math.floor(Math.random() * 500) + 10,
+  value: Math.floor(rng() * 500) + 10,
 }))
 
 const PAGE_SIZES = [10, 20, 50, 100]
