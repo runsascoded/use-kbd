@@ -1,0 +1,120 @@
+import { Link } from 'react-router-dom'
+import { Kbd, ShortcutsModal } from 'use-kbd'
+import { A } from '../components/A'
+import { SourceLink } from '../components/SourceLink'
+import {CommandIcon, CtrlIcon, OptIcon, ShiftIcon} from "../../../../src/index.ts";
+
+# use-kbd
+
+[![npm version](https://img.shields.io/npm/v/use-kbd.svg)](https://www.npmjs.com/package/use-kbd)
+
+Add keyboard shortcuts, navigation, omnibar to React apps:
+
+1. **Drop-in UI components** ([`ShortcutsModal`], [`Omnibar`], [`SequenceModal`]) at the App level
+2. **Minimal-boilerplate action registration** via [`useAction`] hook, colocated with handlers
+3. **CSS variables** for easy theming customization
+
+<div className="hint">
+  Press <Kbd action="global:0-help" clickable /> for shortcuts or <Kbd action="global:1-omnibar" clickable /> for command palette.
+</div>
+
+## Demos
+
+<div className="demos">
+  <section>
+    <h3><Link to="/table">Data Table</Link></h3>
+    <p>Sortable, paginated data table with keyboard navigation.</p>
+    <ul>
+      <li><strong>Custom action rendering in modal</strong> (two-column asc/desc sort layout)</li>
+      <li><strong>Modifier key icons</strong>: <CtrlIcon/><ShiftIcon/><OptIcon/><CommandIcon/></li>
+      <li><A href="https://superhuman.com">Superhuman</A>-style selection</li>
+      <li><strong>Editable shortcuts</strong> (click any binding to customize)</li>
+    </ul>
+    <SourceLink><A href="https://github.com/runsascoded/use-kbd/tree/main/examples/demo/src/routes/TableDemo.tsx">View source</A></SourceLink>
+  </section>
+
+  <section>
+    <h3><Link to="/canvas">Canvas</Link></h3>
+    <p>Simple drawing app with tool and color shortcuts.</p>
+    <ul>
+      <li><strong>Single-key shortcuts</strong> (P/E/L/R/O for tools, 1-8 for colors)</li>
+      <li><strong>Action groups</strong> (Tools, Colors organized in modal)</li>
+      <li><strong>Omnibar search</strong> (all actions discoverable via ⌘K)</li>
+    </ul>
+    <SourceLink><A href="https://github.com/runsascoded/use-kbd/tree/main/examples/demo/src/routes/CanvasDemo.tsx">View source</A></SourceLink>
+  </section>
+
+  <section>
+    <h3><Link to="/calendar">Calendar</Link></h3>
+    <p>Calendar with vim-style navigation and view switching.</p>
+    <ul>
+      <li><strong>Multiple bindings</strong> (HJKL and arrow keys for same actions)</li>
+      <li><strong>Action keywords</strong> (find "Month view" by typing "m")</li>
+      <li><strong>Logical grouping</strong> (Navigation, View, Events sections)</li>
+    </ul>
+    <SourceLink><A href="https://github.com/runsascoded/use-kbd/tree/main/examples/demo/src/routes/CalendarDemo.tsx">View source</A></SourceLink>
+  </section>
+</div>
+
+## Quick Start
+
+```tsx
+import { HotkeysProvider, ShortcutsModal, Omnibar, SequenceModal, useAction } from 'use-kbd'
+import 'use-kbd/styles.css'
+
+function App() {
+  return (
+    <HotkeysProvider>
+      <Dashboard />
+      <ShortcutsModal />
+      <Omnibar />
+      <SequenceModal />
+    </HotkeysProvider>
+  )
+}
+
+function Dashboard() {
+  const { save } = useDocument()
+
+  useAction('doc:save', {
+    label: 'Save document',
+    group: 'Document',
+    defaultBindings: ['meta+s'],
+    handler: save,
+  })
+
+  return <Editor />
+}
+```
+
+## Features
+
+- **Editable Shortcuts** - Click any shortcut in modal to rebind
+- **Global Omnibar** - Search all actions across pages
+- **Sequences** - Multi-key shortcuts like <Kbd action="link:/" first />
+- **ActionLink** - Navigation links auto-register as omnibar actions
+- **Persisted Bindings** - Custom shortcuts saved to localStorage
+
+## Inspiration
+
+- macOS and GDrive menu search
+- [Superhuman] omnibar
+- Android searchable settings
+- [Vimium] keyboard-driven browsing
+
+## Live Examples
+
+Try the library in action:
+- [ctbk.dev]
+- [awair.runsascoded.com]
+
+[`ShortcutsModal`]: https://github.com/runsascoded/use-kbd/blob/main/src/ShortcutsModal.tsx
+[`Omnibar`]: https://github.com/runsascoded/use-kbd/blob/main/src/Omnibar.tsx
+[`SequenceModal`]: https://github.com/runsascoded/use-kbd/blob/main/src/SequenceModal.tsx
+[`useAction`]: https://github.com/runsascoded/use-kbd/blob/main/src/useAction.ts
+[Superhuman]: https://superhuman.com
+[Vimium]: https://github.com/philc/vimium
+[ctbk.dev]: https://ctbk.dev
+[awair.runsascoded.com]: https://awair.runsascoded.com
+
+<ShortcutsModal editable groupOrder={['Global', 'Navigation']} />
