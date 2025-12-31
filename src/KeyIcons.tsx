@@ -12,7 +12,7 @@ const baseStyle: CSSProperties = {
 }
 
 /** Arrow Up icon (↑) */
-export function ArrowUpIcon({ className, style }: KeyIconProps) {
+export function Up({ className, style }: KeyIconProps) {
   return (
     <svg
       className={className}
@@ -30,7 +30,7 @@ export function ArrowUpIcon({ className, style }: KeyIconProps) {
 }
 
 /** Arrow Down icon (↓) */
-export function ArrowDownIcon({ className, style }: KeyIconProps) {
+export function Down({ className, style }: KeyIconProps) {
   return (
     <svg
       className={className}
@@ -48,7 +48,7 @@ export function ArrowDownIcon({ className, style }: KeyIconProps) {
 }
 
 /** Arrow Left icon (←) */
-export function ArrowLeftIcon({ className, style }: KeyIconProps) {
+export function Left({ className, style }: KeyIconProps) {
   return (
     <svg
       className={className}
@@ -66,7 +66,7 @@ export function ArrowLeftIcon({ className, style }: KeyIconProps) {
 }
 
 /** Arrow Right icon (→) */
-export function ArrowRightIcon({ className, style }: KeyIconProps) {
+export function Right({ className, style }: KeyIconProps) {
   return (
     <svg
       className={className}
@@ -84,7 +84,7 @@ export function ArrowRightIcon({ className, style }: KeyIconProps) {
 }
 
 /** Enter/Return icon (↵) */
-export function EnterIcon({ className, style }: KeyIconProps) {
+export function Enter({ className, style }: KeyIconProps) {
   return (
     <svg
       className={className}
@@ -103,7 +103,7 @@ export function EnterIcon({ className, style }: KeyIconProps) {
 }
 
 /** Backspace icon (⌫) */
-export function BackspaceIcon({ className, style }: KeyIconProps) {
+export function Backspace({ className, style }: KeyIconProps) {
   return (
     <svg
       className={className}
@@ -128,17 +128,17 @@ export type KeyIconType = 'arrowup' | 'arrowdown' | 'arrowleft' | 'arrowright' |
 export function getKeyIcon(key: string): React.ComponentType<KeyIconProps> | null {
   switch (key.toLowerCase()) {
     case 'arrowup':
-      return ArrowUpIcon
+      return Up
     case 'arrowdown':
-      return ArrowDownIcon
+      return Down
     case 'arrowleft':
-      return ArrowLeftIcon
+      return Left
     case 'arrowright':
-      return ArrowRightIcon
+      return Right
     case 'enter':
-      return EnterIcon
+      return Enter
     case 'backspace':
-      return BackspaceIcon
+      return Backspace
     default:
       return null
   }

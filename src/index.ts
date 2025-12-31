@@ -48,22 +48,22 @@ export { Omnibar } from './Omnibar'
 export { SequenceModal } from './SequenceModal'
 export { ShortcutsModal } from './ShortcutsModal'
 export {
-  CommandIcon,
-  CtrlIcon,
-  ShiftIcon,
-  OptIcon,
-  AltIcon,
+  Command,
+  Ctrl,
+  Shift,
+  Option,
+  Alt,
   ModifierIcon,
   getModifierIcon,
 } from './ModifierIcons'
 export type { ModifierIconProps, ModifierType } from './ModifierIcons'
 export {
-  ArrowUpIcon,
-  ArrowDownIcon,
-  ArrowLeftIcon,
-  ArrowRightIcon,
-  EnterIcon,
-  BackspaceIcon,
+  Up,
+  Down,
+  Left,
+  Right,
+  Enter,
+  Backspace,
   getKeyIcon,
 } from './KeyIcons'
 export type { KeyIconProps, KeyIconType } from './KeyIcons'
