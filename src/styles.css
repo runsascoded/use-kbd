@@ -256,22 +256,26 @@
   position: absolute;
   top: -6px;
   right: -6px;
-  background: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--kbd-conflict, #dc2626);
   border: none;
+  border-radius: 50%;
   padding: 0;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   font-size: 12px;
-  line-height: 14px;
-  text-align: center;
-  color: var(--kbd-text-secondary);
+  font-weight: bold;
+  line-height: 1;
+  color: #fff;
   cursor: pointer;
   opacity: 0;
   transform: scale(0.8);
   transition:
     opacity var(--kbd-transition),
     transform var(--kbd-transition),
-    color var(--kbd-transition);
+    background var(--kbd-transition);
 }
 
 .kbd-kbd:hover .kbd-remove-btn,
@@ -281,7 +285,7 @@
 }
 
 .kbd-remove-btn:hover {
-  color: var(--kbd-conflict);
+  background: #b91c1c;
 }
 
 /* === Timeout bar === */
