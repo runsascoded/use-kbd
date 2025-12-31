@@ -458,7 +458,7 @@ function DataTable() {
 
   return (
     <div className="data-table-app" onClick={handleContainerClick}>
-      <h1>Data Table Demo</h1>
+      <h1 id="demo">Data Table Demo</h1>
       <p className="hint">
         Press <Kbd action="global:0-help" /> for shortcuts.
         {selectedIds.size > 1 && <strong> ({selectedIds.size} selected)</strong>}

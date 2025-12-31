@@ -29,6 +29,7 @@ function AppNav() {
       >
         Home
       </ActionLink>
+      <span className="nav-separator">Demos:</span>
       <ActionLink
         to="/table"
         className={location.pathname === '/table' ? 'active' : ''}

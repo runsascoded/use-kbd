@@ -21,11 +21,42 @@ export function FloatingControls() {
   const location = useLocation()
   const [isVisible, setIsVisible] = useState(false)
   const [isHovering, setIsHovering] = useState(false)
+  const [themeChangeKey, setThemeChangeKey] = useState(0)
   const lastScrollY = useRef(0)
   const hideTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const prevTheme = useRef(theme)
+  const themeAnimTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Hide keyboard shortcuts button on touch-only devices
   const canHover = typeof window !== 'undefined' && window.matchMedia('(hover: hover)').matches
+
+  // Detect theme changes and show controls with animation
+  useEffect(() => {
+    if (theme !== prevTheme.current) {
+      prevTheme.current = theme
+      setIsVisible(true)
+      // Increment key to force animation restart even if already visible
+      setThemeChangeKey(k => k + 1)
+
+      // Clear any existing timeouts
+      if (hideTimeout.current) {
+        clearTimeout(hideTimeout.current)
+      }
+      if (themeAnimTimeout.current) {
+        clearTimeout(themeAnimTimeout.current)
+      }
+
+      // Hide after delay
+      hideTimeout.current = setTimeout(() => {
+        setIsVisible(false)
+      }, 1500)
+
+      // Reset animation key after animation completes
+      themeAnimTimeout.current = setTimeout(() => {
+        setThemeChangeKey(0)
+      }, 500)
+    }
+  }, [theme])
 
   useEffect(() => {
     const handleScroll = () => {
@@ -112,7 +143,8 @@ export function FloatingControls() {
         )}
         <Tooltip title={`Theme: ${getThemeLabel()}`} arrow placement="top">
           <button
-            className="floating-btn theme-btn"
+            key={themeChangeKey}
+            className={`floating-btn theme-btn ${themeChangeKey > 0 ? 'theme-changed' : ''}`}
             onClick={cycleTheme}
             aria-label={`Current theme: ${getThemeLabel()}. Click to cycle themes.`}
           >
