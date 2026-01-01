@@ -1,15 +1,13 @@
-name: Demo CI & Deploy
+name: CI & Deploy
 on:
   push:
     branches: [main]
-    paths: ['site/**', '.github/workflows/demo-deploy.yml', 'src/**']
   pull_request:
     branches: [main]
-    paths: ['site/**', '.github/workflows/demo-deploy.yml', 'src/**']
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -88,3 +86,10 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+  build-dist:
+    needs: build-and-test
+    if: github.ref == 'refs/heads/main'
+    uses: runsascoded/gh-pnpm-dist/.github/workflows/build-dist.yml@v1
+    with:
+      extra_files: src/styles.css
