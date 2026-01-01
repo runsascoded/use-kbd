@@ -1,6 +1,13 @@
 // Calendar Demo styles
 // Demonstrates: date navigation, view switching, event display
 
+// Route-scoped sequence modal styling (compact rows for calendar's many options)
+.route-calendar {
+  --kbd-sequence-max-height: 50vh;
+  --kbd-sequence-row-padding: 4px 10px;
+  --kbd-sequence-row-gap: 4px;
+}
+
 .calendar-app {
   max-width: 800px;
 }

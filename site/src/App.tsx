@@ -99,8 +99,12 @@ function GlobalActions() {
 }
 
 function AppContent() {
+  const location = useLocation()
+  // Extract route name for route-specific CSS scoping (e.g., "app route-calendar")
+  const routeName = location.pathname === '/' ? 'home' : location.pathname.slice(1)
+
   return (
-    <div className="app">
+    <div className={`app route-${routeName}`}>
       <AppNav />
       <GlobalActions />
       <main className="main">
