@@ -1,3 +1,4 @@
+import { Tooltip } from '@mui/material'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Kbd, ShortcutsModal, useAction, useActions } from 'use-kbd'
 import 'use-kbd/styles.css'
@@ -38,13 +39,35 @@ const COLORS = [
 
 const SIZES = [2, 4, 8, 16, 32]
 
+const STORAGE_KEY = 'use-kbd-canvas'
+
+function getStoredValue<T>(key: string, defaultValue: T): T {
+  try {
+    const stored = sessionStorage.getItem(`${STORAGE_KEY}-${key}`)
+    return stored ? JSON.parse(stored) : defaultValue
+  } catch {
+    return defaultValue
+  }
+}
+
 function Canvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const { resolvedTheme } = useTheme()
   const canvasBg = CANVAS_BG[resolvedTheme]
-  const [tool, setTool] = useState<Tool>('pen')
-  const [color, setColor] = useState('#000000')
-  const [size, setSize] = useState(4)
+  const [tool, setTool] = useState<Tool>(() => getStoredValue('tool', 'pen'))
+  const [color, setColor] = useState(() => getStoredValue('color', '#000000'))
+  const [size, setSize] = useState(() => getStoredValue('size', 4))
+
+  // Persist tool, color, size to sessionStorage
+  useEffect(() => {
+    sessionStorage.setItem(`${STORAGE_KEY}-tool`, JSON.stringify(tool))
+  }, [tool])
+  useEffect(() => {
+    sessionStorage.setItem(`${STORAGE_KEY}-color`, JSON.stringify(color))
+  }, [color])
+  useEffect(() => {
+    sessionStorage.setItem(`${STORAGE_KEY}-size`, JSON.stringify(size))
+  }, [size])
   const [isDrawing, setIsDrawing] = useState(false)
   const [strokes, setStrokes] = useState<Stroke[]>([])
   const [currentStroke, setCurrentStroke] = useState<Stroke | null>(null)
@@ -88,10 +111,14 @@ function Canvas() {
         c.strokeRect(stroke.startPoint.x, stroke.startPoint.y, w, h)
       } else if (stroke.tool === 'circle' && stroke.startPoint && stroke.endPoint) {
         c.beginPath()
+        // Circle inscribed in bbox, tangent to the two edges meeting at start point
         const dx = stroke.endPoint.x - stroke.startPoint.x
         const dy = stroke.endPoint.y - stroke.startPoint.y
-        const radius = Math.sqrt(dx * dx + dy * dy)
-        c.arc(stroke.startPoint.x, stroke.startPoint.y, radius, 0, Math.PI * 2)
+        const radius = Math.min(Math.abs(dx), Math.abs(dy)) / 2
+        // Center is offset from start by radius in the drag direction
+        const centerX = stroke.startPoint.x + Math.sign(dx) * radius
+        const centerY = stroke.startPoint.y + Math.sign(dy) * radius
+        c.arc(centerX, centerY, radius, 0, Math.PI * 2)
         c.stroke()
       }
     }
@@ -286,33 +313,33 @@ function Canvas() {
         <div className="tool-group">
           <span className="group-label">Tool:</span>
           {([
-            { id: 'pen', icon: '✏', label: 'Pen (P)' },
-            { id: 'eraser', icon: '⌫', label: 'Eraser (E)' },
-            { id: 'line', icon: '╱', label: 'Line (L)' },
-            { id: 'rect', icon: '▢', label: 'Rectangle (R)' },
-            { id: 'circle', icon: '○', label: 'Circle (O)' },
+            { id: 'pen', icon: '✏', label: 'Pen' },
+            { id: 'eraser', icon: '⌫', label: 'Eraser' },
+            { id: 'line', icon: '╱', label: 'Line' },
+            { id: 'rect', icon: '▢', label: 'Rectangle' },
+            { id: 'circle', icon: '◯', label: 'Circle' },
           ] as const).map(t => (
-            <button
-              key={t.id}
-              className={`tool-btn ${tool === t.id ? 'active' : ''}`}
-              onClick={() => setTool(t.id)}
-              title={t.label}
-            >
-              {t.icon}
-            </button>
+            <Tooltip key={t.id} title={<>{t.label} <Kbd action={`tool:${t.id}`} /></>} enterDelay={0} arrow>
+              <button
+                className={`tool-btn ${tool === t.id ? 'active' : ''}`}
+                onClick={() => setTool(t.id)}
+              >
+                {t.icon}
+              </button>
+            </Tooltip>
           ))}
         </div>
 
         <div className="tool-group">
           <span className="group-label">Color:</span>
           {COLORS.map(c => (
-            <button
-              key={c.value}
-              className={`color-btn ${color === c.value ? 'active' : ''}`}
-              style={{ backgroundColor: c.value }}
-              onClick={() => setColor(c.value)}
-              title={`${c.name} (${c.key})`}
-            />
+            <Tooltip key={c.value} title={<>{c.name} <Kbd action={`color:${c.key}-${c.name.toLowerCase()}`} /></>} enterDelay={0} arrow>
+              <button
+                className={`color-btn ${color === c.value ? 'active' : ''}`}
+                style={{ backgroundColor: c.value }}
+                onClick={() => setColor(c.value)}
+              />
+            </Tooltip>
           ))}
         </div>
 
