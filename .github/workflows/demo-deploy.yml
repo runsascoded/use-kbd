@@ -2,6 +2,7 @@ name: CI & Deploy
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -49,6 +50,9 @@ jobs:
         working-directory: ./site
         run: pnpm run build
 
+      - name: Create 404.html for SPA routing
+        run: cp docs/index.html docs/404.html
+
       - name: Install Playwright browsers
         working-directory: ./site
         run: pnpm exec playwright install --with-deps chromium
@@ -93,3 +97,10 @@ jobs:
     uses: runsascoded/gh-pnpm-dist/.github/workflows/build-dist.yml@v1
     with:
       extra_files: src/styles.css
+
+  release:
+    needs: build-and-test
+    if: startsWith(github.ref, 'refs/tags/v')
+    uses: runsascoded/gh-pnpm-release/.github/workflows/release.yml@v1
+    secrets:
+      npm_token: ${{ secrets.NPM_TOKEN }}
