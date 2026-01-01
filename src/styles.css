@@ -65,7 +65,6 @@
   background-color: var(--kbd-bg);
   border-radius: var(--kbd-radius);
   padding: var(--kbd-padding);
-  padding-top: 12px;
   width: 85vw;
   max-width: 480px;
   max-height: 80vh;
@@ -78,7 +77,6 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  flex-wrap: nowrap;
   margin-bottom: var(--kbd-gap);
 }
 

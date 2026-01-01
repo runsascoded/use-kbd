@@ -188,7 +188,7 @@ function Canvas() {
   useAction('tool:circle', {
     label: 'Circle',
     group: 'Tools',
-    defaultBindings: ['o'],
+    defaultBindings: ['c'],
     handler: useCallback(() => setTool('circle'), []),
   })
 
@@ -236,7 +236,7 @@ function Canvas() {
   useAction('edit:undo', {
     label: 'Undo',
     group: 'Edit',
-    defaultBindings: ['z', 'meta+z'],
+    defaultBindings: ['z'],
     handler: useCallback(() => {
       if (history.length > 0) {
         const prev = history[history.length - 1]
@@ -250,7 +250,7 @@ function Canvas() {
   useAction('edit:redo', {
     label: 'Redo',
     group: 'Edit',
-    defaultBindings: ['shift+z', 'meta+shift+z'],
+    defaultBindings: ['shift+z'],
     handler: useCallback(() => {
       if (redoStack.length > 0) {
         const next = redoStack[redoStack.length - 1]
