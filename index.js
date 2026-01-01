@@ -1,6 +1,5 @@
 import { jsx, jsxs, Fragment } from 'react/jsx-runtime';
 import { createContext, forwardRef, useRef, useState, useCallback, useMemo, useEffect, useContext, Fragment as Fragment$1 } from 'react';
-import { max, min } from '@rdub/base';
 
 // src/TwoColumnRenderer.tsx
 function createTwoColumnRenderer(config) {
@@ -274,6 +273,9 @@ function useActionsRegistry(options = {}) {
 
 // src/constants.ts
 var DEFAULT_SEQUENCE_TIMEOUT = 1e3;
+
+// src/utils.ts
+var { max } = Math;
 function isMac() {
   if (typeof navigator === "undefined") return false;
   return /Mac|iPod|iPhone|iPad/.test(navigator.platform);
@@ -894,9 +896,7 @@ var DEFAULT_CONFIG = {
   sequenceTimeout: DEFAULT_SEQUENCE_TIMEOUT,
   disableConflicts: true,
   minViewportWidth: 768,
-  enableOnTouch: false,
-  modalTrigger: "?",
-  omnibarTrigger: "meta+k"
+  enableOnTouch: false
 };
 function HotkeysProvider({
   config: configProp = {},
@@ -945,16 +945,12 @@ function HotkeysProvider({
   const openOmnibar = useCallback(() => setIsOmnibarOpen(true), []);
   const closeOmnibar = useCallback(() => setIsOmnibarOpen(false), []);
   const toggleOmnibar = useCallback(() => setIsOmnibarOpen((prev) => !prev), []);
-  const keymap = useMemo(() => {
-    const map = { ...registry.keymap };
-    if (config.modalTrigger !== false) {
-      map[config.modalTrigger] = "__hotkeys:modal";
-    }
-    if (config.omnibarTrigger !== false) {
-      map[config.omnibarTrigger] = "__hotkeys:omnibar";
-    }
-    return map;
-  }, [registry.keymap, config.modalTrigger, config.omnibarTrigger]);
+  const [isLookupOpen, setIsLookupOpen] = useState(false);
+  const openLookup = useCallback(() => setIsLookupOpen(true), []);
+  const closeLookup = useCallback(() => setIsLookupOpen(false), []);
+  const toggleLookup = useCallback(() => setIsLookupOpen((prev) => !prev), []);
+  const [isEditingBinding, setIsEditingBinding] = useState(false);
+  const keymap = registry.keymap;
   const conflicts = useMemo(() => findConflicts(keymap), [keymap]);
   const hasConflicts2 = conflicts.size > 0;
   const effectiveKeymap = useMemo(() => {
@@ -974,11 +970,9 @@ function HotkeysProvider({
     for (const [id, action] of registry.actions) {
       map[id] = action.config.handler;
     }
-    map["__hotkeys:modal"] = toggleModal;
-    map["__hotkeys:omnibar"] = toggleOmnibar;
     return map;
-  }, [registry.actions, toggleModal, toggleOmnibar]);
-  const hotkeysEnabled = isEnabled && !isModalOpen && !isOmnibarOpen;
+  }, [registry.actions]);
+  const hotkeysEnabled = isEnabled && !isEditingBinding && !isOmnibarOpen && !isLookupOpen;
   const {
     pendingKeys,
     isAwaitingSequence,
@@ -989,6 +983,11 @@ function HotkeysProvider({
     enabled: hotkeysEnabled,
     sequenceTimeout: config.sequenceTimeout
   });
+  useEffect(() => {
+    if (isAwaitingSequence && isModalOpen) {
+      closeModal();
+    }
+  }, [isAwaitingSequence, isModalOpen, closeModal]);
   const searchActionsHelper = useCallback(
     (query) => searchActions(query, registry.actionRegistry, keymap),
     [registry.actionRegistry, keymap]
@@ -1008,6 +1007,12 @@ function HotkeysProvider({
     openOmnibar,
     closeOmnibar,
     toggleOmnibar,
+    isLookupOpen,
+    openLookup,
+    closeLookup,
+    toggleLookup,
+    isEditingBinding,
+    setIsEditingBinding,
     executeAction: registry.execute,
     pendingKeys,
     isAwaitingSequence,
@@ -1029,6 +1034,11 @@ function HotkeysProvider({
     openOmnibar,
     closeOmnibar,
     toggleOmnibar,
+    isLookupOpen,
+    openLookup,
+    closeLookup,
+    toggleLookup,
+    isEditingBinding,
     pendingKeys,
     isAwaitingSequence,
     cancelSequence,
@@ -1459,6 +1469,7 @@ function useEditableHotkeys(defaults, handlers, options = {}) {
     sequenceTimeout
   };
 }
+var { max: max2, min } = Math;
 function useOmnibar(options) {
   const {
     actions,
@@ -1538,7 +1549,7 @@ function useOmnibar(options) {
     setSelectedIndex((prev) => min(prev + 1, results.length - 1));
   }, [results.length]);
   const selectPrev = useCallback(() => {
-    setSelectedIndex((prev) => max(prev - 1, 0));
+    setSelectedIndex((prev) => max2(prev - 1, 0));
   }, []);
   const resetSelection = useCallback(() => {
     setSelectedIndex(0);
@@ -2124,6 +2135,175 @@ function KeybindingEditor({
     ] })
   ] });
 }
+function LookupModal({ defaultBinding = "meta+shift+k" } = {}) {
+  const {
+    isLookupOpen,
+    closeLookup,
+    toggleLookup,
+    registry,
+    executeAction
+  } = useHotkeysContext();
+  useAction("__hotkeys:lookup", {
+    label: "Key lookup",
+    group: "Global",
+    defaultBindings: defaultBinding ? [defaultBinding] : [],
+    handler: useCallback(() => toggleLookup(), [toggleLookup])
+  });
+  const [pendingKeys, setPendingKeys] = useState([]);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const allBindings = useMemo(() => {
+    const results = [];
+    const keymap = registry.keymap;
+    for (const [binding, actionOrActions] of Object.entries(keymap)) {
+      if (binding.startsWith("__")) continue;
+      const actions = Array.isArray(actionOrActions) ? actionOrActions : [actionOrActions];
+      const sequence = parseHotkeyString(binding);
+      const display = formatCombination(sequence).display;
+      const labels = actions.map((actionId) => {
+        const action = registry.actions.get(actionId);
+        return action?.config.label || actionId;
+      });
+      results.push({ binding, sequence, display, actions, labels });
+    }
+    results.sort((a, b) => a.binding.localeCompare(b.binding));
+    return results;
+  }, [registry.keymap, registry.actions]);
+  const filteredBindings = useMemo(() => {
+    if (pendingKeys.length === 0) return allBindings;
+    return allBindings.filter((result) => {
+      if (result.sequence.length < pendingKeys.length) return false;
+      for (let i = 0; i < pendingKeys.length; i++) {
+        const pending = pendingKeys[i];
+        const target = result.sequence[i];
+        if (pending.key !== target.key) return false;
+        if (pending.modifiers.ctrl !== target.modifiers.ctrl) return false;
+        if (pending.modifiers.alt !== target.modifiers.alt) return false;
+        if (pending.modifiers.shift !== target.modifiers.shift) return false;
+        if (pending.modifiers.meta !== target.modifiers.meta) return false;
+      }
+      return true;
+    });
+  }, [allBindings, pendingKeys]);
+  const groupedByNextKey = useMemo(() => {
+    const groups = /* @__PURE__ */ new Map();
+    for (const result of filteredBindings) {
+      if (result.sequence.length > pendingKeys.length) {
+        const nextCombo = result.sequence[pendingKeys.length];
+        const nextKey = formatCombination([nextCombo]).display;
+        const existing = groups.get(nextKey) || [];
+        existing.push(result);
+        groups.set(nextKey, existing);
+      } else {
+        const existing = groups.get("") || [];
+        existing.push(result);
+        groups.set("", existing);
+      }
+    }
+    return groups;
+  }, [filteredBindings, pendingKeys]);
+  const formattedPendingKeys = useMemo(() => {
+    if (pendingKeys.length === 0) return "";
+    return formatCombination(pendingKeys).display;
+  }, [pendingKeys]);
+  useEffect(() => {
+    if (isLookupOpen) {
+      setPendingKeys([]);
+      setSelectedIndex(0);
+    }
+  }, [isLookupOpen]);
+  useEffect(() => {
+    setSelectedIndex(0);
+  }, [filteredBindings.length]);
+  useEffect(() => {
+    if (!isLookupOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        if (pendingKeys.length > 0) {
+          setPendingKeys([]);
+        } else {
+          closeLookup();
+        }
+        return;
+      }
+      if (e.key === "Backspace") {
+        e.preventDefault();
+        setPendingKeys((prev) => prev.slice(0, -1));
+        return;
+      }
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSelectedIndex((prev) => Math.min(prev + 1, filteredBindings.length - 1));
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSelectedIndex((prev) => Math.max(prev - 1, 0));
+        return;
+      }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const selected = filteredBindings[selectedIndex];
+        if (selected && selected.actions.length > 0) {
+          closeLookup();
+          executeAction(selected.actions[0]);
+        }
+        return;
+      }
+      if (isModifierKey(e.key)) return;
+      e.preventDefault();
+      const newCombo = {
+        key: normalizeKey(e.key),
+        modifiers: {
+          ctrl: e.ctrlKey,
+          alt: e.altKey,
+          shift: e.shiftKey,
+          meta: e.metaKey
+        }
+      };
+      setPendingKeys((prev) => [...prev, newCombo]);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isLookupOpen, pendingKeys, filteredBindings, selectedIndex, closeLookup, executeAction]);
+  const handleBackdropClick = useCallback(() => {
+    closeLookup();
+  }, [closeLookup]);
+  if (!isLookupOpen) return null;
+  return /* @__PURE__ */ jsx("div", { className: "kbd-lookup-backdrop", onClick: handleBackdropClick, children: /* @__PURE__ */ jsxs("div", { className: "kbd-lookup", onClick: (e) => e.stopPropagation(), children: [
+    /* @__PURE__ */ jsxs("div", { className: "kbd-lookup-header", children: [
+      /* @__PURE__ */ jsx("div", { className: "kbd-lookup-search", children: formattedPendingKeys ? /* @__PURE__ */ jsx("kbd", { className: "kbd-sequence-keys", children: formattedPendingKeys }) : /* @__PURE__ */ jsx("span", { className: "kbd-lookup-placeholder", children: "Type keys to filter..." }) }),
+      /* @__PURE__ */ jsxs("span", { className: "kbd-lookup-hint", children: [
+        "\u2191\u2193 navigate \xB7 Enter select \xB7 Esc ",
+        pendingKeys.length > 0 ? "clear" : "close",
+        " \xB7 \u232B back"
+      ] })
+    ] }),
+    /* @__PURE__ */ jsx("div", { className: "kbd-lookup-results", children: filteredBindings.length === 0 ? /* @__PURE__ */ jsx("div", { className: "kbd-lookup-empty", children: "No matching shortcuts" }) : filteredBindings.map((result, index) => /* @__PURE__ */ jsxs(
+      "div",
+      {
+        className: `kbd-lookup-result ${index === selectedIndex ? "selected" : ""}`,
+        onClick: () => {
+          closeLookup();
+          if (result.actions.length > 0) {
+            executeAction(result.actions[0]);
+          }
+        },
+        onMouseEnter: () => setSelectedIndex(index),
+        children: [
+          /* @__PURE__ */ jsx("kbd", { className: "kbd-kbd", children: result.display }),
+          /* @__PURE__ */ jsx("span", { className: "kbd-lookup-labels", children: result.labels.join(", ") })
+        ]
+      },
+      result.binding
+    )) }),
+    pendingKeys.length > 0 && groupedByNextKey.size > 1 && /* @__PURE__ */ jsxs("div", { className: "kbd-lookup-continuations", children: [
+      /* @__PURE__ */ jsx("span", { className: "kbd-lookup-continuations-label", children: "Continue with:" }),
+      Array.from(groupedByNextKey.keys()).filter((k) => k !== "").slice(0, 8).map((nextKey) => /* @__PURE__ */ jsx("kbd", { className: "kbd-kbd kbd-small", children: nextKey }, nextKey)),
+      groupedByNextKey.size > 9 && /* @__PURE__ */ jsx("span", { children: "..." })
+    ] })
+  ] }) });
+}
 function BindingBadge({ binding }) {
   const sequence = parseHotkeyString(binding);
   return /* @__PURE__ */ jsx("kbd", { className: "kbd-kbd", children: sequence.map((combo, i) => /* @__PURE__ */ jsxs(Fragment$1, { children: [
@@ -2139,8 +2319,7 @@ function Omnibar({
   actions: actionsProp,
   handlers: handlersProp,
   keymap: keymapProp,
-  openKey = "meta+k",
-  enabled: enabledProp,
+  defaultBinding = "meta+k",
   isOpen: isOpenProp,
   onOpen: onOpenProp,
   onClose: onCloseProp,
@@ -2155,7 +2334,12 @@ function Omnibar({
   const ctx = useMaybeHotkeysContext();
   const actions = actionsProp ?? ctx?.registry.actionRegistry ?? {};
   const keymap = keymapProp ?? ctx?.registry.keymap ?? {};
-  const enabled = enabledProp ?? !ctx;
+  useAction("__hotkeys:omnibar", {
+    label: "Command palette",
+    group: "Global",
+    defaultBindings: defaultBinding ? [defaultBinding] : [],
+    handler: useCallback(() => ctx?.toggleOmnibar(), [ctx?.toggleOmnibar])
+  });
   const handleExecute = useCallback((actionId) => {
     if (onExecuteProp) {
       onExecuteProp(actionId);
@@ -2194,9 +2378,9 @@ function Omnibar({
     actions,
     handlers: handlersProp,
     keymap,
-    openKey,
-    enabled: isOpenProp === void 0 && ctx === null ? enabled : false,
-    // Disable hotkey if controlled or using context
+    openKey: "",
+    // Trigger is handled via useAction, not useOmnibar
+    enabled: false,
     onOpen: handleOpen,
     onClose: handleClose,
     onExecute: handleExecute,
@@ -2553,8 +2737,7 @@ function ShortcutsModal({
   groupRenderers,
   isOpen: isOpenProp,
   onClose: onCloseProp,
-  openKey = "?",
-  autoRegisterOpen,
+  defaultBinding = "?",
   editable = false,
   onBindingChange,
   onBindingAdd,
@@ -2617,7 +2800,6 @@ function ShortcutsModal({
   const handleReset = onReset ?? (ctx ? () => {
     ctx.registry.resetOverrides();
   } : void 0);
-  const shouldAutoRegisterOpen = autoRegisterOpen ?? !ctx;
   const [internalIsOpen, setInternalIsOpen] = useState(false);
   const isOpen = isOpenProp ?? ctx?.isModalOpen ?? internalIsOpen;
   const [editingAction, setEditingAction] = useState(null);
@@ -2628,6 +2810,8 @@ function ShortcutsModal({
   const editingActionRef = useRef(null);
   const editingKeyRef = useRef(null);
   const addingActionRef = useRef(null);
+  const setIsEditingBindingRef = useRef(ctx?.setIsEditingBinding);
+  setIsEditingBindingRef.current = ctx?.setIsEditingBinding;
   const conflicts = useMemo(() => findConflicts(keymap), [keymap]);
   const actionBindings = useMemo(() => getActionBindings(keymap), [keymap]);
   const close = useCallback(() => {
@@ -2645,13 +2829,19 @@ function ShortcutsModal({
       ctx.closeModal();
     }
   }, [onCloseProp, ctx]);
-  const open = useCallback(() => {
+  useCallback(() => {
     if (ctx?.openModal) {
       ctx.openModal();
     } else {
       setInternalIsOpen(true);
     }
   }, [ctx]);
+  useAction("__hotkeys:modal", {
+    label: "Show shortcuts",
+    group: "Global",
+    defaultBindings: defaultBinding ? [defaultBinding] : [],
+    handler: useCallback(() => ctx?.toggleModal() ?? setInternalIsOpen((prev) => !prev), [ctx?.toggleModal])
+  });
   const checkConflict = useCallback((newKey, forAction) => {
     const existingActions = keymap[newKey];
     if (!existingActions) return null;
@@ -2704,6 +2894,7 @@ function ShortcutsModal({
         setEditingAction(null);
         setEditingKey(null);
         setAddingAction(null);
+        setIsEditingBindingRef.current?.(false);
       },
       [checkConflict, handleBindingChange, handleBindingAdd]
     ),
@@ -2715,6 +2906,7 @@ function ShortcutsModal({
       setEditingKey(null);
       setAddingAction(null);
       setPendingConflict(null);
+      setIsEditingBindingRef.current?.(false);
     }, []),
     // Tab to next/prev editable kbd and start editing
     onTab: useCallback(() => {
@@ -2750,9 +2942,10 @@ function ShortcutsModal({
       setEditingAction(action);
       setEditingKey(key);
       setPendingConflict(null);
+      ctx?.setIsEditingBinding(true);
       startRecording();
     },
-    [startRecording]
+    [startRecording, ctx?.setIsEditingBinding]
   );
   const startAddingBinding = useCallback(
     (action) => {
@@ -2763,9 +2956,10 @@ function ShortcutsModal({
       setEditingKey(null);
       setAddingAction(action);
       setPendingConflict(null);
+      ctx?.setIsEditingBinding(true);
       startRecording();
     },
-    [startRecording]
+    [startRecording, ctx?.setIsEditingBinding]
   );
   const startEditing = useCallback(
     (action, bindingIndex) => {
@@ -2787,7 +2981,8 @@ function ShortcutsModal({
     setEditingKey(null);
     setAddingAction(null);
     setPendingConflict(null);
-  }, [cancel]);
+    ctx?.setIsEditingBinding(false);
+  }, [cancel, ctx?.setIsEditingBinding]);
   const removeBinding = useCallback(
     (action, key) => {
       handleBindingRemove?.(action, key);
@@ -2915,9 +3110,10 @@ function ShortcutsModal({
   );
   const renderCell = useCallback(
     (actionId, keys) => {
+      const showAddButton = editable && (multipleBindings || keys.length === 0);
       return /* @__PURE__ */ jsxs("span", { className: "kbd-action-bindings", children: [
         keys.map((key) => /* @__PURE__ */ jsx(Fragment$1, { children: renderEditableKbd(actionId, key, true) }, key)),
-        editable && multipleBindings && renderAddButton(actionId)
+        showAddButton && renderAddButton(actionId)
       ] });
     },
     [renderEditableKbd, renderAddButton, editable, multipleBindings]
@@ -2934,14 +3130,10 @@ function ShortcutsModal({
     editingKey,
     addingAction
   }), [renderCell, renderEditableKbd, renderAddButton, startEditingBinding, startAddingBinding, removeBinding, isRecording, editingAction, editingKey, addingAction]);
-  const modalKeymap = shouldAutoRegisterOpen ? { [openKey]: "openShortcuts" } : {};
   useHotkeys(
-    { ...modalKeymap, escape: "closeShortcuts" },
-    {
-      openShortcuts: open,
-      closeShortcuts: close
-    },
-    { enabled: shouldAutoRegisterOpen || isOpen }
+    { escape: "closeShortcuts" },
+    { closeShortcuts: close },
+    { enabled: isOpen }
   );
   useEffect(() => {
     if (!isOpen || !editingAction && !addingAction) return;
@@ -3092,6 +3284,6 @@ function ShortcutsModal({
   ] }) });
 }
 
-export { ActionsRegistryContext, Alt, Backspace, Command, Ctrl, DEFAULT_SEQUENCE_TIMEOUT, Down, Enter, HotkeysProvider, Kbd, Key, KeybindingEditor, Left, ModifierIcon, Omnibar, Option, Right, SequenceModal, Shift, ShortcutsModal, Up, createTwoColumnRenderer, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasConflicts, isMac, isModifierKey, isSequence, normalizeKey, parseCombinationId, parseHotkeyString, searchActions, useAction, useActions, useActionsRegistry, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useOmnibar, useRecordHotkey };
+export { ActionsRegistryContext, Alt, Backspace, Command, Ctrl, DEFAULT_SEQUENCE_TIMEOUT, Down, Enter, HotkeysProvider, Kbd, Key, KeybindingEditor, Left, LookupModal, ModifierIcon, Omnibar, Option, Right, SequenceModal, Shift, ShortcutsModal, Up, createTwoColumnRenderer, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasConflicts, isMac, isModifierKey, isSequence, normalizeKey, parseCombinationId, parseHotkeyString, searchActions, useAction, useActions, useActionsRegistry, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useOmnibar, useRecordHotkey };
 //# sourceMappingURL=index.js.map
 //# sourceMappingURL=index.js.map

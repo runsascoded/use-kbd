@@ -477,13 +477,12 @@ interface ShortcutsModalProps {
      * If not provided, uses closeModal from HotkeysContext.
      */
     onClose?: () => void;
-    /** Hotkey to open modal (default: '?'). Set to empty string to disable. */
-    openKey?: string;
     /**
-     * Whether to auto-register the open hotkey (default: true).
-     * When using HotkeysContext, the provider already handles this, so set to false.
+     * Default keybinding to open shortcuts modal (default: '?').
+     * Users can override this in the shortcuts modal.
+     * Set to empty string to disable.
      */
-    autoRegisterOpen?: boolean;
+    defaultBinding?: string;
     /** Enable editing mode */
     editable?: boolean;
     /** Called when a binding changes (required if editable) */
@@ -548,7 +547,7 @@ interface ShortcutsModalRenderProps {
  * />
  * ```
  */
-declare function ShortcutsModal({ keymap: keymapProp, defaults: defaultsProp, labels: labelsProp, descriptions: descriptionsProp, groups: groupNamesProp, groupOrder, groupRenderers, isOpen: isOpenProp, onClose: onCloseProp, openKey, autoRegisterOpen, editable, onBindingChange, onBindingAdd, onBindingRemove, onReset, multipleBindings, children, backdropClassName, modalClassName, title, hint, showUnbound, }: ShortcutsModalProps): react_jsx_runtime.JSX.Element | null;
+declare function ShortcutsModal({ keymap: keymapProp, defaults: defaultsProp, labels: labelsProp, descriptions: descriptionsProp, groups: groupNamesProp, groupOrder, groupRenderers, isOpen: isOpenProp, onClose: onCloseProp, defaultBinding, editable, onBindingChange, onBindingAdd, onBindingRemove, onReset, multipleBindings, children, backdropClassName, modalClassName, title, hint, showUnbound, }: ShortcutsModalProps): react_jsx_runtime.JSX.Element | null;
 
 /**
  * Configuration for a row in a two-column table
@@ -618,13 +617,12 @@ interface OmnibarProps {
      * If not provided, uses keymap from HotkeysContext.
      */
     keymap?: HotkeyMap;
-    /** Hotkey to open omnibar (default: 'meta+k'). Set to empty string to disable. */
-    openKey?: string;
     /**
-     * Whether omnibar hotkey is enabled.
-     * When using HotkeysContext, defaults to false (provider handles it).
+     * Default keybinding to open omnibar (default: 'meta+k').
+     * Users can override this in the shortcuts modal.
+     * Set to empty string to disable.
      */
-    enabled?: boolean;
+    defaultBinding?: string;
     /**
      * Control visibility externally.
      * If not provided, uses isOmnibarOpen from HotkeysContext.
@@ -683,7 +681,7 @@ interface OmnibarRenderProps {
  * />
  * ```
  */
-declare function Omnibar({ actions: actionsProp, handlers: handlersProp, keymap: keymapProp, openKey, enabled: enabledProp, isOpen: isOpenProp, onOpen: onOpenProp, onClose: onCloseProp, onExecute: onExecuteProp, maxResults, placeholder, children, backdropClassName, omnibarClassName, }: OmnibarProps): react_jsx_runtime.JSX.Element | null;
+declare function Omnibar({ actions: actionsProp, handlers: handlersProp, keymap: keymapProp, defaultBinding, isOpen: isOpenProp, onOpen: onOpenProp, onClose: onCloseProp, onExecute: onExecuteProp, maxResults, placeholder, children, backdropClassName, omnibarClassName, }: OmnibarProps): react_jsx_runtime.JSX.Element | null;
 
 /**
  * Detect if running on macOS
@@ -925,10 +923,6 @@ interface HotkeysConfig {
     minViewportWidth?: number | false;
     /** Whether to show hotkey UI on touch-only devices (default: false) */
     enableOnTouch?: boolean;
-    /** Key sequence to open shortcuts modal (false to disable) */
-    modalTrigger?: string | false;
-    /** Key sequence to open omnibar (false to disable) */
-    omnibarTrigger?: string | false;
 }
 /**
  * Context value for hotkeys.
@@ -954,6 +948,18 @@ interface HotkeysContextValue {
     closeOmnibar: () => void;
     /** Toggle the omnibar */
     toggleOmnibar: () => void;
+    /** Whether currently editing a binding in ShortcutsModal */
+    isEditingBinding: boolean;
+    /** Set editing state (called by ShortcutsModal) */
+    setIsEditingBinding: (value: boolean) => void;
+    /** Lookup modal open state */
+    isLookupOpen: boolean;
+    /** Open the lookup modal */
+    openLookup: () => void;
+    /** Close the lookup modal */
+    closeLookup: () => void;
+    /** Toggle the lookup modal */
+    toggleLookup: () => void;
     /** Execute an action by ID */
     executeAction: (id: string) => void;
     /** Sequence state: pending key combinations */
@@ -1101,6 +1107,28 @@ declare function Kbd({ action, separator, first, fallback, className, clickable,
  */
 declare function Key(props: Omit<KbdProps, 'clickable'>): react_jsx_runtime.JSX.Element;
 
+interface LookupModalProps {
+    /**
+     * Default keybinding to open lookup modal (default: 'meta+shift+k').
+     * Users can override this in the shortcuts modal.
+     * Set to empty string to disable.
+     */
+    defaultBinding?: string;
+}
+/**
+ * Modal for browsing and looking up keyboard shortcuts by typing key sequences.
+ *
+ * Unlike SequenceModal (which auto-executes when a complete sequence is entered),
+ * LookupModal lets you browse all available shortcuts and select one to execute.
+ *
+ * - Press keys to filter to matching sequences
+ * - Use arrow keys to navigate results
+ * - Press Enter to execute selected action
+ * - Press Escape to close or clear filter
+ * - Press Backspace to remove last key from filter
+ */
+declare function LookupModal({ defaultBinding }?: LookupModalProps): react_jsx_runtime.JSX.Element | null;
+
 declare function SequenceModal(): react_jsx_runtime.JSX.Element | null;
 
 interface ModifierIconProps extends SVGProps<SVGSVGElement> {
@@ -1151,4 +1179,4 @@ declare function getKeyIcon(key: string): React.ComponentType<KeyIconProps> | nu
  */
 declare const DEFAULT_SEQUENCE_TIMEOUT = 1000;
 
-export { type ActionConfig, type ActionDefinition, type ActionRegistry, type ActionSearchResult, ActionsRegistryContext, type ActionsRegistryValue, Alt, Backspace, type BindingInfo, Command, Ctrl, DEFAULT_SEQUENCE_TIMEOUT, Down, Enter, type FuzzyMatchResult, type GroupRenderer, type GroupRendererProps, type HandlerMap, type HotkeyMap, type HotkeySequence, type HotkeysConfig, type HotkeysContextValue, HotkeysProvider, type HotkeysProviderProps, Kbd, type KbdProps, Key, type KeyCombination, type KeyCombinationDisplay, type KeyConflict, type KeyIconProps, type KeyIconType, KeybindingEditor, type KeybindingEditorProps, type KeybindingEditorRenderProps, Left, ModifierIcon, type ModifierIconProps, type ModifierType, Omnibar, type OmnibarProps, type OmnibarRenderProps, Option, type RecordHotkeyOptions, type RecordHotkeyResult, type RegisteredAction, Right, type SequenceCompletion, SequenceModal, Shift, type ShortcutGroup, ShortcutsModal, type ShortcutsModalProps, type ShortcutsModalRenderProps, type TwoColumnConfig, type TwoColumnRow, Up, type UseEditableHotkeysOptions, type UseEditableHotkeysResult, type UseHotkeysOptions, type UseHotkeysResult, type UseOmnibarOptions, type UseOmnibarResult, createTwoColumnRenderer, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasConflicts, isMac, isModifierKey, isSequence, normalizeKey, parseCombinationId, parseHotkeyString, searchActions, useAction, useActions, useActionsRegistry, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useOmnibar, useRecordHotkey };
+export { type ActionConfig, type ActionDefinition, type ActionRegistry, type ActionSearchResult, ActionsRegistryContext, type ActionsRegistryValue, Alt, Backspace, type BindingInfo, Command, Ctrl, DEFAULT_SEQUENCE_TIMEOUT, Down, Enter, type FuzzyMatchResult, type GroupRenderer, type GroupRendererProps, type HandlerMap, type HotkeyMap, type HotkeySequence, type HotkeysConfig, type HotkeysContextValue, HotkeysProvider, type HotkeysProviderProps, Kbd, type KbdProps, Key, type KeyCombination, type KeyCombinationDisplay, type KeyConflict, type KeyIconProps, type KeyIconType, KeybindingEditor, type KeybindingEditorProps, type KeybindingEditorRenderProps, Left, LookupModal, ModifierIcon, type ModifierIconProps, type ModifierType, Omnibar, type OmnibarProps, type OmnibarRenderProps, Option, type RecordHotkeyOptions, type RecordHotkeyResult, type RegisteredAction, Right, type SequenceCompletion, SequenceModal, Shift, type ShortcutGroup, ShortcutsModal, type ShortcutsModalProps, type ShortcutsModalRenderProps, type TwoColumnConfig, type TwoColumnRow, Up, type UseEditableHotkeysOptions, type UseEditableHotkeysResult, type UseHotkeysOptions, type UseHotkeysResult, type UseOmnibarOptions, type UseOmnibarResult, createTwoColumnRenderer, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasConflicts, isMac, isModifierKey, isSequence, normalizeKey, parseCombinationId, parseHotkeyString, searchActions, useAction, useActions, useActionsRegistry, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useOmnibar, useRecordHotkey };
