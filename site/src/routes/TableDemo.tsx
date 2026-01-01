@@ -45,11 +45,15 @@ type SortColumn = 'name' | 'status' | 'value'
 function DataTable() {
   const [data, setData] = useState<DataRow[]>(INITIAL_DATA)
   const [history, setHistory] = useState<DataRow[][]>([]) // for undo
-  // Multi-select state: hoveredIndex is keyboard cursor position, selectedIds is the selection set
+  // Multi-select state:
+  // - hoveredIndex: keyboard cursor position (moving end of current range)
+  // - rangeAnchor: fixed end of current range
+  // - pinnedIds: IDs from previous selections (preserved during shift+arrow)
+  // - selectedIds: computed as pinnedIds ∪ current range
   const [hoveredIndex, setHoveredIndex] = useState<number>(0)
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set([1]))
-  const [rangeAnchor, setRangeAnchor] = useState<number>(0) // index for shift-selection
-  const [mouseHoverIndex, setMouseHoverIndex] = useState<number>(-1) // track mouse hover separately
+  const [rangeAnchor, setRangeAnchor] = useState<number>(0)
+  const [pinnedIds, setPinnedIds] = useState<Set<number>>(new Set())
+  const [mouseHoverIndex, setMouseHoverIndex] = useState<number>(-1)
   const containerRef = useRef<HTMLDivElement>(null)
   const [sortColumn, setSortColumn] = useState<SortColumn | null>(null)
   const [sortDirection, setSortDirection] = useState<SortDirection>(null)
@@ -75,7 +79,7 @@ function DataTable() {
       ) {
         return
       }
-      setSelectedIds(new Set())
+      setPinnedIds(new Set())
       setHoveredIndex(-1)
       setRangeAnchor(-1)
     }
@@ -101,18 +105,20 @@ function DataTable() {
     return sortedData.slice(start, start + pageSize)
   }, [sortedData, currentPage, pageSize])
 
-  // Helper to select a range of indices (inclusive)
-  const selectRange = useCallback((from: number, to: number) => {
-    const start = Math.min(from, to)
-    const end = Math.max(from, to)
-    const newSelected = new Set<number>()
-    for (let i = start; i <= end; i++) {
-      if (paginatedData[i]) {
-        newSelected.add(paginatedData[i].id)
+  // Compute selectedIds from pinnedIds + current range
+  const selectedIds = useMemo(() => {
+    const result = new Set(pinnedIds)
+    if (hoveredIndex >= 0 && rangeAnchor >= 0) {
+      const start = Math.min(hoveredIndex, rangeAnchor)
+      const end = Math.max(hoveredIndex, rangeAnchor)
+      for (let i = start; i <= end; i++) {
+        if (paginatedData[i]) {
+          result.add(paginatedData[i].id)
+        }
       }
     }
-    setSelectedIds(newSelected)
-  }, [paginatedData])
+    return result
+  }, [pinnedIds, hoveredIndex, rangeAnchor, paginatedData])
 
   // Sort handlers
   const sortNameAsc = useCallback(() => {
@@ -145,7 +151,7 @@ function DataTable() {
   }, [])
 
   // Row navigation actions (within current page)
-  // Regular up/down: move cursor and single-select
+  // Regular up/down: move cursor and single-select (clears pinned)
   useAction('nav:up', {
     label: 'Row up',
     group: 'Row Navigation',
@@ -155,9 +161,9 @@ function DataTable() {
         const newIndex = hoveredIndex - 1
         setHoveredIndex(newIndex)
         setRangeAnchor(newIndex)
-        setSelectedIds(new Set([paginatedData[newIndex].id]))
+        setPinnedIds(new Set())
       }
-    }, [paginatedData, hoveredIndex]),
+    }, [hoveredIndex]),
   })
 
   useAction('nav:down', {
@@ -169,12 +175,12 @@ function DataTable() {
         const newIndex = hoveredIndex + 1
         setHoveredIndex(newIndex)
         setRangeAnchor(newIndex)
-        setSelectedIds(new Set([paginatedData[newIndex].id]))
+        setPinnedIds(new Set())
       }
     }, [paginatedData, hoveredIndex]),
   })
 
-  // Shift+up/down: extend selection range from anchor
+  // Shift+up/down: extend selection range from anchor (preserves pinned)
   // If no cursor established, use mouse hover position as anchor
   useAction('nav:extend-up', {
     label: 'Extend up',
@@ -187,15 +193,12 @@ function DataTable() {
         const newIndex = Math.max(0, anchor - 1)
         setHoveredIndex(newIndex)
         setRangeAnchor(anchor)
-        selectRange(anchor, newIndex)
         return
       }
       if (hoveredIndex > 0) {
-        const newIndex = hoveredIndex - 1
-        setHoveredIndex(newIndex)
-        selectRange(rangeAnchor, newIndex)
+        setHoveredIndex(hoveredIndex - 1)
       }
-    }, [hoveredIndex, mouseHoverIndex, rangeAnchor, selectRange]),
+    }, [hoveredIndex, mouseHoverIndex]),
   })
 
   useAction('nav:extend-down', {
@@ -209,15 +212,12 @@ function DataTable() {
         const newIndex = Math.min(paginatedData.length - 1, anchor + 1)
         setHoveredIndex(newIndex)
         setRangeAnchor(anchor)
-        selectRange(anchor, newIndex)
         return
       }
       if (hoveredIndex < paginatedData.length - 1) {
-        const newIndex = hoveredIndex + 1
-        setHoveredIndex(newIndex)
-        selectRange(rangeAnchor, newIndex)
+        setHoveredIndex(hoveredIndex + 1)
       }
-    }, [paginatedData, hoveredIndex, mouseHoverIndex, rangeAnchor, selectRange]),
+    }, [paginatedData, hoveredIndex, mouseHoverIndex]),
   })
 
   useAction('nav:first', {
@@ -228,7 +228,7 @@ function DataTable() {
       if (paginatedData.length > 0) {
         setHoveredIndex(0)
         setRangeAnchor(0)
-        setSelectedIds(new Set([paginatedData[0].id]))
+        setPinnedIds(new Set())
       }
     }, [paginatedData]),
   })
@@ -242,12 +242,12 @@ function DataTable() {
         const lastIndex = paginatedData.length - 1
         setHoveredIndex(lastIndex)
         setRangeAnchor(lastIndex)
-        setSelectedIds(new Set([paginatedData[lastIndex].id]))
+        setPinnedIds(new Set())
       }
     }, [paginatedData]),
   })
 
-  // Select to start/end of page
+  // Meta+shift: extend current range to start/end (preserves pinned)
   useAction('nav:select-to-first', {
     label: 'Select to first',
     group: 'Row Navigation',
@@ -255,9 +255,8 @@ function DataTable() {
     handler: useCallback(() => {
       if (paginatedData.length > 0) {
         setHoveredIndex(0)
-        selectRange(rangeAnchor, 0)
       }
-    }, [paginatedData, rangeAnchor, selectRange]),
+    }, [paginatedData]),
   })
 
   useAction('nav:select-to-last', {
@@ -266,11 +265,9 @@ function DataTable() {
     defaultBindings: ['meta+shift+arrowdown'],
     handler: useCallback(() => {
       if (paginatedData.length > 0) {
-        const lastIndex = paginatedData.length - 1
-        setHoveredIndex(lastIndex)
-        selectRange(rangeAnchor, lastIndex)
+        setHoveredIndex(paginatedData.length - 1)
       }
-    }, [paginatedData, rangeAnchor, selectRange]),
+    }, [paginatedData]),
   })
 
   useAction('nav:select-all', {
@@ -279,7 +276,9 @@ function DataTable() {
     defaultBindings: ['ctrl+a'],
     handler: useCallback(() => {
       if (paginatedData.length > 0) {
-        setSelectedIds(new Set(paginatedData.map(r => r.id)))
+        setPinnedIds(new Set(paginatedData.map(r => r.id)))
+        setHoveredIndex(-1)
+        setRangeAnchor(-1)
       }
     }, [paginatedData]),
   })
@@ -526,26 +525,29 @@ function DataTable() {
                 onMouseEnter={() => setMouseHoverIndex(index)}
                 onMouseLeave={() => setMouseHoverIndex(-1)}
                 onClick={(e) => {
-                  setHoveredIndex(index)
                   if (e.shiftKey) {
-                    // Shift-click: range select from anchor to clicked
-                    selectRange(rangeAnchor, index)
+                    // Shift-click: extend range from anchor to clicked (preserves pinned)
+                    setHoveredIndex(index)
                   } else if (e.metaKey || e.ctrlKey) {
-                    // Meta/Ctrl-click: toggle selection, start new range anchor
-                    setRangeAnchor(index)
-                    setSelectedIds(prev => {
-                      const next = new Set(prev)
-                      if (next.has(row.id)) {
-                        next.delete(row.id)
-                      } else {
-                        next.add(row.id)
-                      }
-                      return next
-                    })
+                    // Meta/Ctrl-click: toggle if selected, otherwise add to selection
+                    if (selectedIds.has(row.id)) {
+                      // Deselect: remove from pinned, clear range if it was the cursor
+                      const newPinned = new Set(selectedIds)
+                      newPinned.delete(row.id)
+                      setPinnedIds(newPinned)
+                      setHoveredIndex(-1)
+                      setRangeAnchor(-1)
+                    } else {
+                      // Add: pin current selection, start new range at clicked
+                      setPinnedIds(new Set(selectedIds))
+                      setRangeAnchor(index)
+                      setHoveredIndex(index)
+                    }
                   } else {
-                    // Normal click: single select
+                    // Normal click: single select (clears pinned)
+                    setPinnedIds(new Set())
                     setRangeAnchor(index)
-                    setSelectedIds(new Set([row.id]))
+                    setHoveredIndex(index)
                   }
                 }}
               >
