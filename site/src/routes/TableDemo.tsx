@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   createTwoColumnRenderer,
   Kbd,
@@ -45,10 +45,12 @@ type SortColumn = 'name' | 'status' | 'value'
 function DataTable() {
   const [data, setData] = useState<DataRow[]>(INITIAL_DATA)
   const [history, setHistory] = useState<DataRow[][]>([]) // for undo
-  // Multi-select state: hoveredIndex is cursor position, selectedIds is the selection set
+  // Multi-select state: hoveredIndex is keyboard cursor position, selectedIds is the selection set
   const [hoveredIndex, setHoveredIndex] = useState<number>(0)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set([1]))
   const [rangeAnchor, setRangeAnchor] = useState<number>(0) // index for shift-selection
+  const [mouseHoverIndex, setMouseHoverIndex] = useState<number>(-1) // track mouse hover separately
+  const containerRef = useRef<HTMLDivElement>(null)
   const [sortColumn, setSortColumn] = useState<SortColumn | null>(null)
   const [sortDirection, setSortDirection] = useState<SortDirection>(null)
   const [currentPage, setCurrentPage] = useState(1)
@@ -59,6 +61,27 @@ function DataTable() {
   const saveHistory = useCallback(() => {
     setHistory(prev => [...prev.slice(-19), data])
   }, [data])
+
+  // Document-level click handler for deselection
+  useEffect(() => {
+    const handleDocumentClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      // Don't deselect if clicking inside table container, modals, or omnibar
+      if (
+        containerRef.current?.contains(target) ||
+        target.closest('.kbd-modal') ||
+        target.closest('.kbd-backdrop') ||
+        target.closest('.kbd-omnibar')
+      ) {
+        return
+      }
+      setSelectedIds(new Set())
+      setHoveredIndex(-1)
+      setRangeAnchor(-1)
+    }
+    document.addEventListener('click', handleDocumentClick)
+    return () => document.removeEventListener('click', handleDocumentClick)
+  }, [])
 
   // Sorted data
   const sortedData = useMemo(() => {
@@ -152,17 +175,27 @@ function DataTable() {
   })
 
   // Shift+up/down: extend selection range from anchor
+  // If no cursor established, use mouse hover position as anchor
   useAction('nav:extend-up', {
     label: 'Extend up',
     group: 'Row Navigation',
     defaultBindings: ['shift+k', 'shift+arrowup'],
     handler: useCallback(() => {
+      // If no cursor, initialize from mouse hover
+      if (hoveredIndex < 0 && mouseHoverIndex >= 0) {
+        const anchor = mouseHoverIndex
+        const newIndex = Math.max(0, anchor - 1)
+        setHoveredIndex(newIndex)
+        setRangeAnchor(anchor)
+        selectRange(anchor, newIndex)
+        return
+      }
       if (hoveredIndex > 0) {
         const newIndex = hoveredIndex - 1
         setHoveredIndex(newIndex)
         selectRange(rangeAnchor, newIndex)
       }
-    }, [hoveredIndex, rangeAnchor, selectRange]),
+    }, [hoveredIndex, mouseHoverIndex, rangeAnchor, selectRange]),
   })
 
   useAction('nav:extend-down', {
@@ -170,12 +203,21 @@ function DataTable() {
     group: 'Row Navigation',
     defaultBindings: ['shift+j', 'shift+arrowdown'],
     handler: useCallback(() => {
+      // If no cursor, initialize from mouse hover
+      if (hoveredIndex < 0 && mouseHoverIndex >= 0) {
+        const anchor = mouseHoverIndex
+        const newIndex = Math.min(paginatedData.length - 1, anchor + 1)
+        setHoveredIndex(newIndex)
+        setRangeAnchor(anchor)
+        selectRange(anchor, newIndex)
+        return
+      }
       if (hoveredIndex < paginatedData.length - 1) {
         const newIndex = hoveredIndex + 1
         setHoveredIndex(newIndex)
         selectRange(rangeAnchor, newIndex)
       }
-    }, [paginatedData, hoveredIndex, rangeAnchor, selectRange]),
+    }, [paginatedData, hoveredIndex, mouseHoverIndex, rangeAnchor, selectRange]),
   })
 
   useAction('nav:first', {
@@ -457,20 +499,8 @@ function DataTable() {
   const startRow = (currentPage - 1) * pageSize + 1
   const endRow = Math.min(currentPage * pageSize, sortedData.length)
 
-  // Deselect when clicking outside the table
-  const handleContainerClick = useCallback((e: React.MouseEvent) => {
-    const target = e.target as HTMLElement
-    // Don't deselect if clicking inside table, pagination, or modals
-    if (target.closest('.data-table') || target.closest('.pagination-controls') || target.closest('.kbd-modal') || target.closest('.kbd-backdrop')) {
-      return
-    }
-    setSelectedIds(new Set())
-    setHoveredIndex(-1)
-    setRangeAnchor(-1)
-  }, [])
-
   return (
-    <div className="data-table-app" onClick={handleContainerClick}>
+    <div className="data-table-app" ref={containerRef}>
       <h1 id="demo">Data Table Demo</h1>
       <p className="hint">
         Press <Kbd action="__hotkeys:modal" /> for shortcuts.
@@ -493,6 +523,8 @@ function DataTable() {
               <tr
                 key={row.id}
                 className={`${isCursor ? 'cursor' : ''} ${isSelected ? 'selected' : ''}`}
+                onMouseEnter={() => setMouseHoverIndex(index)}
+                onMouseLeave={() => setMouseHoverIndex(-1)}
                 onClick={(e) => {
                   setHoveredIndex(index)
                   if (e.shiftKey) {
