@@ -101,6 +101,6 @@ jobs:
   release:
     needs: build-and-test
     if: startsWith(github.ref, 'refs/tags/v')
-    uses: runsascoded/gh-pnpm-release/.github/workflows/release.yml@v1
+    uses: runsascoded/pnpm-release/.github/workflows/release.yml@v1
     secrets:
       npm_token: ${{ secrets.NPM_TOKEN }}
