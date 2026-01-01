@@ -1,5 +1,5 @@
 import { Fragment, MouseEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { DEFAULT_SEQUENCE_TIMEOUT } from './constants'
+import { ACTION_MODAL, DEFAULT_SEQUENCE_TIMEOUT } from './constants'
 import { useMaybeHotkeysContext } from './HotkeysProvider'
 import { getKeyIcon } from './KeyIcons'
 import { ModifierIcon } from './ModifierIcons'
@@ -564,7 +564,7 @@ export function ShortcutsModal({
   }, [ctx])
 
   // Register the shortcuts modal trigger action
-  useAction('__hotkeys:modal', {
+  useAction(ACTION_MODAL, {
     label: 'Show shortcuts',
     group: 'Global',
     defaultBindings: defaultBinding ? [defaultBinding] : [],

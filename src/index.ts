@@ -41,7 +41,7 @@ export { useEditableHotkeys } from './useEditableHotkeys'
 export { useOmnibar } from './useOmnibar'
 
 // Components
-export { Kbd, Key } from './Kbd'
+export { Kbd, Key, KbdModal, KbdOmnibar, KbdLookup } from './Kbd'
 export type { KbdProps } from './Kbd'
 export { KeybindingEditor } from './KeybindingEditor'
 export { LookupModal } from './LookupModal'
@@ -92,4 +92,9 @@ export {
 export type { FuzzyMatchResult, KeyConflict } from './utils'
 
 // Constants
-export { DEFAULT_SEQUENCE_TIMEOUT } from './constants'
+export {
+  DEFAULT_SEQUENCE_TIMEOUT,
+  ACTION_MODAL,
+  ACTION_OMNIBAR,
+  ACTION_LOOKUP,
+} from './constants'

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { ACTION_LOOKUP } from './constants'
 import { useHotkeysContext } from './HotkeysProvider'
 import { useAction } from './useAction'
 import type { HotkeySequence, KeyCombination } from './types'
@@ -43,7 +44,7 @@ export function LookupModal({ defaultBinding = 'meta+shift+k' }: LookupModalProp
   } = useHotkeysContext()
 
   // Register the lookup modal trigger action
-  useAction('__hotkeys:lookup', {
+  useAction(ACTION_LOOKUP, {
     label: 'Key lookup',
     group: 'Global',
     defaultBindings: defaultBinding ? [defaultBinding] : [],

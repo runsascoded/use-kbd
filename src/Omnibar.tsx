@@ -1,4 +1,5 @@
 import { Fragment, KeyboardEvent, MouseEvent, ReactNode, RefObject, useCallback, useEffect, useRef } from 'react'
+import { ACTION_OMNIBAR } from './constants'
 import { useMaybeHotkeysContext } from './HotkeysProvider'
 import { ModifierIcon } from './ModifierIcons'
 import { useAction } from './useAction'
@@ -154,7 +155,7 @@ export function Omnibar({
   const keymap = keymapProp ?? ctx?.registry.keymap ?? {}
 
   // Register the omnibar trigger action (only works within HotkeysProvider)
-  useAction('__hotkeys:omnibar', {
+  useAction(ACTION_OMNIBAR, {
     label: 'Command palette',
     group: 'Global',
     defaultBindings: defaultBinding ? [defaultBinding] : [],

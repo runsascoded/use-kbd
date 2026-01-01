@@ -1,4 +1,4 @@
-import { Kbd, ShortcutsModal } from 'use-kbd'
+import { Kbd, KbdModal, KbdOmnibar, KbdLookup, ShortcutsModal } from 'use-kbd'
 import { A } from '../components/A'
 import { CodeBlock } from '../components/CodeBlock'
 import { DemoThumbnail } from '../components/DemoThumbnail'
@@ -17,7 +17,7 @@ Add keyboard shortcuts, navigation, omnibar to React apps:
 3. **CSS variables** for easy theming customization
 
 <div className="hint">
-  Press <Kbd action="__hotkeys:modal" /> for shortcuts, <Kbd action="__hotkeys:omnibar" /> for command palette, <Kbd action="__hotkeys:lookup" /> for shortcut lookup, or start a sequence (e.g. <code>G</code>…).
+  Press <KbdModal /> for shortcuts, <KbdOmnibar /> for command palette, <KbdLookup /> for shortcut lookup, or start a sequence (e.g. <code>G</code>…).
 </div>
 
 ## Demos
@@ -65,9 +65,9 @@ Add keyboard shortcuts, navigation, omnibar to React apps:
 
 ## Features
 
-- **Editable Shortcuts** - Click any shortcut in modal to rebind
-- **Global Omnibar** - Search all actions across pages
-- **Sequences** - Multi-key shortcuts like <Kbd action="link:/" first />
+- **Editable Shortcuts** - <KbdModal />, edit shortcuts in modal to rebind
+- **Global Omnibar** - <KbdOmnibar /> Search all actions across pages
+- **Sequences** - Multi-key shortcuts like <Kbd action="link:/table" first />
 - **ActionLink** - Navigation links auto-register as omnibar actions
 - **Persisted Bindings** - Custom shortcuts saved to localStorage
 

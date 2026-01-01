@@ -1,4 +1,5 @@
 import { Fragment, ReactNode, useEffect, useRef } from 'react'
+import { ACTION_LOOKUP, ACTION_MODAL, ACTION_OMNIBAR } from './constants'
 import { useMaybeHotkeysContext } from './HotkeysProvider'
 import { getKeyIcon } from './KeyIcons'
 import { ModifierIcon } from './ModifierIcons'
@@ -168,4 +169,30 @@ export function Kbd({
  */
 export function Key(props: Omit<KbdProps, 'clickable'>) {
   return <Kbd {...props} clickable={false} />
+}
+
+type BuiltinKbdProps = Omit<KbdProps, 'action'>
+
+/**
+ * Kbd for the ShortcutsModal trigger (default: `?`).
+ * @example <KbdModal /> // Shows "?" or user's custom binding
+ */
+export function KbdModal(props: BuiltinKbdProps) {
+  return <Kbd {...props} action={ACTION_MODAL} />
+}
+
+/**
+ * Kbd for the Omnibar trigger (default: `⌘K`).
+ * @example <KbdOmnibar /> // Shows "⌘K" or user's custom binding
+ */
+export function KbdOmnibar(props: BuiltinKbdProps) {
+  return <Kbd {...props} action={ACTION_OMNIBAR} />
+}
+
+/**
+ * Kbd for the LookupModal trigger (default: `⌘⇧K`).
+ * @example <KbdLookup /> // Shows "⌘⇧K" or user's custom binding
+ */
+export function KbdLookup(props: BuiltinKbdProps) {
+  return <Kbd {...props} action={ACTION_LOOKUP} />
 }
