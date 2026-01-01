@@ -34,6 +34,7 @@ export function FloatingControls() {
   useEffect(() => {
     if (theme !== prevTheme.current) {
       prevTheme.current = theme
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: show controls on theme change
       setIsVisible(true)
       // Increment key to force animation restart even if already visible
       setThemeChangeKey(k => k + 1)

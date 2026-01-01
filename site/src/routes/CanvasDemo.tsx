@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Kbd, ShortcutsModal, useAction } from 'use-kbd'
+import { Kbd, ShortcutsModal, useAction, useActions } from 'use-kbd'
 import 'use-kbd/styles.css'
 import { useTheme } from '../contexts/ThemeContext'
 
@@ -193,14 +193,19 @@ function Canvas() {
   })
 
   // Color actions (prefix with key number for proper sort order in modal)
-  COLORS.forEach(c => {
-    useAction(`color:${c.key}-${c.name.toLowerCase()}`, {
-      label: c.name,
-      group: 'Colors',
-      defaultBindings: [c.key],
-      handler: () => setColor(c.value),
-    })
-  })
+  useActions(
+    Object.fromEntries(
+      COLORS.map(c => [
+        `color:${c.key}-${c.name.toLowerCase()}`,
+        {
+          label: c.name,
+          group: 'Colors',
+          defaultBindings: [c.key],
+          handler: () => setColor(c.value),
+        },
+      ])
+    )
+  )
 
   // Size actions
   useAction('size:decrease', {
