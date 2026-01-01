@@ -1,6 +1,6 @@
 import * as react_jsx_runtime from 'react/jsx-runtime';
 import * as react from 'react';
-import { ReactNode, RefObject, CSSProperties, ComponentType } from 'react';
+import { ReactNode, RefObject, SVGProps, CSSProperties } from 'react';
 
 /**
  * Represents a single key press (possibly with modifiers)
@@ -53,6 +53,8 @@ interface RecordHotkeyResult {
     pendingKeys: HotkeySequence;
     /** The key currently being held (for live UI feedback during recording) */
     activeKeys: KeyCombination | null;
+    /** The timeout duration for sequences (ms) */
+    sequenceTimeout: number;
     /**
      * @deprecated Use `sequence` instead
      */
@@ -72,7 +74,9 @@ interface RecordHotkeyOptions {
     onShiftTab?: () => void;
     /** Prevent default on captured keys (default: true) */
     preventDefault?: boolean;
-    /** Timeout in ms before sequence is submitted (default: 1000) */
+    /** Timeout in ms before sequence is submitted (default: DEFAULT_SEQUENCE_TIMEOUT).
+     * Set to 0 for immediate submit (no sequences - first key press is captured).
+     * Set to Infinity for no auto-submit (user must explicitly commit via Enter/Tab). */
     sequenceTimeout?: number;
     /** When true, pause the auto-submit timeout (useful for conflict warnings). Default: false */
     pauseTimeout?: boolean;
@@ -146,7 +150,7 @@ interface UseHotkeysOptions {
     stopPropagation?: boolean;
     /** Enable hotkeys even when focused on input/textarea/select (default: false) */
     enableOnFormTags?: boolean;
-    /** Timeout in ms for sequences (default: 1000) */
+    /** Timeout in ms for sequences (default: DEFAULT_SEQUENCE_TIMEOUT) */
     sequenceTimeout?: number;
     /** What happens on timeout: 'submit' executes current sequence, 'cancel' resets (default: 'submit') */
     onTimeout?: 'submit' | 'cancel';
@@ -183,8 +187,7 @@ interface UseHotkeysResult {
  * // Sequences
  * const { pendingKeys, isAwaitingSequence } = useHotkeys(
  *   { '2 w': 'twoWeeks', '2 d': 'twoDays' },
- *   { twoWeeks: () => setRange('2w'), twoDays: () => setRange('2d') },
- *   { sequenceTimeout: 1000 }
+ *   { twoWeeks: () => setRange('2w'), twoDays: () => setRange('2d') }
  * )
  * ```
  */
@@ -503,6 +506,8 @@ interface ShortcutsModalProps {
     title?: string;
     /** Hint text shown below title (e.g., "Click any key to customize") */
     hint?: string;
+    /** Whether to show actions with no bindings (default: true in editable mode, false otherwise) */
+    showUnbound?: boolean;
 }
 interface ShortcutsModalRenderProps {
     groups: ShortcutGroup[];
@@ -543,7 +548,7 @@ interface ShortcutsModalRenderProps {
  * />
  * ```
  */
-declare function ShortcutsModal({ keymap: keymapProp, defaults: defaultsProp, labels: labelsProp, descriptions: descriptionsProp, groups: groupNamesProp, groupOrder, groupRenderers, isOpen: isOpenProp, onClose: onCloseProp, openKey, autoRegisterOpen, editable, onBindingChange, onBindingAdd, onBindingRemove, onReset, multipleBindings, children, backdropClassName, modalClassName, title, hint, }: ShortcutsModalProps): react_jsx_runtime.JSX.Element | null;
+declare function ShortcutsModal({ keymap: keymapProp, defaults: defaultsProp, labels: labelsProp, descriptions: descriptionsProp, groups: groupNamesProp, groupOrder, groupRenderers, isOpen: isOpenProp, onClose: onCloseProp, openKey, autoRegisterOpen, editable, onBindingChange, onBindingAdd, onBindingRemove, onReset, multipleBindings, children, backdropClassName, modalClassName, title, hint, showUnbound, }: ShortcutsModalProps): react_jsx_runtime.JSX.Element | null;
 
 /**
  * Configuration for a row in a two-column table
@@ -697,6 +702,16 @@ declare function formatKeyForDisplay(key: string): string;
  */
 declare function formatCombination(combo: KeyCombination): KeyCombinationDisplay;
 declare function formatCombination(sequence: HotkeySequence): KeyCombinationDisplay;
+/**
+ * Format a binding string for display.
+ * Takes a binding like "meta+k" or "2 w" and returns a display string like "⌘K" or "2 W".
+ *
+ * @example
+ * formatBinding('meta+k') // "⌘K" on Mac, "Ctrl+K" on Windows
+ * formatBinding('2 w')    // "2 W"
+ * formatBinding('?')      // "?"
+ */
+declare function formatBinding(binding: string): string;
 /**
  * Check if a key is a modifier key
  */
@@ -874,12 +889,14 @@ interface ActionsRegistryValue {
     actionRegistry: ActionRegistry;
     /** Get all bindings for an action (defaults + overrides) */
     getBindingsForAction: (id: string) => string[];
+    /** Get the first binding for an action (convenience for display) */
+    getFirstBindingForAction: (id: string) => string | undefined;
     /** User's binding overrides */
     overrides: Record<string, string | string[]>;
     /** Set a user override for a binding */
     setBinding: (actionId: string, key: string) => void;
-    /** Remove a binding */
-    removeBinding: (key: string) => void;
+    /** Remove a binding for a specific action */
+    removeBinding: (actionId: string, key: string) => void;
     /** Reset all overrides */
     resetOverrides: () => void;
 }
@@ -900,7 +917,7 @@ declare function useActionsRegistry(options?: UseActionsRegistryOptions): Action
 interface HotkeysConfig {
     /** Storage key for persisting user binding overrides */
     storageKey?: string;
-    /** Timeout in ms before a sequence auto-submits (default: 1000) */
+    /** Timeout in ms before a sequence auto-submits (default: DEFAULT_SEQUENCE_TIMEOUT) */
     sequenceTimeout?: number;
     /** When true, keys with conflicts are disabled (default: true) */
     disableConflicts?: boolean;
@@ -955,6 +972,8 @@ interface HotkeysContextValue {
     searchActions: (query: string) => ReturnType<typeof searchActions>;
     /** Get sequence completions for pending keys */
     getCompletions: (pendingKeys: HotkeySequence) => ReturnType<typeof getSequenceCompletions>;
+    /** Cancel the current sequence */
+    cancelSequence: () => void;
 }
 interface HotkeysProviderProps {
     config?: HotkeysConfig;
@@ -1020,7 +1039,7 @@ declare function useMaybeHotkeysContext(): HotkeysContextValue | null;
  *       console.log('Captured:', display.display) // "2 W" or "⌘K"
  *       saveKeybinding(display.id) // "2 w" or "meta+k"
  *     },
- *     sequenceTimeout: 1000,
+ *     sequenceTimeout: 800, // custom timeout
  *   })
  *
  *   return (
@@ -1037,28 +1056,99 @@ declare function useMaybeHotkeysContext(): HotkeysContextValue | null;
  */
 declare function useRecordHotkey(options?: RecordHotkeyOptions): RecordHotkeyResult;
 
+interface KbdProps {
+    /** Action ID to display binding(s) for */
+    action: string;
+    /** Separator between multiple bindings (default: " / ") */
+    separator?: string;
+    /** Only show the first binding */
+    first?: boolean;
+    /** Fallback content when no bindings exist */
+    fallback?: React.ReactNode;
+    /** Additional className */
+    className?: string;
+    /** Make the kbd clickable to trigger the action */
+    clickable?: boolean;
+}
+/**
+ * Display the current binding(s) for an action (clickable by default).
+ *
+ * Automatically updates when users customize their bindings.
+ * Uses SVG icons for modifiers (⌘, ⌥, ⇧, ⌃) and special keys (arrows, enter, etc.)
+ *
+ * @example
+ * ```tsx
+ * // Clickable kbd that triggers the action (default)
+ * <p>Press <Kbd action="help" /> to see shortcuts</p>
+ *
+ * // Non-clickable for pure display (use Key alias or clickable={false})
+ * <p>Navigate with <Key action="next" /> to go to next item</p>
+ *
+ * // Show only the first binding
+ * <p>Press <Kbd action="next" first /> to go to next item</p>
+ *
+ * // Custom separator for multiple bindings
+ * <p>Navigate with <Key action="next" separator=" or " /></p>
+ *
+ * // With fallback when no binding exists
+ * <Kbd action="customAction" fallback="(unbound)" />
+ * ```
+ */
+declare function Kbd({ action, separator, first, fallback, className, clickable, }: KbdProps): react_jsx_runtime.JSX.Element | null;
+/**
+ * Non-clickable variant of Kbd for pure display/documentation purposes.
+ * Alias for `<Kbd clickable={false} ... />`
+ */
+declare function Key(props: Omit<KbdProps, 'clickable'>): react_jsx_runtime.JSX.Element;
+
 declare function SequenceModal(): react_jsx_runtime.JSX.Element | null;
 
-interface ModifierIconProps {
+interface ModifierIconProps extends SVGProps<SVGSVGElement> {
     className?: string;
     style?: CSSProperties;
 }
 /** Command/Meta key icon (⌘) */
-declare function CommandIcon({ className, style }: ModifierIconProps): react_jsx_runtime.JSX.Element;
+declare const Command: react.ForwardRefExoticComponent<Omit<ModifierIconProps, "ref"> & react.RefAttributes<SVGSVGElement>>;
 /** Control key icon (^) - chevron/caret */
-declare function CtrlIcon({ className, style }: ModifierIconProps): react_jsx_runtime.JSX.Element;
+declare const Ctrl: react.ForwardRefExoticComponent<Omit<ModifierIconProps, "ref"> & react.RefAttributes<SVGSVGElement>>;
 /** Shift key icon (⇧) - hollow arrow */
-declare function ShiftIcon({ className, style }: ModifierIconProps): react_jsx_runtime.JSX.Element;
+declare const Shift: react.ForwardRefExoticComponent<Omit<ModifierIconProps, "ref"> & react.RefAttributes<SVGSVGElement>>;
 /** Option key icon (⌥) - macOS style */
-declare function OptIcon({ className, style }: ModifierIconProps): react_jsx_runtime.JSX.Element;
+declare const Option: react.ForwardRefExoticComponent<Omit<ModifierIconProps, "ref"> & react.RefAttributes<SVGSVGElement>>;
 /** Alt key icon (⎇) - Windows style, though "Alt" text is more common on Windows */
-declare function AltIcon({ className, style }: ModifierIconProps): react_jsx_runtime.JSX.Element;
+declare const Alt: react.ForwardRefExoticComponent<Omit<ModifierIconProps, "ref"> & react.RefAttributes<SVGSVGElement>>;
 type ModifierType = 'meta' | 'ctrl' | 'shift' | 'alt' | 'opt';
 /** Get the appropriate icon component for a modifier key */
-declare function getModifierIcon(modifier: ModifierType): ComponentType<ModifierIconProps>;
+declare function getModifierIcon(modifier: ModifierType): typeof Command;
 /** Render a modifier icon by name */
-declare function ModifierIcon({ modifier, ...props }: ModifierIconProps & {
+declare const ModifierIcon: react.ForwardRefExoticComponent<Omit<ModifierIconProps & {
     modifier: ModifierType;
-}): react_jsx_runtime.JSX.Element;
+}, "ref"> & react.RefAttributes<SVGSVGElement>>;
 
-export { type ActionConfig, type ActionDefinition, type ActionRegistry, type ActionSearchResult, ActionsRegistryContext, type ActionsRegistryValue, AltIcon, type BindingInfo, CommandIcon, CtrlIcon, type FuzzyMatchResult, type GroupRenderer, type GroupRendererProps, type HandlerMap, type HotkeyMap, type HotkeySequence, type HotkeysConfig, type HotkeysContextValue, HotkeysProvider, type HotkeysProviderProps, type KeyCombination, type KeyCombinationDisplay, type KeyConflict, KeybindingEditor, type KeybindingEditorProps, type KeybindingEditorRenderProps, ModifierIcon, type ModifierIconProps, type ModifierType, Omnibar, type OmnibarProps, type OmnibarRenderProps, OptIcon, type RecordHotkeyOptions, type RecordHotkeyResult, type RegisteredAction, type SequenceCompletion, SequenceModal, ShiftIcon, type ShortcutGroup, ShortcutsModal, type ShortcutsModalProps, type ShortcutsModalRenderProps, type TwoColumnConfig, type TwoColumnRow, type UseEditableHotkeysOptions, type UseEditableHotkeysResult, type UseHotkeysOptions, type UseHotkeysResult, type UseOmnibarOptions, type UseOmnibarResult, createTwoColumnRenderer, findConflicts, formatCombination, formatKeyForDisplay, fuzzyMatch, getActionBindings, getConflictsArray, getModifierIcon, getSequenceCompletions, hasConflicts, isMac, isModifierKey, isSequence, normalizeKey, parseCombinationId, parseHotkeyString, searchActions, useAction, useActions, useActionsRegistry, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useOmnibar, useRecordHotkey };
+interface KeyIconProps {
+    className?: string;
+    style?: CSSProperties;
+}
+/** Arrow Up icon (↑) */
+declare function Up({ className, style }: KeyIconProps): react_jsx_runtime.JSX.Element;
+/** Arrow Down icon (↓) */
+declare function Down({ className, style }: KeyIconProps): react_jsx_runtime.JSX.Element;
+/** Arrow Left icon (←) */
+declare function Left({ className, style }: KeyIconProps): react_jsx_runtime.JSX.Element;
+/** Arrow Right icon (→) */
+declare function Right({ className, style }: KeyIconProps): react_jsx_runtime.JSX.Element;
+/** Enter/Return icon (↵) */
+declare function Enter({ className, style }: KeyIconProps): react_jsx_runtime.JSX.Element;
+/** Backspace icon (⌫) */
+declare function Backspace({ className, style }: KeyIconProps): react_jsx_runtime.JSX.Element;
+type KeyIconType = 'arrowup' | 'arrowdown' | 'arrowleft' | 'arrowright' | 'enter' | 'backspace';
+/** Get the icon component for a key, or null if no icon exists */
+declare function getKeyIcon(key: string): React.ComponentType<KeyIconProps> | null;
+
+/**
+ * Default timeout in milliseconds before a key sequence auto-submits.
+ * Used when no explicit `sequenceTimeout` is provided.
+ */
+declare const DEFAULT_SEQUENCE_TIMEOUT = 1000;
+
+export { type ActionConfig, type ActionDefinition, type ActionRegistry, type ActionSearchResult, ActionsRegistryContext, type ActionsRegistryValue, Alt, Backspace, type BindingInfo, Command, Ctrl, DEFAULT_SEQUENCE_TIMEOUT, Down, Enter, type FuzzyMatchResult, type GroupRenderer, type GroupRendererProps, type HandlerMap, type HotkeyMap, type HotkeySequence, type HotkeysConfig, type HotkeysContextValue, HotkeysProvider, type HotkeysProviderProps, Kbd, type KbdProps, Key, type KeyCombination, type KeyCombinationDisplay, type KeyConflict, type KeyIconProps, type KeyIconType, KeybindingEditor, type KeybindingEditorProps, type KeybindingEditorRenderProps, Left, ModifierIcon, type ModifierIconProps, type ModifierType, Omnibar, type OmnibarProps, type OmnibarRenderProps, Option, type RecordHotkeyOptions, type RecordHotkeyResult, type RegisteredAction, Right, type SequenceCompletion, SequenceModal, Shift, type ShortcutGroup, ShortcutsModal, type ShortcutsModalProps, type ShortcutsModalRenderProps, type TwoColumnConfig, type TwoColumnRow, Up, type UseEditableHotkeysOptions, type UseEditableHotkeysResult, type UseHotkeysOptions, type UseHotkeysResult, type UseOmnibarOptions, type UseOmnibarResult, createTwoColumnRenderer, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasConflicts, isMac, isModifierKey, isSequence, normalizeKey, parseCombinationId, parseHotkeyString, searchActions, useAction, useActions, useActionsRegistry, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useOmnibar, useRecordHotkey };

@@ -187,34 +187,55 @@ function useActionsRegistry(options = {}) {
     }
     return bindings;
   }, [keymap]);
+  const getFirstBindingForAction = react.useCallback((actionId) => {
+    return getBindingsForAction(actionId)[0];
+  }, [getBindingsForAction]);
   const setBinding = react.useCallback((actionId, key) => {
-    updateOverrides((prev) => ({
-      ...prev,
-      [key]: actionId
-    }));
-  }, [updateOverrides]);
-  const removeBinding = react.useCallback((key) => {
-    const actionsWithDefault = [];
-    for (const [id, { config }] of actionsRef.current) {
-      if (config.defaultBindings?.includes(key)) {
-        actionsWithDefault.push(id);
-      }
-    }
-    if (actionsWithDefault.length > 0) {
+    if (isDefaultBinding(key, actionId)) {
       updateRemovedDefaults((prev) => {
-        const next = { ...prev };
-        for (const actionId of actionsWithDefault) {
-          const existing = next[actionId] ?? [];
-          if (!existing.includes(key)) {
-            next[actionId] = [...existing, key];
+        const existing = prev[actionId] ?? [];
+        if (existing.includes(key)) {
+          const filtered = existing.filter((k) => k !== key);
+          if (filtered.length === 0) {
+            const { [actionId]: _, ...rest } = prev;
+            return rest;
           }
+          return { ...prev, [actionId]: filtered };
         }
-        return next;
+        return prev;
+      });
+    } else {
+      updateOverrides((prev) => ({
+        ...prev,
+        [key]: actionId
+      }));
+    }
+  }, [updateOverrides, updateRemovedDefaults, isDefaultBinding]);
+  const removeBinding = react.useCallback((actionId, key) => {
+    const action = actionsRef.current.get(actionId);
+    const isDefault = action?.config.defaultBindings?.includes(key);
+    if (isDefault) {
+      updateRemovedDefaults((prev) => {
+        const existing = prev[actionId] ?? [];
+        if (existing.includes(key)) return prev;
+        return { ...prev, [actionId]: [...existing, key] };
       });
     }
     updateOverrides((prev) => {
-      const { [key]: _, ...rest } = prev;
-      return rest;
+      const boundAction = prev[key];
+      if (boundAction === actionId) {
+        const { [key]: _, ...rest } = prev;
+        return rest;
+      }
+      if (Array.isArray(boundAction) && boundAction.includes(actionId)) {
+        const newActions = boundAction.filter((a) => a !== actionId);
+        if (newActions.length === 0) {
+          const { [key]: _, ...rest } = prev;
+          return rest;
+        }
+        return { ...prev, [key]: newActions.length === 1 ? newActions[0] : newActions };
+      }
+      return prev;
     });
   }, [updateOverrides, updateRemovedDefaults]);
   const resetOverrides = react.useCallback(() => {
@@ -232,6 +253,7 @@ function useActionsRegistry(options = {}) {
     keymap,
     actionRegistry,
     getBindingsForAction,
+    getFirstBindingForAction,
     overrides,
     setBinding,
     removeBinding,
@@ -244,12 +266,16 @@ function useActionsRegistry(options = {}) {
     keymap,
     actionRegistry,
     getBindingsForAction,
+    getFirstBindingForAction,
     overrides,
     setBinding,
     removeBinding,
     resetOverrides
   ]);
 }
+
+// src/constants.ts
+var DEFAULT_SEQUENCE_TIMEOUT = 1e3;
 function isMac() {
   if (typeof navigator === "undefined") return false;
   return /Mac|iPod|iPhone|iPad/.test(navigator.platform);
@@ -355,6 +381,10 @@ function formatCombination(input) {
   }
   const single = formatSingleCombination(input);
   return { ...single, isSequence: false };
+}
+function formatBinding(binding) {
+  const parsed = parseHotkeyString(binding);
+  return formatCombination(parsed).display;
 }
 function isModifierKey(key) {
   return ["Control", "Alt", "Shift", "Meta"].includes(key);
@@ -653,7 +683,7 @@ function useHotkeys(keymap, handlers, options = {}) {
     preventDefault = true,
     stopPropagation = true,
     enableOnFormTags = false,
-    sequenceTimeout = 1e3,
+    sequenceTimeout = DEFAULT_SEQUENCE_TIMEOUT,
     onTimeout = "submit",
     onSequenceStart,
     onSequenceProgress,
@@ -732,7 +762,8 @@ function useHotkeys(keymap, handlers, options = {}) {
     const handleKeyDown = (e) => {
       if (!enableOnFormTags) {
         const eventTarget = e.target;
-        if (eventTarget instanceof HTMLInputElement || eventTarget instanceof HTMLTextAreaElement || eventTarget instanceof HTMLSelectElement || eventTarget.isContentEditable) {
+        const isTextInput = eventTarget instanceof HTMLInputElement && ["text", "email", "password", "search", "tel", "url", "number", "date", "datetime-local", "month", "time", "week"].includes(eventTarget.type);
+        if (isTextInput || eventTarget instanceof HTMLTextAreaElement || eventTarget instanceof HTMLSelectElement || eventTarget.isContentEditable) {
           return;
         }
       }
@@ -773,25 +804,27 @@ function useHotkeys(keymap, handlers, options = {}) {
           } else {
             onSequenceProgress?.(newSequence);
           }
-          setTimeoutStartedAt(Date.now());
-          timeoutRef.current = setTimeout(() => {
-            if (onTimeout === "submit") {
-              setPendingKeys((current) => {
-                if (current.length > 0) {
-                  onSequenceCancel?.();
-                }
-                return [];
-              });
-              setIsAwaitingSequence(false);
-              setTimeoutStartedAt(null);
-            } else {
-              setPendingKeys([]);
-              setIsAwaitingSequence(false);
-              setTimeoutStartedAt(null);
-              onSequenceCancel?.();
-            }
-            timeoutRef.current = null;
-          }, sequenceTimeout);
+          if (Number.isFinite(sequenceTimeout)) {
+            setTimeoutStartedAt(Date.now());
+            timeoutRef.current = setTimeout(() => {
+              if (onTimeout === "submit") {
+                setPendingKeys((current) => {
+                  if (current.length > 0) {
+                    onSequenceCancel?.();
+                  }
+                  return [];
+                });
+                setIsAwaitingSequence(false);
+                setTimeoutStartedAt(null);
+              } else {
+                setPendingKeys([]);
+                setIsAwaitingSequence(false);
+                setTimeoutStartedAt(null);
+                onSequenceCancel?.();
+              }
+              timeoutRef.current = null;
+            }, sequenceTimeout);
+          }
           if (preventDefault) {
             e.preventDefault();
           }
@@ -811,21 +844,23 @@ function useHotkeys(keymap, handlers, options = {}) {
           if (preventDefault) {
             e.preventDefault();
           }
-          setTimeoutStartedAt(Date.now());
-          timeoutRef.current = setTimeout(() => {
-            if (onTimeout === "submit") {
-              setPendingKeys([]);
-              setIsAwaitingSequence(false);
-              setTimeoutStartedAt(null);
-              onSequenceCancel?.();
-            } else {
-              setPendingKeys([]);
-              setIsAwaitingSequence(false);
-              setTimeoutStartedAt(null);
-              onSequenceCancel?.();
-            }
-            timeoutRef.current = null;
-          }, sequenceTimeout);
+          if (Number.isFinite(sequenceTimeout)) {
+            setTimeoutStartedAt(Date.now());
+            timeoutRef.current = setTimeout(() => {
+              if (onTimeout === "submit") {
+                setPendingKeys([]);
+                setIsAwaitingSequence(false);
+                setTimeoutStartedAt(null);
+                onSequenceCancel?.();
+              } else {
+                setPendingKeys([]);
+                setIsAwaitingSequence(false);
+                setTimeoutStartedAt(null);
+                onSequenceCancel?.();
+              }
+              timeoutRef.current = null;
+            }, sequenceTimeout);
+          }
         }
       }
     };
@@ -858,7 +893,7 @@ function useHotkeys(keymap, handlers, options = {}) {
 var HotkeysContext = react.createContext(null);
 var DEFAULT_CONFIG = {
   storageKey: "use-kbd",
-  sequenceTimeout: 1e3,
+  sequenceTimeout: DEFAULT_SEQUENCE_TIMEOUT,
   disableConflicts: true,
   minViewportWidth: 768,
   enableOnTouch: false,
@@ -949,6 +984,7 @@ function HotkeysProvider({
   const {
     pendingKeys,
     isAwaitingSequence,
+    cancelSequence,
     timeoutStartedAt: sequenceTimeoutStartedAt,
     sequenceTimeout
   } = useHotkeys(effectiveKeymap, handlers, {
@@ -977,6 +1013,7 @@ function HotkeysProvider({
     executeAction: registry.execute,
     pendingKeys,
     isAwaitingSequence,
+    cancelSequence,
     sequenceTimeoutStartedAt,
     sequenceTimeout,
     conflicts,
@@ -996,6 +1033,7 @@ function HotkeysProvider({
     toggleOmnibar,
     pendingKeys,
     isAwaitingSequence,
+    cancelSequence,
     sequenceTimeoutStartedAt,
     sequenceTimeout,
     conflicts,
@@ -1103,7 +1141,7 @@ function useRecordHotkey(options = {}) {
     onTab: onTabProp,
     onShiftTab: onShiftTabProp,
     preventDefault = true,
-    sequenceTimeout = 1e3,
+    sequenceTimeout = DEFAULT_SEQUENCE_TIMEOUT,
     pauseTimeout = false
   } = options;
   const onCapture = useEventCallback(onCaptureProp);
@@ -1180,9 +1218,13 @@ function useRecordHotkey(options = {}) {
       }
     } else if (isRecording && pendingKeysRef.current.length > 0 && !timeoutRef.current) {
       const currentSequence = pendingKeysRef.current;
-      timeoutRef.current = setTimeout(() => {
+      if (sequenceTimeout === 0) {
         submit(currentSequence);
-      }, sequenceTimeout);
+      } else if (Number.isFinite(sequenceTimeout)) {
+        timeoutRef.current = setTimeout(() => {
+          submit(currentSequence);
+        }, sequenceTimeout);
+      }
     }
   }, [pauseTimeout, isRecording, sequenceTimeout, submit]);
   react.useEffect(() => {
@@ -1290,7 +1332,9 @@ function useRecordHotkey(options = {}) {
         pendingKeysRef.current = newSequence;
         setPendingKeys(newSequence);
         clearTimeout_();
-        if (!pauseTimeoutRef.current) {
+        if (sequenceTimeout === 0) {
+          submit(newSequence);
+        } else if (!pauseTimeoutRef.current && Number.isFinite(sequenceTimeout)) {
           timeoutRef.current = setTimeout(() => {
             submit(newSequence);
           }, sequenceTimeout);
@@ -1316,6 +1360,7 @@ function useRecordHotkey(options = {}) {
     display,
     pendingKeys,
     activeKeys,
+    sequenceTimeout,
     combination
     // deprecated
   };
@@ -1561,6 +1606,339 @@ function useOmnibar(options) {
     isAwaitingSequence
   };
 }
+var baseStyle = {
+  width: "1em",
+  height: "1em",
+  verticalAlign: "middle"
+};
+function Up({ className, style }) {
+  return /* @__PURE__ */ jsxRuntime.jsx(
+    "svg",
+    {
+      className,
+      style: { ...baseStyle, ...style },
+      viewBox: "0 0 24 24",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: "3",
+      strokeLinecap: "round",
+      strokeLinejoin: "round",
+      children: /* @__PURE__ */ jsxRuntime.jsx("path", { d: "M12 19V5M5 12l7-7 7 7" })
+    }
+  );
+}
+function Down({ className, style }) {
+  return /* @__PURE__ */ jsxRuntime.jsx(
+    "svg",
+    {
+      className,
+      style: { ...baseStyle, ...style },
+      viewBox: "0 0 24 24",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: "3",
+      strokeLinecap: "round",
+      strokeLinejoin: "round",
+      children: /* @__PURE__ */ jsxRuntime.jsx("path", { d: "M12 5v14M5 12l7 7 7-7" })
+    }
+  );
+}
+function Left({ className, style }) {
+  return /* @__PURE__ */ jsxRuntime.jsx(
+    "svg",
+    {
+      className,
+      style: { ...baseStyle, ...style },
+      viewBox: "0 0 24 24",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: "3",
+      strokeLinecap: "round",
+      strokeLinejoin: "round",
+      children: /* @__PURE__ */ jsxRuntime.jsx("path", { d: "M19 12H5M12 5l-7 7 7 7" })
+    }
+  );
+}
+function Right({ className, style }) {
+  return /* @__PURE__ */ jsxRuntime.jsx(
+    "svg",
+    {
+      className,
+      style: { ...baseStyle, ...style },
+      viewBox: "0 0 24 24",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: "3",
+      strokeLinecap: "round",
+      strokeLinejoin: "round",
+      children: /* @__PURE__ */ jsxRuntime.jsx("path", { d: "M5 12h14M12 5l7 7-7 7" })
+    }
+  );
+}
+function Enter({ className, style }) {
+  return /* @__PURE__ */ jsxRuntime.jsxs(
+    "svg",
+    {
+      className,
+      style: { ...baseStyle, ...style },
+      viewBox: "0 0 24 24",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: "3",
+      strokeLinecap: "round",
+      strokeLinejoin: "round",
+      children: [
+        /* @__PURE__ */ jsxRuntime.jsx("path", { d: "M9 10l-4 4 4 4" }),
+        /* @__PURE__ */ jsxRuntime.jsx("path", { d: "M19 6v8a2 2 0 01-2 2H5" })
+      ]
+    }
+  );
+}
+function Backspace({ className, style }) {
+  return /* @__PURE__ */ jsxRuntime.jsxs(
+    "svg",
+    {
+      className,
+      style: { ...baseStyle, ...style },
+      viewBox: "0 0 24 24",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: "2",
+      strokeLinecap: "round",
+      strokeLinejoin: "round",
+      children: [
+        /* @__PURE__ */ jsxRuntime.jsx("path", { d: "M21 4H8l-7 8 7 8h13a2 2 0 002-2V6a2 2 0 00-2-2z" }),
+        /* @__PURE__ */ jsxRuntime.jsx("line", { x1: "18", y1: "9", x2: "12", y2: "15" }),
+        /* @__PURE__ */ jsxRuntime.jsx("line", { x1: "12", y1: "9", x2: "18", y2: "15" })
+      ]
+    }
+  );
+}
+function getKeyIcon(key) {
+  switch (key.toLowerCase()) {
+    case "arrowup":
+      return Up;
+    case "arrowdown":
+      return Down;
+    case "arrowleft":
+      return Left;
+    case "arrowright":
+      return Right;
+    case "enter":
+      return Enter;
+    case "backspace":
+      return Backspace;
+    default:
+      return null;
+  }
+}
+var baseStyle2 = {
+  width: "1.2em",
+  height: "1.2em",
+  marginRight: "2px",
+  verticalAlign: "middle"
+};
+var wideStyle = {
+  ...baseStyle2,
+  width: "1.4em"
+};
+var Command = react.forwardRef(
+  ({ className, style, ...props }, ref) => /* @__PURE__ */ jsxRuntime.jsx(
+    "svg",
+    {
+      ref,
+      className,
+      style: { ...baseStyle2, ...style },
+      viewBox: "0 0 24 24",
+      fill: "currentColor",
+      ...props,
+      children: /* @__PURE__ */ jsxRuntime.jsx("path", { d: "M6 4a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h2v4H6a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2v-2h4v2a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2v-2a2 2 0 0 0-2-2h-2v-4h2a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v2h-4V6a2 2 0 0 0-2-2H6zm4 6h4v4h-4v-4z" })
+    }
+  )
+);
+Command.displayName = "Command";
+var Ctrl = react.forwardRef(
+  ({ className, style, ...props }, ref) => /* @__PURE__ */ jsxRuntime.jsx(
+    "svg",
+    {
+      ref,
+      className,
+      style: { ...baseStyle2, ...style },
+      viewBox: "0 0 24 24",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: "3",
+      strokeLinecap: "round",
+      strokeLinejoin: "round",
+      ...props,
+      children: /* @__PURE__ */ jsxRuntime.jsx("path", { d: "M6 15l6-6 6 6" })
+    }
+  )
+);
+Ctrl.displayName = "Ctrl";
+var Shift = react.forwardRef(
+  ({ className, style, ...props }, ref) => /* @__PURE__ */ jsxRuntime.jsx(
+    "svg",
+    {
+      ref,
+      className,
+      style: { ...wideStyle, ...style },
+      viewBox: "0 0 28 24",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: "2",
+      strokeLinejoin: "round",
+      ...props,
+      children: /* @__PURE__ */ jsxRuntime.jsx("path", { d: "M14 3L3 14h6v7h10v-7h6L14 3z" })
+    }
+  )
+);
+Shift.displayName = "Shift";
+var Option = react.forwardRef(
+  ({ className, style, ...props }, ref) => /* @__PURE__ */ jsxRuntime.jsx(
+    "svg",
+    {
+      ref,
+      className,
+      style: { ...baseStyle2, ...style },
+      viewBox: "0 0 24 24",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: "2.5",
+      strokeLinecap: "round",
+      strokeLinejoin: "round",
+      ...props,
+      children: /* @__PURE__ */ jsxRuntime.jsx("path", { d: "M4 6h6l8 12h6M14 6h6" })
+    }
+  )
+);
+Option.displayName = "Option";
+var Alt = react.forwardRef(
+  ({ className, style, ...props }, ref) => /* @__PURE__ */ jsxRuntime.jsx(
+    "svg",
+    {
+      ref,
+      className,
+      style: { ...baseStyle2, ...style },
+      viewBox: "0 0 24 24",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: "2.5",
+      strokeLinecap: "round",
+      strokeLinejoin: "round",
+      ...props,
+      children: /* @__PURE__ */ jsxRuntime.jsx("path", { d: "M4 18h8M12 18l4-6M12 18l4 0M16 12l4-6h-8" })
+    }
+  )
+);
+Alt.displayName = "Alt";
+var isMac2 = typeof navigator !== "undefined" && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
+function getModifierIcon(modifier) {
+  switch (modifier) {
+    case "meta":
+      return Command;
+    case "ctrl":
+      return Ctrl;
+    case "shift":
+      return Shift;
+    case "opt":
+      return Option;
+    case "alt":
+      return isMac2 ? Option : Alt;
+  }
+}
+var ModifierIcon = react.forwardRef(
+  ({ modifier, ...props }, ref) => {
+    const Icon = getModifierIcon(modifier);
+    return /* @__PURE__ */ jsxRuntime.jsx(Icon, { ref, ...props });
+  }
+);
+ModifierIcon.displayName = "ModifierIcon";
+function KeyCombo({ combo }) {
+  const { key, modifiers } = combo;
+  const parts = [];
+  if (modifiers.meta) {
+    parts.push(/* @__PURE__ */ jsxRuntime.jsx(ModifierIcon, { modifier: "meta", className: "kbd-modifier-icon" }, "meta"));
+  }
+  if (modifiers.ctrl) {
+    parts.push(/* @__PURE__ */ jsxRuntime.jsx(ModifierIcon, { modifier: "ctrl", className: "kbd-modifier-icon" }, "ctrl"));
+  }
+  if (modifiers.alt) {
+    parts.push(/* @__PURE__ */ jsxRuntime.jsx(ModifierIcon, { modifier: "alt", className: "kbd-modifier-icon" }, "alt"));
+  }
+  if (modifiers.shift) {
+    parts.push(/* @__PURE__ */ jsxRuntime.jsx(ModifierIcon, { modifier: "shift", className: "kbd-modifier-icon" }, "shift"));
+  }
+  const KeyIcon = getKeyIcon(key);
+  if (KeyIcon) {
+    parts.push(/* @__PURE__ */ jsxRuntime.jsx(KeyIcon, { className: "kbd-key-icon" }, "key"));
+  } else {
+    parts.push(/* @__PURE__ */ jsxRuntime.jsx("span", { children: formatKeyForDisplay(key) }, "key"));
+  }
+  return /* @__PURE__ */ jsxRuntime.jsx(jsxRuntime.Fragment, { children: parts });
+}
+function BindingDisplay({ binding }) {
+  const sequence = parseHotkeyString(binding);
+  return /* @__PURE__ */ jsxRuntime.jsx(jsxRuntime.Fragment, { children: sequence.map((combo, i) => /* @__PURE__ */ jsxRuntime.jsxs(react.Fragment, { children: [
+    i > 0 && /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-sequence-sep", children: " " }),
+    /* @__PURE__ */ jsxRuntime.jsx(KeyCombo, { combo })
+  ] }, i)) });
+}
+function Kbd({
+  action,
+  separator = " / ",
+  first = false,
+  fallback = null,
+  className,
+  clickable = true
+}) {
+  const ctx = useMaybeHotkeysContext();
+  const warnedRef = react.useRef(false);
+  const bindings = ctx ? first ? [ctx.registry.getFirstBindingForAction(action)].filter(Boolean) : ctx.registry.getBindingsForAction(action) : [];
+  react.useEffect(() => {
+    if (!ctx) return;
+    if (warnedRef.current) return;
+    const timer = setTimeout(() => {
+      if (!ctx.registry.actions.has(action)) {
+        console.warn(`Kbd: Action "${action}" not found in registry`);
+        warnedRef.current = true;
+      }
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [ctx, action]);
+  if (!ctx) {
+    return null;
+  }
+  if (bindings.length === 0) {
+    return /* @__PURE__ */ jsxRuntime.jsx(jsxRuntime.Fragment, { children: fallback });
+  }
+  const content = bindings.map((binding, i) => /* @__PURE__ */ jsxRuntime.jsxs(react.Fragment, { children: [
+    i > 0 && separator,
+    /* @__PURE__ */ jsxRuntime.jsx(BindingDisplay, { binding })
+  ] }, binding));
+  if (clickable) {
+    return /* @__PURE__ */ jsxRuntime.jsx(
+      "kbd",
+      {
+        className: `${className || ""} kbd-clickable`.trim(),
+        onClick: () => ctx.executeAction(action),
+        role: "button",
+        tabIndex: 0,
+        onKeyDown: (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            ctx.executeAction(action);
+          }
+        },
+        children: content
+      }
+    );
+  }
+  return /* @__PURE__ */ jsxRuntime.jsx("kbd", { className, children: content });
+}
+function Key(props) {
+  return /* @__PURE__ */ jsxRuntime.jsx(Kbd, { ...props, clickable: false });
+}
 function buildActionMap(keymap) {
   const map = /* @__PURE__ */ new Map();
   for (const [key, actionOrActions] of Object.entries(keymap)) {
@@ -1748,110 +2126,6 @@ function KeybindingEditor({
     ] })
   ] });
 }
-var baseStyle = {
-  width: "1.2em",
-  height: "1.2em",
-  marginRight: "2px",
-  verticalAlign: "middle"
-};
-var wideStyle = {
-  ...baseStyle,
-  width: "1.4em"
-};
-function CommandIcon({ className, style }) {
-  return /* @__PURE__ */ jsxRuntime.jsx(
-    "svg",
-    {
-      className,
-      style: { ...baseStyle, ...style },
-      viewBox: "0 0 24 24",
-      fill: "currentColor",
-      children: /* @__PURE__ */ jsxRuntime.jsx("path", { d: "M6 4a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h2v4H6a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2v-2h4v2a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2v-2a2 2 0 0 0-2-2h-2v-4h2a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v2h-4V6a2 2 0 0 0-2-2H6zm4 6h4v4h-4v-4z" })
-    }
-  );
-}
-function CtrlIcon({ className, style }) {
-  return /* @__PURE__ */ jsxRuntime.jsx(
-    "svg",
-    {
-      className,
-      style: { ...baseStyle, ...style },
-      viewBox: "0 0 24 24",
-      fill: "none",
-      stroke: "currentColor",
-      strokeWidth: "3",
-      strokeLinecap: "round",
-      strokeLinejoin: "round",
-      children: /* @__PURE__ */ jsxRuntime.jsx("path", { d: "M6 15l6-6 6 6" })
-    }
-  );
-}
-function ShiftIcon({ className, style }) {
-  return /* @__PURE__ */ jsxRuntime.jsx(
-    "svg",
-    {
-      className,
-      style: { ...wideStyle, ...style },
-      viewBox: "0 0 28 24",
-      fill: "none",
-      stroke: "currentColor",
-      strokeWidth: "2",
-      strokeLinejoin: "round",
-      children: /* @__PURE__ */ jsxRuntime.jsx("path", { d: "M14 3L3 14h6v7h10v-7h6L14 3z" })
-    }
-  );
-}
-function OptIcon({ className, style }) {
-  return /* @__PURE__ */ jsxRuntime.jsx(
-    "svg",
-    {
-      className,
-      style: { ...baseStyle, ...style },
-      viewBox: "0 0 24 24",
-      fill: "none",
-      stroke: "currentColor",
-      strokeWidth: "2.5",
-      strokeLinecap: "round",
-      strokeLinejoin: "round",
-      children: /* @__PURE__ */ jsxRuntime.jsx("path", { d: "M4 6h6l8 12h6M14 6h6" })
-    }
-  );
-}
-function AltIcon({ className, style }) {
-  return /* @__PURE__ */ jsxRuntime.jsx(
-    "svg",
-    {
-      className,
-      style: { ...baseStyle, ...style },
-      viewBox: "0 0 24 24",
-      fill: "none",
-      stroke: "currentColor",
-      strokeWidth: "2.5",
-      strokeLinecap: "round",
-      strokeLinejoin: "round",
-      children: /* @__PURE__ */ jsxRuntime.jsx("path", { d: "M4 18h8M12 18l4-6M12 18l4 0M16 12l4-6h-8" })
-    }
-  );
-}
-var isMac2 = typeof navigator !== "undefined" && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
-function getModifierIcon(modifier) {
-  switch (modifier) {
-    case "meta":
-      return CommandIcon;
-    case "ctrl":
-      return CtrlIcon;
-    case "shift":
-      return ShiftIcon;
-    case "opt":
-      return OptIcon;
-    case "alt":
-      return isMac2 ? OptIcon : AltIcon;
-  }
-}
-function ModifierIcon({ modifier, ...props }) {
-  const Icon = getModifierIcon(modifier);
-  return /* @__PURE__ */ jsxRuntime.jsx(Icon, { ...props });
-}
 function BindingBadge({ binding }) {
   const sequence = parseHotkeyString(binding);
   return /* @__PURE__ */ jsxRuntime.jsx("kbd", { className: "kbd-kbd", children: sequence.map((combo, i) => /* @__PURE__ */ jsxRuntime.jsxs(react.Fragment, { children: [
@@ -1938,6 +2212,18 @@ function Omnibar({
       });
     }
   }, [isOpen]);
+  react.useEffect(() => {
+    if (!isOpen) return;
+    const handleGlobalKeyDown = (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        close();
+      }
+    };
+    document.addEventListener("keydown", handleGlobalKeyDown, true);
+    return () => document.removeEventListener("keydown", handleGlobalKeyDown, true);
+  }, [isOpen, close]);
   const handleKeyDown = react.useCallback(
     (e) => {
       switch (e.key) {
@@ -2024,6 +2310,7 @@ function SequenceModal() {
   const {
     pendingKeys,
     isAwaitingSequence,
+    cancelSequence,
     sequenceTimeoutStartedAt: timeoutStartedAt,
     sequenceTimeout,
     getCompletions,
@@ -2056,7 +2343,7 @@ function SequenceModal() {
   if (!isAwaitingSequence || pendingKeys.length === 0) {
     return null;
   }
-  return /* @__PURE__ */ jsxRuntime.jsx("div", { className: "kbd-sequence-backdrop", children: /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "kbd-sequence", children: [
+  return /* @__PURE__ */ jsxRuntime.jsx("div", { className: "kbd-sequence-backdrop", onClick: cancelSequence, children: /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "kbd-sequence", onClick: (e) => e.stopPropagation(), children: [
     /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "kbd-sequence-current", children: [
       /* @__PURE__ */ jsxRuntime.jsx("kbd", { className: "kbd-sequence-keys", children: formattedPendingKeys }),
       /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-sequence-ellipsis", children: "\u2026" })
@@ -2087,21 +2374,46 @@ function parseActionId(actionId) {
   }
   return { group: "General", name: actionId };
 }
-function organizeShortcuts(keymap, labels, descriptions, groupNames, groupOrder) {
+function organizeShortcuts(keymap, labels, descriptions, groupNames, groupOrder, actionRegistry, showUnbound = true) {
   const actionBindings = getActionBindings(keymap);
   const groupMap = /* @__PURE__ */ new Map();
+  const includedActions = /* @__PURE__ */ new Set();
+  const getGroupName = (actionId) => {
+    const registeredGroup = actionRegistry?.[actionId]?.group;
+    if (registeredGroup) return registeredGroup;
+    const { group: groupKey } = parseActionId(actionId);
+    return groupNames?.[groupKey] ?? groupKey;
+  };
   for (const [actionId, bindings] of actionBindings) {
-    const { group: groupKey, name } = parseActionId(actionId);
-    const groupName = groupNames?.[groupKey] ?? groupKey;
+    includedActions.add(actionId);
+    const { name } = parseActionId(actionId);
+    const groupName = getGroupName(actionId);
     if (!groupMap.has(groupName)) {
       groupMap.set(groupName, { name: groupName, shortcuts: [] });
     }
     groupMap.get(groupName).shortcuts.push({
       actionId,
-      label: labels?.[actionId] ?? name,
+      label: labels?.[actionId] ?? actionRegistry?.[actionId]?.label ?? name,
       description: descriptions?.[actionId],
       bindings
     });
+  }
+  if (actionRegistry && showUnbound) {
+    for (const [actionId, action] of Object.entries(actionRegistry)) {
+      if (includedActions.has(actionId)) continue;
+      const { name } = parseActionId(actionId);
+      const groupName = getGroupName(actionId);
+      if (!groupMap.has(groupName)) {
+        groupMap.set(groupName, { name: groupName, shortcuts: [] });
+      }
+      groupMap.get(groupName).shortcuts.push({
+        actionId,
+        label: labels?.[actionId] ?? action.label ?? name,
+        description: descriptions?.[actionId],
+        bindings: []
+        // No bindings
+      });
+    }
   }
   for (const group of groupMap.values()) {
     group.shortcuts.sort((a, b) => a.actionId.localeCompare(b.actionId));
@@ -2143,11 +2455,15 @@ function KeyDisplay({
   if (modifiers.shift) {
     parts.push(/* @__PURE__ */ jsxRuntime.jsx(ModifierIcon, { modifier: "shift", className: "kbd-modifier-icon" }, "shift"));
   }
-  const keyDisplay = key.length === 1 ? key.toUpperCase() : key.charAt(0).toUpperCase() + key.slice(1);
-  parts.push(/* @__PURE__ */ jsxRuntime.jsx("span", { children: keyDisplay }, "key"));
+  const KeyIcon = getKeyIcon(key);
+  if (KeyIcon) {
+    parts.push(/* @__PURE__ */ jsxRuntime.jsx(KeyIcon, { className: "kbd-key-icon" }, "key"));
+  } else {
+    parts.push(/* @__PURE__ */ jsxRuntime.jsx("span", { children: formatKeyForDisplay(key) }, "key"));
+  }
   return /* @__PURE__ */ jsxRuntime.jsx("span", { className, children: parts });
 }
-function BindingDisplay({
+function BindingDisplay2({
   binding,
   className,
   editable,
@@ -2158,7 +2474,8 @@ function BindingDisplay({
   onEdit,
   onRemove,
   pendingKeys,
-  activeKeys
+  activeKeys,
+  timeoutDuration = DEFAULT_SEQUENCE_TIMEOUT
 }) {
   const sequence = parseHotkeyString(binding);
   const display = formatCombination(sequence);
@@ -2192,7 +2509,17 @@ function BindingDisplay({
     } else {
       content = "...";
     }
-    return /* @__PURE__ */ jsxRuntime.jsx("kbd", { className: kbdClassName, tabIndex: editable ? 0 : void 0, children: content });
+    return /* @__PURE__ */ jsxRuntime.jsxs("kbd", { className: kbdClassName, tabIndex: editable ? 0 : void 0, children: [
+      content,
+      pendingKeys && pendingKeys.length > 0 && Number.isFinite(timeoutDuration) && /* @__PURE__ */ jsxRuntime.jsx(
+        "span",
+        {
+          className: "kbd-timeout-bar",
+          style: { animationDuration: `${timeoutDuration}ms` }
+        },
+        pendingKeys.length
+      )
+    ] });
   }
   return /* @__PURE__ */ jsxRuntime.jsxs("kbd", { className: kbdClassName, onClick: handleClick, tabIndex: editable ? 0 : void 0, onKeyDown: editable && onEdit ? (e) => {
     if (e.key === "Enter" || e.key === " ") {
@@ -2240,7 +2567,8 @@ function ShortcutsModal({
   backdropClassName = "kbd-backdrop",
   modalClassName = "kbd-modal",
   title = "Keyboard Shortcuts",
-  hint
+  hint,
+  showUnbound
 }) {
   const ctx = useMaybeHotkeysContext();
   const contextLabels = react.useMemo(() => {
@@ -2279,14 +2607,14 @@ function ShortcutsModal({
   const descriptions = descriptionsProp ?? contextDescriptions;
   const groupNames = groupNamesProp ?? contextGroups;
   const handleBindingChange = onBindingChange ?? (ctx ? (action, oldKey, newKey) => {
-    if (oldKey) ctx.registry.removeBinding(oldKey);
+    if (oldKey) ctx.registry.removeBinding(action, oldKey);
     ctx.registry.setBinding(action, newKey);
   } : void 0);
   const handleBindingAdd = onBindingAdd ?? (ctx ? (action, key) => {
     ctx.registry.setBinding(action, key);
   } : void 0);
-  const handleBindingRemove = onBindingRemove ?? (ctx ? (_action, key) => {
-    ctx.registry.removeBinding(key);
+  const handleBindingRemove = onBindingRemove ?? (ctx ? (action, key) => {
+    ctx.registry.removeBinding(action, key);
   } : void 0);
   const handleReset = onReset ?? (ctx ? () => {
     ctx.registry.resetOverrides();
@@ -2298,6 +2626,7 @@ function ShortcutsModal({
   const [editingKey, setEditingKey] = react.useState(null);
   const [addingAction, setAddingAction] = react.useState(null);
   const [pendingConflict, setPendingConflict] = react.useState(null);
+  const [hasPendingConflictState, setHasPendingConflictState] = react.useState(false);
   const editingActionRef = react.useRef(null);
   const editingKeyRef = react.useRef(null);
   const addingActionRef = react.useRef(null);
@@ -2332,7 +2661,24 @@ function ShortcutsModal({
     const conflicts2 = actions.filter((a) => a !== forAction);
     return conflicts2.length > 0 ? conflicts2 : null;
   }, [keymap]);
-  const { isRecording, startRecording, cancel, pendingKeys, activeKeys } = useRecordHotkey({
+  const combinationsEqual2 = react.useCallback((a, b) => {
+    return a.key === b.key && a.modifiers.ctrl === b.modifiers.ctrl && a.modifiers.alt === b.modifiers.alt && a.modifiers.shift === b.modifiers.shift && a.modifiers.meta === b.modifiers.meta;
+  }, []);
+  const isSequencePrefix = react.useCallback((a, b) => {
+    if (a.length >= b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (!combinationsEqual2(a[i], b[i])) return false;
+    }
+    return true;
+  }, [combinationsEqual2]);
+  const sequencesEqual = react.useCallback((a, b) => {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (!combinationsEqual2(a[i], b[i])) return false;
+    }
+    return true;
+  }, [combinationsEqual2]);
+  const { isRecording, startRecording, cancel, pendingKeys, activeKeys, sequenceTimeout } = useRecordHotkey({
     onCapture: react.useCallback(
       (_sequence, display) => {
         const currentAddingAction = addingActionRef.current;
@@ -2395,7 +2741,7 @@ function ShortcutsModal({
         prev.click();
       }
     }, []),
-    pauseTimeout: pendingConflict !== null
+    pauseTimeout: pendingConflict !== null || hasPendingConflictState
   });
   const startEditingBinding = react.useCallback(
     (action, key) => {
@@ -2453,6 +2799,31 @@ function ShortcutsModal({
   const reset = react.useCallback(() => {
     handleReset?.();
   }, [handleReset]);
+  const pendingConflictInfo = react.useMemo(() => {
+    if (!isRecording || pendingKeys.length === 0) {
+      return { hasConflict: false, conflictingKeys: /* @__PURE__ */ new Set() };
+    }
+    const conflictingKeys = /* @__PURE__ */ new Set();
+    for (const key of Object.keys(keymap)) {
+      if (editingKey && key.toLowerCase() === editingKey.toLowerCase()) continue;
+      const keySequence = parseHotkeyString(key);
+      if (sequencesEqual(pendingKeys, keySequence)) {
+        conflictingKeys.add(key);
+        continue;
+      }
+      if (isSequencePrefix(pendingKeys, keySequence)) {
+        conflictingKeys.add(key);
+        continue;
+      }
+      if (isSequencePrefix(keySequence, pendingKeys)) {
+        conflictingKeys.add(key);
+      }
+    }
+    return { hasConflict: conflictingKeys.size > 0, conflictingKeys };
+  }, [isRecording, pendingKeys, keymap, editingKey, sequencesEqual, isSequencePrefix]);
+  react.useEffect(() => {
+    setHasPendingConflictState(pendingConflictInfo.hasConflict);
+  }, [pendingConflictInfo.hasConflict]);
   const renderEditableKbd = react.useCallback(
     (actionId, key, showRemove = false) => {
       const isEditingThis = editingAction === actionId && editingKey === key && !addingAction;
@@ -2464,13 +2835,15 @@ function ShortcutsModal({
         const defaultActions = Array.isArray(defaultAction) ? defaultAction : [defaultAction];
         return defaultActions.includes(actionId);
       })() : true;
+      const isPendingConflict = pendingConflictInfo.conflictingKeys.has(key);
       return /* @__PURE__ */ jsxRuntime.jsx(
-        BindingDisplay,
+        BindingDisplay2,
         {
           binding: key,
           editable,
           isEditing: isEditingThis,
           isConflict,
+          isPendingConflict,
           isDefault,
           onEdit: () => {
             if (isRecording && !(editingAction === actionId && editingKey === key)) {
@@ -2491,24 +2864,27 @@ function ShortcutsModal({
           },
           onRemove: editable && showRemove ? () => removeBinding(actionId, key) : void 0,
           pendingKeys,
-          activeKeys
+          activeKeys,
+          timeoutDuration: pendingConflictInfo.hasConflict ? Infinity : sequenceTimeout
         },
         key
       );
     },
-    [editingAction, editingKey, addingAction, conflicts, defaults, editable, startEditingBinding, removeBinding, pendingKeys, activeKeys, isRecording, cancel, handleBindingAdd, handleBindingChange]
+    [editingAction, editingKey, addingAction, conflicts, defaults, editable, startEditingBinding, removeBinding, pendingKeys, activeKeys, isRecording, cancel, handleBindingAdd, handleBindingChange, sequenceTimeout, pendingConflictInfo]
   );
   const renderAddButton = react.useCallback(
     (actionId) => {
       const isAddingThis = addingAction === actionId;
       if (isAddingThis) {
         return /* @__PURE__ */ jsxRuntime.jsx(
-          BindingDisplay,
+          BindingDisplay2,
           {
             binding: "",
             isEditing: true,
+            isPendingConflict: pendingConflictInfo.hasConflict,
             pendingKeys,
-            activeKeys
+            activeKeys,
+            timeoutDuration: pendingConflictInfo.hasConflict ? Infinity : sequenceTimeout
           }
         );
       }
@@ -2537,7 +2913,7 @@ function ShortcutsModal({
         }
       );
     },
-    [addingAction, pendingKeys, activeKeys, startAddingBinding, isRecording, cancel, handleBindingAdd, handleBindingChange]
+    [addingAction, pendingKeys, activeKeys, startAddingBinding, isRecording, cancel, handleBindingAdd, handleBindingChange, sequenceTimeout, pendingConflictInfo]
   );
   const renderCell = react.useCallback(
     (actionId, keys) => {
@@ -2581,6 +2957,19 @@ function ShortcutsModal({
     window.addEventListener("keydown", handleEscape, true);
     return () => window.removeEventListener("keydown", handleEscape, true);
   }, [isOpen, editingAction, addingAction, cancelEditing]);
+  react.useEffect(() => {
+    if (!isOpen || !ctx) return;
+    const handleMetaK = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        e.stopPropagation();
+        close();
+        ctx.openOmnibar();
+      }
+    };
+    window.addEventListener("keydown", handleMetaK, true);
+    return () => window.removeEventListener("keydown", handleMetaK, true);
+  }, [isOpen, ctx, close]);
   const handleBackdropClick = react.useCallback(
     (e) => {
       if (e.target === e.currentTarget) {
@@ -2600,9 +2989,10 @@ function ShortcutsModal({
     },
     [editingAction, addingAction, cancelEditing]
   );
+  const effectiveShowUnbound = showUnbound ?? editable;
   const shortcutGroups = react.useMemo(
-    () => organizeShortcuts(keymap, labels, descriptions, groupNames, groupOrder),
-    [keymap, labels, descriptions, groupNames, groupOrder]
+    () => organizeShortcuts(keymap, labels, descriptions, groupNames, groupOrder, ctx?.registry.actionRegistry, effectiveShowUnbound),
+    [keymap, labels, descriptions, groupNames, groupOrder, ctx?.registry.actionRegistry, effectiveShowUnbound]
   );
   if (!isOpen) return null;
   if (children) {
@@ -2705,24 +3095,35 @@ function ShortcutsModal({
 }
 
 exports.ActionsRegistryContext = ActionsRegistryContext;
-exports.AltIcon = AltIcon;
-exports.CommandIcon = CommandIcon;
-exports.CtrlIcon = CtrlIcon;
+exports.Alt = Alt;
+exports.Backspace = Backspace;
+exports.Command = Command;
+exports.Ctrl = Ctrl;
+exports.DEFAULT_SEQUENCE_TIMEOUT = DEFAULT_SEQUENCE_TIMEOUT;
+exports.Down = Down;
+exports.Enter = Enter;
 exports.HotkeysProvider = HotkeysProvider;
+exports.Kbd = Kbd;
+exports.Key = Key;
 exports.KeybindingEditor = KeybindingEditor;
+exports.Left = Left;
 exports.ModifierIcon = ModifierIcon;
 exports.Omnibar = Omnibar;
-exports.OptIcon = OptIcon;
+exports.Option = Option;
+exports.Right = Right;
 exports.SequenceModal = SequenceModal;
-exports.ShiftIcon = ShiftIcon;
+exports.Shift = Shift;
 exports.ShortcutsModal = ShortcutsModal;
+exports.Up = Up;
 exports.createTwoColumnRenderer = createTwoColumnRenderer;
 exports.findConflicts = findConflicts;
+exports.formatBinding = formatBinding;
 exports.formatCombination = formatCombination;
 exports.formatKeyForDisplay = formatKeyForDisplay;
 exports.fuzzyMatch = fuzzyMatch;
 exports.getActionBindings = getActionBindings;
 exports.getConflictsArray = getConflictsArray;
+exports.getKeyIcon = getKeyIcon;
 exports.getModifierIcon = getModifierIcon;
 exports.getSequenceCompletions = getSequenceCompletions;
 exports.hasConflicts = hasConflicts;

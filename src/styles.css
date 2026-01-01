@@ -9,37 +9,44 @@
  * }
  */
 
-/* === CSS Custom Properties === */
-.kbd-modal,
-.kbd-omnibar {
-  /* Colors */
-  --kbd-bg: var(--kbd-bg, #ffffff);
-  --kbd-bg-secondary: var(--kbd-bg-secondary, #f9fafb);
-  --kbd-text: var(--kbd-text, #1f2937);
-  --kbd-text-secondary: var(--kbd-text-secondary, #6b7280);
-  --kbd-border: var(--kbd-border, #e5e7eb);
-  --kbd-accent: var(--kbd-accent, #3b82f6);
-  --kbd-accent-hover: var(--kbd-accent-hover, #2563eb);
+/* === CSS Custom Properties (defaults) === */
+:root {
+  /* Colors - light mode defaults */
+  --kbd-bg: #ffffff;
+  --kbd-bg-secondary: #f9fafb;
+  --kbd-text: #1f2937;
+  --kbd-text-secondary: #6b7280;
+  --kbd-border: #e5e7eb;
+  --kbd-accent: #3b82f6;
+  --kbd-accent-hover: #2563eb;
 
   /* Conflict/warning colors */
-  --kbd-conflict: var(--kbd-conflict, #ef4444);
-  --kbd-conflict-bg: var(--kbd-conflict-bg, #fef2f2);
-  --kbd-warning: var(--kbd-warning, #f59e0b);
-  --kbd-warning-bg: var(--kbd-warning-bg, #fef3c7);
+  --kbd-conflict: #ef4444;
+  --kbd-conflict-bg: #fef2f2;
+  --kbd-warning: #f59e0b;
+  --kbd-warning-bg: #fef3c7;
+
+  /* Timeout bar */
+  --kbd-timeout-bar: #10b981;
 
   /* Kbd element */
-  --kbd-kbd-bg: var(--kbd-kbd-bg, #f3f4f6);
-  --kbd-kbd-border: var(--kbd-kbd-border, #d1d5db);
-  --kbd-kbd-text: var(--kbd-kbd-text, #374151);
+  --kbd-kbd-bg: #f3f4f6;
+  --kbd-kbd-border: #d1d5db;
+  --kbd-kbd-text: #374151;
 
   /* Spacing & sizing */
-  --kbd-radius: var(--kbd-radius, 8px);
-  --kbd-radius-sm: var(--kbd-radius-sm, 4px);
-  --kbd-gap: var(--kbd-gap, 8px);
-  --kbd-padding: var(--kbd-padding, 16px);
+  --kbd-radius: 8px;
+  --kbd-radius-sm: 4px;
+  --kbd-gap: 8px;
+  --kbd-padding: 16px;
 
   /* Animation */
-  --kbd-transition: var(--kbd-transition, 150ms ease);
+  --kbd-transition: 150ms ease;
+
+  /* Sequence modal */
+  --kbd-sequence-max-height: 300px;
+  --kbd-sequence-row-padding: 8px 12px;
+  --kbd-sequence-row-gap: 8px;
 }
 
 /* === Backdrop === */
@@ -79,12 +86,34 @@
   font-weight: 600;
 }
 
+.kbd-modal-header-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.kbd-reset-btn {
+  background: none;
+  border: 1px solid var(--kbd-border);
+  border-radius: var(--kbd-radius-sm);
+  padding: 4px 10px;
+  font-size: 0.875rem;
+  cursor: pointer;
+  color: var(--kbd-text-secondary);
+  transition: all var(--kbd-transition);
+}
+
+.kbd-reset-btn:hover {
+  color: var(--kbd-text);
+  border-color: var(--kbd-text-secondary);
+}
+
 .kbd-modal-close {
   background: none;
   border: none;
-  font-size: 1.5rem;
+  font-size: 1.25rem;
   cursor: pointer;
-  padding: 4px;
+  padding: 4px 8px;
   line-height: 1;
   color: var(--kbd-text-secondary);
   transition: color var(--kbd-transition);
@@ -136,6 +165,7 @@
 
 /* === Kbd element === */
 .kbd-kbd {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 2px;
@@ -202,10 +232,33 @@
   flex-shrink: 0;
 }
 
+/* === Key icons (arrows, enter, etc.) === */
+.kbd-key-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
 /* === Sequence separator === */
 .kbd-sequence-sep {
   color: var(--kbd-text-secondary);
   margin: 0 1px;
+}
+
+/* === Clickable kbd === */
+.kbd-clickable {
+  cursor: pointer;
+  transition: all var(--kbd-transition);
+}
+
+.kbd-clickable:hover {
+  background: var(--kbd-accent);
+  color: white;
+}
+
+.kbd-clickable:focus-visible {
+  outline: 2px solid var(--kbd-accent);
+  outline-offset: 2px;
 }
 
 /* === Add binding button === */
@@ -227,23 +280,39 @@
 
 /* === Remove binding button === */
 .kbd-remove-btn {
-  background: none;
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--kbd-conflict, #dc2626);
   border: none;
+  border-radius: 50%;
   padding: 0;
-  margin-left: 2px;
-  font-size: 0.875rem;
-  color: var(--kbd-text-secondary);
+  width: 16px;
+  height: 16px;
+  font-size: 12px;
+  font-weight: bold;
+  line-height: 1;
+  color: #fff;
   cursor: pointer;
   opacity: 0;
-  transition: opacity var(--kbd-transition);
+  transform: scale(0.8);
+  transition:
+    opacity var(--kbd-transition),
+    transform var(--kbd-transition),
+    background var(--kbd-transition);
 }
 
-.kbd-kbd:hover .kbd-remove-btn {
+.kbd-kbd:hover .kbd-remove-btn,
+.kbd-kbd:focus-within .kbd-remove-btn {
   opacity: 1;
+  transform: scale(1);
 }
 
 .kbd-remove-btn:hover {
-  color: var(--kbd-conflict);
+  background: #b91c1c;
 }
 
 /* === Timeout bar === */
@@ -251,8 +320,8 @@
   position: absolute;
   bottom: 0;
   left: 0;
-  height: 2px;
-  background-color: var(--kbd-accent);
+  height: 3px;
+  background-color: var(--kbd-timeout-bar);
   animation: kbd-timeout linear forwards;
 }
 
@@ -362,18 +431,6 @@
 }
 
 .kbd-sequence {
-  /* Inherit CSS custom properties */
-  --kbd-bg: var(--kbd-bg, #ffffff);
-  --kbd-bg-secondary: var(--kbd-bg-secondary, #f9fafb);
-  --kbd-text: var(--kbd-text, #1f2937);
-  --kbd-text-secondary: var(--kbd-text-secondary, #6b7280);
-  --kbd-border: var(--kbd-border, #e5e7eb);
-  --kbd-kbd-bg: var(--kbd-kbd-bg, #f3f4f6);
-  --kbd-kbd-border: var(--kbd-kbd-border, #d1d5db);
-  --kbd-kbd-text: var(--kbd-kbd-text, #374151);
-  --kbd-radius: var(--kbd-radius, 8px);
-  --kbd-accent: var(--kbd-accent, #3b82f6);
-
   background-color: var(--kbd-bg);
   border: 1px solid var(--kbd-border);
   border-radius: 12px;
@@ -447,8 +504,8 @@
   padding: 12px 16px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  max-height: 300px;
+  gap: var(--kbd-sequence-row-gap);
+  max-height: var(--kbd-sequence-max-height);
   overflow-y: auto;
 }
 
@@ -456,7 +513,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
+  padding: var(--kbd-sequence-row-padding);
   background-color: var(--kbd-bg-secondary);
   border-radius: 6px;
   transition: background-color 0.1s ease;
@@ -509,18 +566,27 @@
 }
 
 /* === Dark mode preset === */
-[data-theme="dark"] .kbd-modal,
-[data-theme="dark"] .kbd-omnibar,
-[data-theme="dark"] .kbd-sequence,
-.dark .kbd-modal,
-.dark .kbd-omnibar,
-.dark .kbd-sequence {
-  --kbd-bg: var(--kbd-bg, #1f2937);
-  --kbd-bg-secondary: var(--kbd-bg-secondary, #374151);
-  --kbd-text: var(--kbd-text, #f3f4f6);
-  --kbd-text-secondary: var(--kbd-text-secondary, #9ca3af);
-  --kbd-border: var(--kbd-border, #4b5563);
-  --kbd-kbd-bg: var(--kbd-kbd-bg, #374151);
-  --kbd-kbd-border: var(--kbd-kbd-border, #4b5563);
-  --kbd-kbd-text: var(--kbd-kbd-text, #e5e7eb);
+[data-theme="dark"],
+.dark {
+  --kbd-bg: #1f2937;
+  --kbd-bg-secondary: #374151;
+  --kbd-text: #f3f4f6;
+  --kbd-text-secondary: #9ca3af;
+  --kbd-border: #4b5563;
+  --kbd-kbd-bg: #374151;
+  --kbd-kbd-border: #4b5563;
+  --kbd-kbd-text: #e5e7eb;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not(.light) {
+    --kbd-bg: #1f2937;
+    --kbd-bg-secondary: #374151;
+    --kbd-text: #f3f4f6;
+    --kbd-text-secondary: #9ca3af;
+    --kbd-border: #4b5563;
+    --kbd-kbd-bg: #374151;
+    --kbd-kbd-border: #4b5563;
+    --kbd-kbd-text: #e5e7eb;
+  }
 }
