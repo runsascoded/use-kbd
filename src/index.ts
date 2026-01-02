@@ -41,7 +41,7 @@ export { useEditableHotkeys } from './useEditableHotkeys'
 export { useOmnibar } from './useOmnibar'
 
 // Components
-export { Kbd, Key, KbdModal, KbdOmnibar, KbdLookup } from './Kbd'
+export { Kbd, Kbds, Key, KbdModal, KbdOmnibar, KbdLookup } from './Kbd'
 export type { KbdProps } from './Kbd'
 export { KeybindingEditor } from './KeybindingEditor'
 export { LookupModal } from './LookupModal'

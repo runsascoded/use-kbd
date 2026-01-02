@@ -11,8 +11,8 @@ export interface KbdProps {
   action: string
   /** Separator between multiple bindings (default: " / ") */
   separator?: string
-  /** Only show the first binding */
-  first?: boolean
+  /** Show all bindings instead of just the first (default: false, shows only first) */
+  all?: boolean
   /** Fallback content when no bindings exist */
   fallback?: React.ReactNode
   /** Additional className */
@@ -84,11 +84,8 @@ function BindingDisplay({ binding }: { binding: string }) {
  * // Non-clickable for pure display (use Key alias or clickable={false})
  * <p>Navigate with <Key action="next" /> to go to next item</p>
  *
- * // Show only the first binding
- * <p>Press <Kbd action="next" first /> to go to next item</p>
- *
- * // Custom separator for multiple bindings
- * <p>Navigate with <Key action="next" separator=" or " /></p>
+ * // Show all bindings (not just the first)
+ * <p>Navigate with <Kbd action="next" all separator=" or " /></p>
  *
  * // With fallback when no binding exists
  * <Kbd action="customAction" fallback="(unbound)" />
@@ -97,7 +94,7 @@ function BindingDisplay({ binding }: { binding: string }) {
 export function Kbd({
   action,
   separator = ' / ',
-  first = false,
+  all = false,
   fallback = null,
   className,
   clickable = true,
@@ -106,9 +103,9 @@ export function Kbd({
   const warnedRef = useRef(false)
 
   const bindings = ctx
-    ? (first
-      ? [ctx.registry.getFirstBindingForAction(action)].filter(Boolean) as string[]
-      : ctx.registry.getBindingsForAction(action))
+    ? (all
+      ? ctx.registry.getBindingsForAction(action)
+      : [ctx.registry.getFirstBindingForAction(action)].filter(Boolean) as string[])
     : []
 
   // Warn about missing actions after mount (to allow time for registration)
@@ -169,6 +166,19 @@ export function Kbd({
  */
 export function Key(props: Omit<KbdProps, 'clickable'>) {
   return <Kbd {...props} clickable={false} />
+}
+
+/**
+ * Display all bindings for an action (shows multiple if they exist).
+ * Alias for `<Kbd all ... />`
+ *
+ * @example
+ * ```tsx
+ * <p>Navigate with <Kbds action="next" separator=" or " /></p>
+ * ```
+ */
+export function Kbds(props: Omit<KbdProps, 'all'>) {
+  return <Kbd {...props} all />
 }
 
 type BuiltinKbdProps = Omit<KbdProps, 'action'>

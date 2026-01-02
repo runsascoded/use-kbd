@@ -1,10 +1,10 @@
-import { Kbd, KbdModal, KbdOmnibar, KbdLookup, ShortcutsModal } from 'use-kbd'
+import { ShortcutsModal } from 'use-kbd'
 import { A } from '../components/A'
-import { CodeBlock } from '../components/CodeBlock'
 import { DemoThumbnail } from '../components/DemoThumbnail'
 import { DemoTitle } from '../components/DemoTitle'
+import { Kbd, KbdModal, KbdOmnibar, KbdLookup } from '../components/Kbd'
 import { Command, Ctrl, Option, Shift } from '../components/ModifierIconsWithTooltips'
-import { quickStartCode } from './quickStartCode'
+import { QuickStartCode } from './quickStartCode'
 
 # use-kbd
 
@@ -61,14 +61,14 @@ Add keyboard shortcuts, navigation, omnibar to React apps:
 
 ## Quick Start
 
-<CodeBlock highlightLines="1-2,6,8-11,18-23" code={quickStartCode} />
+<QuickStartCode />
 
 ## Features
 
 - **Editable Shortcuts** - <KbdModal />, edit shortcuts in modal to rebind
 - **Global Omnibar** - <KbdOmnibar /> Search all actions across pages
-- **Sequences** - Multi-key shortcuts like <Kbd action="link:/table" first />
-- **ActionLink** - Navigation links auto-register as omnibar actions
+- **Sequences** - Multi-key shortcuts like <Kbd action="link:/table" />
+- **[`ActionLink`]** - Navigation links auto-register as omnibar actions
 - **Persisted Bindings** - Custom shortcuts saved to localStorage
 
 ## Inspiration
@@ -89,6 +89,7 @@ Try the library in action:
 [`LookupModal`]: https://github.com/runsascoded/use-kbd/blob/main/src/LookupModal.tsx
 [`SequenceModal`]: https://github.com/runsascoded/use-kbd/blob/main/src/SequenceModal.tsx
 [`useAction`]: https://github.com/runsascoded/use-kbd/blob/main/src/useAction.ts
+[`ActionLink`]: https://github.com/runsascoded/use-kbd/blob/main/site/src/components/ActionLink.tsx
 [Superhuman]: https://superhuman.com
 [Vimium]: https://github.com/philc/vimium
 [ctbk.dev]: https://ctbk.dev
