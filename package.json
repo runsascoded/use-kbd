@@ -21,7 +21,7 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
-    "test": "vitest",
+    "test": "pnpm -C site test",
     "lint": "eslint src"
   },
   "keywords": [
@@ -54,8 +54,7 @@
     "react": "^18.3.1",
     "tsup": "^8.3.5",
     "typescript": "^5.7.2",
-    "typescript-eslint": "^8.50.1",
-    "vitest": "^2.1.8"
+    "typescript-eslint": "^8.50.1"
   },
   "peerDependencies": {
     "react": ">=18.0.0",
