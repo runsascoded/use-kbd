@@ -1,9 +1,10 @@
+import { mdxComponents } from '../components/CodeBlock'
 import HomeMDX from './Home.mdx'
 
 export function Home() {
   return (
     <div className="home">
-      <HomeMDX />
+      <HomeMDX components={mdxComponents} />
     </div>
   )
 }

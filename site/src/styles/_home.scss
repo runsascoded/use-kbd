@@ -72,6 +72,36 @@
     }
   }
 
+  // Code block wrapper with copy button
+  .code-block-wrapper {
+    position: relative;
+
+    .code-copy-btn {
+      position: absolute;
+      top: 0.5rem;
+      right: 0.5rem;
+      padding: 0.25rem 0.5rem;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-primary);
+      border-radius: 4px;
+      color: var(--text-secondary);
+      font-size: 1rem;
+      cursor: pointer;
+      opacity: 0;
+      transition: opacity 0.15s, background 0.15s;
+      z-index: 1;
+
+      &:hover {
+        background: var(--bg-hover);
+        color: var(--text-primary);
+      }
+    }
+
+    &:hover .code-copy-btn {
+      opacity: 1;
+    }
+  }
+
   // Fallback for plain pre blocks
   pre:not(.shiki) {
     background: var(--bg-secondary);

@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import type { ReactElement, ReactNode } from 'react'
+import { Children, isValidElement, useCallback, useEffect, useState } from 'react'
 import { createHighlighterCore, type HighlighterCore } from 'shiki/core'
 import { createOnigurumaEngine } from 'shiki/engine/oniguruma'
 import { transformerNotationDiff, transformerMetaHighlight } from '@shikijs/transformers'
@@ -9,6 +10,27 @@ interface CodeBlockProps {
   lang?: string
   /** Line numbers or ranges to highlight, e.g. "1-2,6-8" */
   highlightLines?: string
+}
+
+function CopyButton({ code }: { code: string }) {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = useCallback(async () => {
+    await navigator.clipboard.writeText(code)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }, [code])
+
+  return (
+    <button
+      className="code-copy-btn"
+      onClick={handleCopy}
+      title="Copy to clipboard"
+      aria-label="Copy to clipboard"
+    >
+      {copied ? '✓' : '⎘'}
+    </button>
+  )
 }
 
 // Lazy-loaded highlighter singleton
@@ -23,6 +45,7 @@ async function getHighlighter() {
       ],
       langs: [
         import('shiki/langs/tsx.mjs'),
+        import('shiki/langs/bash.mjs'),
       ],
       engine: createOnigurumaEngine(import('shiki/wasm')),
     })
@@ -46,18 +69,61 @@ export function CodeBlock({ code, lang = 'tsx', highlightLines }: CodeBlockProps
     })
   }, [code, lang, resolvedTheme, highlightLines])
 
+  const trimmedCode = code.trim()
+
   if (!html) {
     return (
-      <pre className="code-block-loading">
-        <code>{code}</code>
-      </pre>
+      <div className="code-block-wrapper">
+        <CopyButton code={trimmedCode} />
+        <pre className="code-block-loading">
+          <code>{trimmedCode}</code>
+        </pre>
+      </div>
     )
   }
 
   return (
-    <div
-      className="code-block"
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
+    <div className="code-block-wrapper">
+      <CopyButton code={trimmedCode} />
+      <div
+        className="code-block"
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+    </div>
   )
+}
+
+interface CodeElementProps {
+  className?: string
+  children?: string
+}
+
+/**
+ * Pre component for MDX - intercepts <pre><code className="language-xxx">
+ * and renders with CodeBlock for syntax highlighting + copy button.
+ */
+export function Pre({ children }: { children?: ReactNode }) {
+  if (!children) return <pre />
+
+  // MDX renders: <pre><code className="language-xxx">content</code></pre>
+  const codeElement = Children.toArray(children).find(
+    (child): child is ReactElement<CodeElementProps> =>
+      isValidElement(child) && child.type === 'code'
+  )
+
+  if (!codeElement) {
+    // Fallback for non-code pre blocks
+    return <pre>{children}</pre>
+  }
+
+  const className = codeElement.props.className || ''
+  const lang = className.replace(/^language-/, '') || 'text'
+  const code = codeElement.props.children || ''
+
+  return <CodeBlock code={code} lang={lang} />
+}
+
+/** MDX component overrides for code blocks with copy button */
+export const mdxComponents = {
+  pre: Pre,
 }
