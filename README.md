@@ -2,15 +2,17 @@
 
 [![npm version](https://img.shields.io/npm/v/use-kbd.svg)](https://www.npmjs.com/package/use-kbd)
 
-React library for keyboard-accessible web applications with:
+Keyboard shortcuts, navigation, omnibar for React apps.
 
-1. **Drop-in UI components** (`ShortcutsModal`, `Omnibar`, `SequenceModal`) at the App level
-2. **Minimal-boilerplate action registration** via `useAction` hook, colocated with handlers
-3. **CSS variables** for easy theming customization
+**[📖 Documentation & Demos →][kbd.rbw.sh]**
 
-Try "?" or "⌘-K" at:
-- [ctbk.dev]
-- [awair.runsascoded.com]
+1. **Drop-in UI components** (`ShortcutsModal`, `Omnibar`, `LookupModal`, `SequenceModal`)
+2. **Register functions as "actions"** with `useAction`
+3. **Easy theming** with CSS variables
+
+Also in production at [ctbk.dev] and [awair.runsascoded.com].
+
+[kbd.rbw.sh]: https://kbd.rbw.sh
 
 ## Inspiration
 - macOS (⌘-/) and GDrive (⌥-/) menu search
