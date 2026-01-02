@@ -12,6 +12,23 @@ interface CodeBlockProps {
   highlightLines?: string
 }
 
+function CopyIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <rect x="5.5" y="5.5" width="8" height="9" rx="1" />
+      <path d="M3.5 10.5v-8a1 1 0 0 1 1-1h6" />
+    </svg>
+  )
+}
+
+function CheckIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M3 8.5l3.5 3.5 6.5-7" />
+    </svg>
+  )
+}
+
 function CopyButton({ code }: { code: string }) {
   const [copied, setCopied] = useState(false)
 
@@ -28,7 +45,7 @@ function CopyButton({ code }: { code: string }) {
       title="Copy to clipboard"
       aria-label="Copy to clipboard"
     >
-      {copied ? '✓' : '⎘'}
+      {copied ? <CheckIcon /> : <CopyIcon />}
     </button>
   )
 }

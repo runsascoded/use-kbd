@@ -6,47 +6,38 @@ Keyboard shortcuts, navigation, omnibar for React apps.
 
 **[📖 Documentation & Demos →][kbd.rbw.sh]**
 
-1. **Drop-in UI components** (`ShortcutsModal`, `Omnibar`, `LookupModal`, `SequenceModal`)
-2. **Register functions as "actions"** with `useAction`
-3. **Easy theming** with CSS variables
-
 Also in production at [ctbk.dev] and [awair.runsascoded.com].
 
 [kbd.rbw.sh]: https://kbd.rbw.sh
-
-## Inspiration
-- macOS (⌘-/) and GDrive (⌥-/) menu search
-- [Superhuman] omnibar
-- Android searchable settings
-- [Vimium] keyboard-driven browsing.
-
 [ctbk.dev]: https://ctbk.dev
 [awair.runsascoded.com]: https://awair.runsascoded.com
-[Superhuman]: https://superhuman.com
-[Vimium]: https://github.com/philc/vimium
 
 ## Quick Start
 
+```bash
+npm install use-kbd  # or: pnpm add use-kbd
+```
+
 ```tsx
-import { HotkeysProvider, ShortcutsModal, Omnibar, SequenceModal, useAction } from 'use-kbd'
+import { HotkeysProvider, ShortcutsModal, Omnibar, LookupModal, SequenceModal, useAction } from 'use-kbd'
 import 'use-kbd/styles.css'
 
 function App() {
   return (
     <HotkeysProvider>
-      {/* Your app content */}
       <Dashboard />
-      {/* Drop-in UI components */}
-      <ShortcutsModal />
-      <Omnibar />
-      <SequenceModal />
+      <ShortcutsModal />  {/* "?" modal: view/edit key-bindings */}
+      <Omnibar />         {/* "⌘K" omnibar: search and select actions */}
+      <LookupModal />     {/* "⌘⇧K": look up actions by key-binding */}
+      <SequenceModal />   {/* Inline display for key-sequences in progress */}
     </HotkeysProvider>
   )
 }
 
 function Dashboard() {
-  const { save, exportData } = useDocument()
+  const { save } = useDocument()  // Function to expose via hotkeys / omnibar
 
+  // Wrap function as "action", with keybinding(s) and omnibar keywords
   useAction('doc:save', {
     label: 'Save document',
     group: 'Document',
@@ -54,24 +45,15 @@ function Dashboard() {
     handler: save,
   })
 
-  useAction('doc:export', {
-    label: 'Export data',
-    group: 'Document',
-    defaultBindings: ['meta+e'],
-    handler: exportData,
-  })
-
   return <Editor />
 }
 ```
 
-Press `?` to see the shortcuts modal, or `⌘K` to open the omnibar.
+Basic steps:
 
-## Installation
-
-```bash
-pnpm add use-kbd
-```
+1. **Drop-in UI components**: `ShortcutsModal`, `Omnibar`, `LookupModal`, `SequenceModal`
+2. **Register functions as "actions"** with `useAction`
+3. **Easy theming** with CSS variables
 
 ## Core Concepts
 
@@ -212,6 +194,16 @@ const { isRecording, startRecording, display } = useRecordHotkey({
 ### `useEditableHotkeys(defaults, handlers, options?)`
 
 Wraps `useHotkeys` with localStorage persistence and conflict detection.
+
+## Inspiration
+
+- macOS and GDrive menu search
+- [Superhuman] omnibar
+- Android searchable settings
+- [Vimium] keyboard-driven browsing
+
+[Superhuman]: https://superhuman.com
+[Vimium]: https://github.com/philc/vimium
 
 ## License
 

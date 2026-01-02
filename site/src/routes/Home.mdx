@@ -1,63 +1,38 @@
 import { ShortcutsModal } from 'use-kbd'
+import { FaGithub } from 'react-icons/fa'
 import { A } from '../components/A'
 import { DemoThumbnail } from '../components/DemoThumbnail'
 import { DemoTitle } from '../components/DemoTitle'
 import { Kbd, KbdModal, KbdOmnibar, KbdLookup } from '../components/Kbd'
 import { Command, Ctrl, Option, Shift } from '../components/ModifierIconsWithTooltips'
 import { QuickStartCode } from './quickStartCode'
+import {Tooltip} from "../components/Tooltip"
 
 # use-kbd
 
 [![npm version](https://img.shields.io/npm/v/use-kbd.svg)](https://www.npmjs.com/package/use-kbd)
 
-Keyboard shortcuts, navigation, omnibar for React apps:
+Keyboard shortcuts, navigation, omnibar for React apps.
 
-1. **Drop-in UI components:** [`ShortcutsModal`], [`Omnibar`], [`LookupModal`], [`SequenceModal`]
-2. **Register functions as "actions"** with [`useAction`]
-3. **Easy theming** with CSS variables
+Try them on this page:
 
-<div className="hint">
-  Press <KbdModal /> for shortcuts, <KbdOmnibar /> for command palette, <KbdLookup /> for shortcut lookup, or start a sequence (e.g. <code>G</code>…).
-</div>
+<table className="components-table">
+  <thead>
+    <tr>
+      <th>Keys</th>
+      <th><A href="https://github.com/runsascoded/use-kbd/tree/main/site/#readme" title="View source on GitHub"><FaGithub size={20} /></A></th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td><KbdModal /></td><td>[`ShortcutsModal`]</td><td>View/Edit key-bindings</td></tr>
+    <tr><td><KbdOmnibar /></td><td>[`Omnibar`]</td><td>Search and select actions</td></tr>
+    <tr><td><KbdLookup /></td><td>[`LookupModal`]</td><td>Look up actions by key-binding</td></tr>
+    <tr><td><Tooltip title={"Autocomplete multi-key sequences"}><code>G …</code></Tooltip></td><td>[`SequenceModal`]</td><td>View completions for a key-sequence</td></tr>
+  </tbody>
+</table>
 
-## Demos
-
-<div className="demos-list">
-  <div className="demo-item">
-    <DemoThumbnail demo="table" />
-    <div className="demo-content">
-      <DemoTitle to="/table" source="TableDemo.tsx">Data Table</DemoTitle>
-      <p>Sortable, paginated table with row selection (inspired by [Superhuman]).</p>
-      <ul>
-        <li><strong>Custom renderers in modal</strong>: two-column layout for fwd/back shortcuts</li>
-        <li><strong>Modifier key examples</strong>: <Ctrl/><Shift/><Option/><Command/></li>
-      </ul>
-    </div>
-  </div>
-  <div className="demo-item">
-    <DemoThumbnail demo="canvas" />
-    <div className="demo-content">
-      <DemoTitle to="/canvas" source="CanvasDemo.tsx">Canvas</DemoTitle>
-      <p>Drawing app with tools and color palette.</p>
-      <ul>
-        <li><strong>Single-key shortcuts</strong> for tools, colors, undo/redo</li>
-        <li><strong>Single binding per action</strong>: no "+" or "×" clutter</li>
-      </ul>
-    </div>
-  </div>
-  <div className="demo-item">
-    <DemoThumbnail demo="calendar" />
-    <div className="demo-content">
-      <DemoTitle to="/calendar" source="CalendarDemo.tsx">Calendar</DemoTitle>
-      <p>Month/week/day views with event management.</p>
-      <ul>
-        <li><strong>Multiple bindings per action</strong>: arrow keys + Vim-style HJKL</li>
-        <li><strong>Sequence shortcuts</strong>: `g m` for month, `g w` for week, `g d` for day, etc.</li>
-        <li><strong>Custom remove-button styling</strong>: inline animated "×"</li>
-      </ul>
-    </div>
-  </div>
-</div>
+or view source [on GitHub][`site`].
 
 ## Quick Start
 
@@ -67,13 +42,62 @@ npm install use-kbd  # or: pnpm add use-kbd
 
 <QuickStartCode />
 
-## Features
+Basic steps:
 
+1. **Drop-in UI components**: [`ShortcutsModal`], [`Omnibar`], [`LookupModal`], [`SequenceModal`], [`ActionLink`]
+2. **Register functions as "actions"** with [`useAction`]
+3. **Easy theming** with CSS variables
+
+## Features
 - **Editable Shortcuts** - <KbdModal />, edit shortcuts in modal to rebind
 - **Global Omnibar** - <KbdOmnibar /> Search all actions across pages
-- **Sequences** - Multi-key shortcuts like <Kbd action="link:/table" />
-- **[`ActionLink`]** - Navigation links auto-register as omnibar actions
+- **Sequences** - Multi-key shortcuts like <Kbd action="link:/table" tooltip="Navigate to Table demo" />
 - **Persisted Bindings** - Custom shortcuts saved to localStorage
+
+## Demos
+
+<div className="demos-list">
+    <div className="demo-item">
+        <DemoThumbnail demo="table" />
+        <div className="demo-content">
+            <DemoTitle to="/table" source="TableDemo.tsx">Data Table</DemoTitle>
+            <p>Sortable, paginated table with row selection (inspired by [Superhuman]).</p>
+            <ul>
+                <li><strong>Custom renderers in modal</strong>: two-column layout for fwd/back shortcuts</li>
+                <li><strong>Modifier key examples</strong>: <Ctrl/><Shift/><Option/><Command/></li>
+            </ul>
+        </div>
+    </div>
+    <div className="demo-item">
+        <DemoThumbnail demo="canvas" />
+        <div className="demo-content">
+            <DemoTitle to="/canvas" source="CanvasDemo.tsx">Canvas</DemoTitle>
+            <p>Drawing app with tools and color palette.</p>
+            <ul>
+                <li><strong>Single-key shortcuts</strong> for tools, colors, undo/redo</li>
+                <li><strong>Single binding per action</strong>: no "+" or "×" clutter</li>
+            </ul>
+        </div>
+    </div>
+    <div className="demo-item">
+        <DemoThumbnail demo="calendar" />
+        <div className="demo-content">
+            <DemoTitle to="/calendar" source="CalendarDemo.tsx">Calendar</DemoTitle>
+            <p>Month/week/day views with event management.</p>
+            <ul>
+                <li><strong>Multiple bindings per action</strong>: arrow keys + Vim-style HJKL</li>
+                <li><strong>Sequence shortcuts</strong>: `g m` for month, `g w` for week, `g d` for day, etc.</li>
+                <li><strong>Custom remove-button styling</strong>: inline animated "×"</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+### Live Examples
+
+See this library in action at:
+- [ctbk.dev]
+- [awair.runsascoded.com]
 
 ## Inspiration
 
@@ -82,17 +106,12 @@ npm install use-kbd  # or: pnpm add use-kbd
 - Android searchable settings
 - [Vimium] keyboard-driven browsing
 
-## Live Examples
-
-Try the library in action:
-- [ctbk.dev]
-- [awair.runsascoded.com]
-
 [`ShortcutsModal`]: https://github.com/runsascoded/use-kbd/blob/main/src/ShortcutsModal.tsx
 [`Omnibar`]: https://github.com/runsascoded/use-kbd/blob/main/src/Omnibar.tsx
 [`LookupModal`]: https://github.com/runsascoded/use-kbd/blob/main/src/LookupModal.tsx
 [`SequenceModal`]: https://github.com/runsascoded/use-kbd/blob/main/src/SequenceModal.tsx
 [`useAction`]: https://github.com/runsascoded/use-kbd/blob/main/src/useAction.ts
+[`site`]: https://github.com/runsascoded/use-kbd/tree/main/site/#readme
 [`ActionLink`]: https://github.com/runsascoded/use-kbd/blob/main/site/src/components/ActionLink.tsx
 [Superhuman]: https://superhuman.com
 [Vimium]: https://github.com/philc/vimium

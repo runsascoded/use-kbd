@@ -186,35 +186,35 @@ function Canvas() {
   // Tool actions
   useAction('tool:pen', {
     label: 'Pen tool',
-    group: 'Tools',
+    group: 'Canvas: Tools',
     defaultBindings: ['p'],
     handler: useCallback(() => setTool('pen'), []),
   })
 
   useAction('tool:eraser', {
     label: 'Eraser',
-    group: 'Tools',
+    group: 'Canvas: Tools',
     defaultBindings: ['e'],
     handler: useCallback(() => setTool('eraser'), []),
   })
 
   useAction('tool:line', {
     label: 'Line tool',
-    group: 'Tools',
+    group: 'Canvas: Tools',
     defaultBindings: ['l'],
     handler: useCallback(() => setTool('line'), []),
   })
 
   useAction('tool:rect', {
     label: 'Rectangle',
-    group: 'Tools',
+    group: 'Canvas: Tools',
     defaultBindings: ['r'],
     handler: useCallback(() => setTool('rect'), []),
   })
 
   useAction('tool:circle', {
     label: 'Circle',
-    group: 'Tools',
+    group: 'Canvas: Tools',
     defaultBindings: ['c'],
     handler: useCallback(() => setTool('circle'), []),
   })
@@ -226,7 +226,7 @@ function Canvas() {
         `color:${c.key}-${c.name.toLowerCase()}`,
         {
           label: c.name,
-          group: 'Colors',
+          group: 'Canvas: Colors',
           defaultBindings: [c.key],
           handler: () => setColor(c.value),
         },
@@ -237,7 +237,7 @@ function Canvas() {
   // Size actions
   useAction('size:decrease', {
     label: 'Smaller brush',
-    group: 'Brush Size',
+    group: 'Canvas: Brush Size',
     defaultBindings: ['['],
     handler: useCallback(() => {
       setSize(s => {
@@ -249,7 +249,7 @@ function Canvas() {
 
   useAction('size:increase', {
     label: 'Larger brush',
-    group: 'Brush Size',
+    group: 'Canvas: Brush Size',
     defaultBindings: [']'],
     handler: useCallback(() => {
       setSize(s => {
@@ -262,7 +262,7 @@ function Canvas() {
   // Edit actions (prefixed for sort order: undo, redo, clear)
   useAction('edit:0-undo', {
     label: 'Undo',
-    group: 'Edit',
+    group: 'Canvas: Edit',
     defaultBindings: ['z'],
     handler: useCallback(() => {
       if (history.length > 0) {
@@ -276,7 +276,7 @@ function Canvas() {
 
   useAction('edit:1-redo', {
     label: 'Redo',
-    group: 'Edit',
+    group: 'Canvas: Edit',
     defaultBindings: ['shift+z'],
     handler: useCallback(() => {
       if (redoStack.length > 0) {
@@ -290,7 +290,7 @@ function Canvas() {
 
   useAction('edit:2-clear', {
     label: 'Clear canvas',
-    group: 'Edit',
+    group: 'Canvas: Edit',
     defaultBindings: ['meta+backspace'],
     handler: useCallback(() => {
       if (strokes.length > 0) {
@@ -378,7 +378,7 @@ function Canvas() {
       <ShortcutsModal
         editable
         multipleBindings={false}
-        groupOrder={['Tools', 'Colors', 'Brush Size', 'Edit', 'Global', 'Navigation']}
+        groupOrder={['Canvas: Tools', 'Canvas: Colors', 'Canvas: Brush Size', 'Canvas: Edit', 'Global', 'Navigation']}
       />
     </div>
   )

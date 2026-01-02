@@ -198,49 +198,49 @@ function Calendar() {
   // Navigation actions
   useAction('nav:today', {
     label: 'Go to today',
-    group: 'Calendar Navigation',
+    group: 'Calendar: Navigation',
     defaultBindings: ['t'],
     handler: goToToday,
   })
 
   useAction('nav:prev', {
     label: 'Previous',
-    group: 'Calendar Navigation',
+    group: 'Calendar: Navigation',
     defaultBindings: ['h', 'arrowleft'],
     handler: moveDayLeft,
   })
 
   useAction('nav:next', {
     label: 'Next',
-    group: 'Calendar Navigation',
+    group: 'Calendar: Navigation',
     defaultBindings: ['l', 'arrowright'],
     handler: moveDayRight,
   })
 
   useAction('nav:up', {
     label: 'Week up',
-    group: 'Calendar Navigation',
+    group: 'Calendar: Navigation',
     defaultBindings: ['k', 'arrowup'],
     handler: moveDayUp,
   })
 
   useAction('nav:down', {
     label: 'Week down',
-    group: 'Calendar Navigation',
+    group: 'Calendar: Navigation',
     defaultBindings: ['j', 'arrowdown'],
     handler: moveDayDown,
   })
 
   useAction('nav:prev-period', {
     label: 'Prev month',
-    group: 'Calendar Navigation',
+    group: 'Calendar: Navigation',
     defaultBindings: ['['],
     handler: prevPeriod,
   })
 
   useAction('nav:next-period', {
     label: 'Next month',
-    group: 'Calendar Navigation',
+    group: 'Calendar: Navigation',
     defaultBindings: [']'],
     handler: nextPeriod,
   })
@@ -248,21 +248,21 @@ function Calendar() {
   // View mode actions
   useAction('view:month', {
     label: 'Month view',
-    group: 'View',
+    group: 'Calendar: View',
     defaultBindings: ['m', 'g m'],
     handler: useCallback(() => setViewMode('month'), []),
   })
 
   useAction('view:week', {
     label: 'Week view',
-    group: 'View',
+    group: 'Calendar: View',
     defaultBindings: ['w', 'g w'],
     handler: useCallback(() => setViewMode('week'), []),
   })
 
   useAction('view:day', {
     label: 'Day view',
-    group: 'View',
+    group: 'Calendar: View',
     defaultBindings: ['d', 'g d'],
     handler: useCallback(() => setViewMode('day'), []),
   })
@@ -270,14 +270,14 @@ function Calendar() {
   // Event actions
   useAction('event:create', {
     label: 'New event',
-    group: 'Events',
+    group: 'Calendar: Events',
     defaultBindings: ['n'],
     handler: createEvent,
   })
 
   useAction('event:delete', {
     label: 'Delete events',
-    group: 'Events',
+    group: 'Calendar: Events',
     defaultBindings: ['backspace'],
     handler: deleteSelectedEvents,
   })
@@ -494,7 +494,7 @@ function Calendar() {
 
       <ShortcutsModal
         editable
-        groupOrder={['Calendar Navigation', 'View', 'Events', 'Global', 'Navigation']}
+        groupOrder={['Calendar: Navigation', 'Calendar: View', 'Calendar: Events', 'Global', 'Navigation']}
       />
     </div>
   )

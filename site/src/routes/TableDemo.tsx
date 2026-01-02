@@ -156,7 +156,7 @@ function DataTable() {
   // Regular up/down: move cursor and single-select (clears pinned)
   useAction('nav:up', {
     label: 'Row up',
-    group: 'Row Navigation',
+    group: 'Table: Row Navigation',
     defaultBindings: ['k', 'arrowup'],
     handler: useCallback(() => {
       if (hoveredIndex > 0) {
@@ -170,7 +170,7 @@ function DataTable() {
 
   useAction('nav:down', {
     label: 'Row down',
-    group: 'Row Navigation',
+    group: 'Table: Row Navigation',
     defaultBindings: ['j', 'arrowdown'],
     handler: useCallback(() => {
       if (hoveredIndex < paginatedData.length - 1) {
@@ -186,7 +186,7 @@ function DataTable() {
   // If no cursor established, use mouse hover position as anchor
   useAction('nav:extend-up', {
     label: 'Extend up',
-    group: 'Row Navigation',
+    group: 'Table: Row Navigation',
     defaultBindings: ['shift+k', 'shift+arrowup'],
     handler: useCallback(() => {
       // If no cursor, initialize from mouse hover
@@ -205,7 +205,7 @@ function DataTable() {
 
   useAction('nav:extend-down', {
     label: 'Extend down',
-    group: 'Row Navigation',
+    group: 'Table: Row Navigation',
     defaultBindings: ['shift+j', 'shift+arrowdown'],
     handler: useCallback(() => {
       // If no cursor, initialize from mouse hover
@@ -224,7 +224,7 @@ function DataTable() {
 
   useAction('nav:first', {
     label: 'First row',
-    group: 'Row Navigation',
+    group: 'Table: Row Navigation',
     defaultBindings: ['meta+arrowup'],
     handler: useCallback(() => {
       if (paginatedData.length > 0) {
@@ -237,7 +237,7 @@ function DataTable() {
 
   useAction('nav:last', {
     label: 'Last row',
-    group: 'Row Navigation',
+    group: 'Table: Row Navigation',
     defaultBindings: ['meta+arrowdown'],
     handler: useCallback(() => {
       if (paginatedData.length > 0) {
@@ -252,7 +252,7 @@ function DataTable() {
   // Meta+shift: extend current range to start/end (preserves pinned)
   useAction('nav:select-to-first', {
     label: 'Select to first',
-    group: 'Row Navigation',
+    group: 'Table: Row Navigation',
     defaultBindings: ['meta+shift+arrowup'],
     handler: useCallback(() => {
       if (paginatedData.length > 0) {
@@ -263,7 +263,7 @@ function DataTable() {
 
   useAction('nav:select-to-last', {
     label: 'Select to last',
-    group: 'Row Navigation',
+    group: 'Table: Row Navigation',
     defaultBindings: ['meta+shift+arrowdown'],
     handler: useCallback(() => {
       if (paginatedData.length > 0) {
@@ -274,7 +274,7 @@ function DataTable() {
 
   useAction('nav:select-all', {
     label: 'Select all',
-    group: 'Selection',
+    group: 'Table: Selection',
     defaultBindings: ['ctrl+a'],
     handler: useCallback(() => {
       if (paginatedData.length > 0) {
@@ -288,7 +288,7 @@ function DataTable() {
   // Page navigation actions
   useAction('page:prev', {
     label: 'Prev page',
-    group: 'Page Navigation',
+    group: 'Table: Page Navigation',
     defaultBindings: ['arrowleft'],
     handler: useCallback(() => {
       if (currentPage > 1) {
@@ -299,7 +299,7 @@ function DataTable() {
 
   useAction('page:next', {
     label: 'Next page',
-    group: 'Page Navigation',
+    group: 'Table: Page Navigation',
     defaultBindings: ['arrowright'],
     handler: useCallback(() => {
       if (currentPage < totalPages) {
@@ -310,7 +310,7 @@ function DataTable() {
 
   useAction('page:first', {
     label: 'First page',
-    group: 'Page Navigation',
+    group: 'Table: Page Navigation',
     defaultBindings: ['meta+arrowleft'],
     handler: useCallback(() => {
       setCurrentPage(1)
@@ -319,7 +319,7 @@ function DataTable() {
 
   useAction('page:last', {
     label: 'Last page',
-    group: 'Page Navigation',
+    group: 'Table: Page Navigation',
     defaultBindings: ['meta+arrowright'],
     handler: useCallback(() => {
       setCurrentPage(totalPages)
@@ -329,7 +329,7 @@ function DataTable() {
   // Page size actions (use numeric prefixes to control sort order in modal)
   useAction('pagesize:1-10', {
     label: '10 rows',
-    group: 'Page Size',
+    group: 'Table: Page Size',
     defaultBindings: ['1'],
     handler: useCallback(() => {
       setPageSize(10)
@@ -339,7 +339,7 @@ function DataTable() {
 
   useAction('pagesize:2-20', {
     label: '20 rows',
-    group: 'Page Size',
+    group: 'Table: Page Size',
     defaultBindings: ['2'],
     handler: useCallback(() => {
       setPageSize(20)
@@ -349,7 +349,7 @@ function DataTable() {
 
   useAction('pagesize:3-50', {
     label: '50 rows',
-    group: 'Page Size',
+    group: 'Table: Page Size',
     defaultBindings: ['5'],
     handler: useCallback(() => {
       setPageSize(50)
@@ -359,7 +359,7 @@ function DataTable() {
 
   useAction('pagesize:4-100', {
     label: '100 rows',
-    group: 'Page Size',
+    group: 'Table: Page Size',
     defaultBindings: ['0'],
     handler: useCallback(() => {
       setPageSize(100)
@@ -378,7 +378,7 @@ function DataTable() {
   // Undo action
   useAction('undo', {
     label: 'Undo',
-    group: 'Edit',
+    group: 'Table: Edit',
     defaultBindings: ['z'],
     handler: useCallback(() => {
       if (history.length > 0) {
@@ -391,21 +391,21 @@ function DataTable() {
 
   useAction('status:active', {
     label: 'Set active',
-    group: 'Status',
+    group: 'Table: Status',
     defaultBindings: ['a'],
     handler: useCallback(() => setSelectedStatus('active'), [setSelectedStatus]),
   })
 
   useAction('status:pending', {
     label: 'Set pending',
-    group: 'Status',
+    group: 'Table: Status',
     defaultBindings: ['p'],
     handler: useCallback(() => setSelectedStatus('pending'), [setSelectedStatus]),
   })
 
   useAction('status:inactive', {
     label: 'Set inactive',
-    group: 'Status',
+    group: 'Table: Status',
     defaultBindings: ['i'],
     handler: useCallback(() => setSelectedStatus('inactive'), [setSelectedStatus]),
   })
@@ -413,49 +413,49 @@ function DataTable() {
   // Sort actions - paired asc/desc for each column (single keys for instant response)
   useAction('sort:name:asc', {
     label: 'Name ↑',
-    group: 'Sort',
+    group: 'Table: Sort',
     defaultBindings: ['n'],
     handler: sortNameAsc,
   })
 
   useAction('sort:name:desc', {
     label: 'Name ↓',
-    group: 'Sort',
+    group: 'Table: Sort',
     defaultBindings: ['shift+n'],
     handler: sortNameDesc,
   })
 
   useAction('sort:status:asc', {
     label: 'Status ↑',
-    group: 'Sort',
+    group: 'Table: Sort',
     defaultBindings: ['s'],
     handler: sortStatusAsc,
   })
 
   useAction('sort:status:desc', {
     label: 'Status ↓',
-    group: 'Sort',
+    group: 'Table: Sort',
     defaultBindings: ['shift+s'],
     handler: sortStatusDesc,
   })
 
   useAction('sort:value:asc', {
     label: 'Value ↑',
-    group: 'Sort',
+    group: 'Table: Sort',
     defaultBindings: ['v'],
     handler: sortValueAsc,
   })
 
   useAction('sort:value:desc', {
     label: 'Value ↓',
-    group: 'Sort',
+    group: 'Table: Sort',
     defaultBindings: ['shift+v'],
     handler: sortValueDesc,
   })
 
   useAction('sort:clear', {
     label: 'Clear',
-    group: 'Sort',
+    group: 'Table: Sort',
     defaultBindings: ['c'],
     handler: sortClear,
   })
@@ -631,20 +631,20 @@ function DataTable() {
       <ShortcutsModal
         editable
         groupOrder={[
-          'Sort',
-          'Row Navigation',
-          'Page Navigation',
-          'Page Size',
-          'Selection',
-          'Status',
-          'Edit',
+          'Table: Sort',
+          'Table: Row Navigation',
+          'Table: Page Navigation',
+          'Table: Page Size',
+          'Table: Selection',
+          'Table: Status',
+          'Table: Edit',
           'Global',
           'Navigation',
         ]}
         groupRenderers={{
-          Sort: SortRenderer,
-          'Row Navigation': RowNavRenderer,
-          'Page Navigation': PageNavRenderer,
+          'Table: Sort': SortRenderer,
+          'Table: Row Navigation': RowNavRenderer,
+          'Table: Page Navigation': PageNavRenderer,
         }}
       />
     </div>
