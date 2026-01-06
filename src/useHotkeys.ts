@@ -29,7 +29,7 @@ export interface UseHotkeysOptions {
   stopPropagation?: boolean
   /** Enable hotkeys even when focused on input/textarea/select (default: false) */
   enableOnFormTags?: boolean
-  /** Timeout in ms for sequences (default: DEFAULT_SEQUENCE_TIMEOUT) */
+  /** Timeout in ms for sequences (default: Infinity, no timeout) */
   sequenceTimeout?: number
   /** What happens on timeout: 'submit' executes current sequence, 'cancel' resets (default: 'submit') */
   onTimeout?: 'submit' | 'cancel'

@@ -13,7 +13,7 @@ export interface HotkeysConfig {
   /** Storage key for persisting user binding overrides */
   storageKey?: string
 
-  /** Timeout in ms before a sequence auto-submits (default: DEFAULT_SEQUENCE_TIMEOUT) */
+  /** Timeout in ms before a sequence auto-submits (default: Infinity, no timeout) */
   sequenceTimeout?: number
 
   /** When true, keys with conflicts are disabled (default: true) */

@@ -1,8 +1,8 @@
 /**
- * Default timeout in milliseconds before a key sequence auto-submits.
- * Used when no explicit `sequenceTimeout` is provided.
+ * Default timeout for key sequences (no timeout).
+ * Set to a finite number (ms) to auto-submit sequences after that duration.
  */
-export const DEFAULT_SEQUENCE_TIMEOUT = 1000
+export const DEFAULT_SEQUENCE_TIMEOUT = Infinity
 
 /**
  * Reserved action IDs for built-in UI components.

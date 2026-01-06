@@ -107,7 +107,7 @@ Wrap your app to enable the hotkeys system:
   storageKey: 'use-kbd',      // localStorage key for user overrides (default)
   modalTrigger: '?',          // Open shortcuts modal (default; false to disable)
   omnibarTrigger: 'meta+k',   // Open omnibar (default; false to disable)
-  sequenceTimeout: 1000,      // ms before sequence times out (default)
+  sequenceTimeout: Infinity,  // ms before sequence times out (default: no timeout)
 }}>
   {children}
 </HotkeysProvider>
