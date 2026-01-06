@@ -274,7 +274,7 @@ function useActionsRegistry(options = {}) {
 }
 
 // src/constants.ts
-var DEFAULT_SEQUENCE_TIMEOUT = 1e3;
+var DEFAULT_SEQUENCE_TIMEOUT = Infinity;
 var ACTION_MODAL = "__hotkeys:modal";
 var ACTION_OMNIBAR = "__hotkeys:omnibar";
 var ACTION_LOOKUP = "__hotkeys:lookup";

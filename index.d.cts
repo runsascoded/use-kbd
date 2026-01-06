@@ -74,9 +74,9 @@ interface RecordHotkeyOptions {
     onShiftTab?: () => void;
     /** Prevent default on captured keys (default: true) */
     preventDefault?: boolean;
-    /** Timeout in ms before sequence is submitted (default: DEFAULT_SEQUENCE_TIMEOUT).
+    /** Timeout in ms before sequence is submitted (default: Infinity, no timeout).
      * Set to 0 for immediate submit (no sequences - first key press is captured).
-     * Set to Infinity for no auto-submit (user must explicitly commit via Enter/Tab). */
+     * Set to a finite number for auto-submit after that duration. */
     sequenceTimeout?: number;
     /** When true, pause the auto-submit timeout (useful for conflict warnings). Default: false */
     pauseTimeout?: boolean;
@@ -150,7 +150,7 @@ interface UseHotkeysOptions {
     stopPropagation?: boolean;
     /** Enable hotkeys even when focused on input/textarea/select (default: false) */
     enableOnFormTags?: boolean;
-    /** Timeout in ms for sequences (default: DEFAULT_SEQUENCE_TIMEOUT) */
+    /** Timeout in ms for sequences (default: Infinity, no timeout) */
     sequenceTimeout?: number;
     /** What happens on timeout: 'submit' executes current sequence, 'cancel' resets (default: 'submit') */
     onTimeout?: 'submit' | 'cancel';
@@ -944,7 +944,7 @@ declare function useActionsRegistry(options?: UseActionsRegistryOptions): Action
 interface HotkeysConfig {
     /** Storage key for persisting user binding overrides */
     storageKey?: string;
-    /** Timeout in ms before a sequence auto-submits (default: DEFAULT_SEQUENCE_TIMEOUT) */
+    /** Timeout in ms before a sequence auto-submits (default: Infinity, no timeout) */
     sequenceTimeout?: number;
     /** When true, keys with conflicts are disabled (default: true) */
     disableConflicts?: boolean;
@@ -1250,10 +1250,10 @@ type KeyIconType = 'arrowup' | 'arrowdown' | 'arrowleft' | 'arrowright' | 'enter
 declare function getKeyIcon(key: string): React.ComponentType<KeyIconProps> | null;
 
 /**
- * Default timeout in milliseconds before a key sequence auto-submits.
- * Used when no explicit `sequenceTimeout` is provided.
+ * Default timeout for key sequences (no timeout).
+ * Set to a finite number (ms) to auto-submit sequences after that duration.
  */
-declare const DEFAULT_SEQUENCE_TIMEOUT = 1000;
+declare const DEFAULT_SEQUENCE_TIMEOUT: number;
 /**
  * Reserved action IDs for built-in UI components.
  * These are registered automatically by their respective components.
