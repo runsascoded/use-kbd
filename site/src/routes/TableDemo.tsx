@@ -1,11 +1,29 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import Tooltip from '@mui/material/Tooltip'
 import {
   createTwoColumnRenderer,
   KbdModal,
   ShortcutsModal,
   useAction,
 } from 'use-kbd'
+import type { TooltipProps } from 'use-kbd'
 import 'use-kbd/styles.css'
+
+/** MUI Tooltip wrapper for use-kbd */
+function MuiTooltip({ title, children }: TooltipProps) {
+  return (
+    <Tooltip
+      title={title}
+      placement="top"
+      arrow
+      PopperProps={{
+        disablePortal: true,
+      }}
+    >
+      <span style={{ display: 'inline' }}>{children}</span>
+    </Tooltip>
+  )
+}
 
 interface DataRow {
   id: number
@@ -154,18 +172,26 @@ function DataTable() {
 
   // Row navigation actions (within current page)
   // Regular up/down: move cursor and single-select (clears pinned)
+  // If no selection, initialize from mouse hover position
   useAction('nav:up', {
     label: 'Row up',
     group: 'Table: Row Navigation',
     defaultBindings: ['k', 'arrowup'],
     handler: useCallback(() => {
+      // If no cursor, initialize from mouse hover
+      if (hoveredIndex < 0 && mouseHoverIndex >= 0) {
+        setHoveredIndex(mouseHoverIndex)
+        setRangeAnchor(mouseHoverIndex)
+        setPinnedIds(new Set())
+        return
+      }
       if (hoveredIndex > 0) {
         const newIndex = hoveredIndex - 1
         setHoveredIndex(newIndex)
         setRangeAnchor(newIndex)
         setPinnedIds(new Set())
       }
-    }, [hoveredIndex]),
+    }, [hoveredIndex, mouseHoverIndex]),
   })
 
   useAction('nav:down', {
@@ -173,13 +199,62 @@ function DataTable() {
     group: 'Table: Row Navigation',
     defaultBindings: ['j', 'arrowdown'],
     handler: useCallback(() => {
+      // If no cursor, initialize from mouse hover
+      if (hoveredIndex < 0 && mouseHoverIndex >= 0) {
+        setHoveredIndex(mouseHoverIndex)
+        setRangeAnchor(mouseHoverIndex)
+        setPinnedIds(new Set())
+        return
+      }
       if (hoveredIndex < paginatedData.length - 1) {
         const newIndex = hoveredIndex + 1
         setHoveredIndex(newIndex)
         setRangeAnchor(newIndex)
         setPinnedIds(new Set())
       }
-    }, [paginatedData, hoveredIndex]),
+    }, [paginatedData, hoveredIndex, mouseHoverIndex]),
+  })
+
+  // Numeric navigation: move up/down by N rows
+  // If no selection, initialize from mouse hover position
+  useAction('nav:up-n', {
+    label: 'Up N rows',
+    group: 'Table: Row Navigation',
+    defaultBindings: ['\\d+ k', '\\d+ arrowup'],
+    handler: useCallback((_e, captures) => {
+      const n = captures?.[0] ?? 1
+      // If no cursor, initialize from mouse hover
+      if (hoveredIndex < 0 && mouseHoverIndex >= 0) {
+        setHoveredIndex(mouseHoverIndex)
+        setRangeAnchor(mouseHoverIndex)
+        setPinnedIds(new Set())
+        return
+      }
+      const newIndex = Math.max(0, hoveredIndex - n)
+      setHoveredIndex(newIndex)
+      setRangeAnchor(newIndex)
+      setPinnedIds(new Set())
+    }, [hoveredIndex, mouseHoverIndex]),
+  })
+
+  useAction('nav:down-n', {
+    label: 'Down N rows',
+    group: 'Table: Row Navigation',
+    defaultBindings: ['\\d+ j', '\\d+ arrowdown'],
+    handler: useCallback((_e, captures) => {
+      const n = captures?.[0] ?? 1
+      // If no cursor, initialize from mouse hover
+      if (hoveredIndex < 0 && mouseHoverIndex >= 0) {
+        setHoveredIndex(mouseHoverIndex)
+        setRangeAnchor(mouseHoverIndex)
+        setPinnedIds(new Set())
+        return
+      }
+      const newIndex = Math.min(paginatedData.length - 1, hoveredIndex + n)
+      setHoveredIndex(newIndex)
+      setRangeAnchor(newIndex)
+      setPinnedIds(new Set())
+    }, [paginatedData, hoveredIndex, mouseHoverIndex]),
   })
 
   // Shift+up/down: extend selection range from anchor (preserves pinned)
@@ -219,6 +294,45 @@ function DataTable() {
       if (hoveredIndex < paginatedData.length - 1) {
         setHoveredIndex(hoveredIndex + 1)
       }
+    }, [paginatedData, hoveredIndex, mouseHoverIndex]),
+  })
+
+  // Numeric extend selection: extend up/down by N rows
+  useAction('nav:extend-up-n', {
+    label: 'Extend up N rows',
+    group: 'Table: Row Navigation',
+    defaultBindings: ['\\d+ shift+k', '\\d+ shift+arrowup'],
+    handler: useCallback((_e, captures) => {
+      const n = captures?.[0] ?? 1
+      // If no cursor, initialize from mouse hover
+      if (hoveredIndex < 0 && mouseHoverIndex >= 0) {
+        const anchor = mouseHoverIndex
+        const newIndex = Math.max(0, anchor - n)
+        setHoveredIndex(newIndex)
+        setRangeAnchor(anchor)
+        return
+      }
+      const newIndex = Math.max(0, hoveredIndex - n)
+      setHoveredIndex(newIndex)
+    }, [hoveredIndex, mouseHoverIndex]),
+  })
+
+  useAction('nav:extend-down-n', {
+    label: 'Extend down N rows',
+    group: 'Table: Row Navigation',
+    defaultBindings: ['\\d+ shift+j', '\\d+ shift+arrowdown'],
+    handler: useCallback((_e, captures) => {
+      const n = captures?.[0] ?? 1
+      // If no cursor, initialize from mouse hover
+      if (hoveredIndex < 0 && mouseHoverIndex >= 0) {
+        const anchor = mouseHoverIndex
+        const newIndex = Math.min(paginatedData.length - 1, anchor + n)
+        setHoveredIndex(newIndex)
+        setRangeAnchor(anchor)
+        return
+      }
+      const newIndex = Math.min(paginatedData.length - 1, hoveredIndex + n)
+      setHoveredIndex(newIndex)
     }, [paginatedData, hoveredIndex, mouseHoverIndex]),
   })
 
@@ -285,6 +399,17 @@ function DataTable() {
     }, [paginatedData]),
   })
 
+  useAction('nav:deselect', {
+    label: 'Deselect all',
+    group: 'Table: Selection',
+    defaultBindings: ['escape'],
+    handler: useCallback(() => {
+      setPinnedIds(new Set())
+      setHoveredIndex(-1)
+      setRangeAnchor(-1)
+    }, []),
+  })
+
   // Page navigation actions
   useAction('page:prev', {
     label: 'Prev page',
@@ -326,11 +451,11 @@ function DataTable() {
     }, [totalPages]),
   })
 
-  // Page size actions (use numeric prefixes to control sort order in modal)
+  // Page size actions (P prefix or digit then p)
   useAction('pagesize:1-10', {
     label: '10 rows',
     group: 'Table: Page Size',
-    defaultBindings: ['1'],
+    defaultBindings: ['P 1', '1 p'],
     handler: useCallback(() => {
       setPageSize(10)
       setCurrentPage(1)
@@ -340,7 +465,7 @@ function DataTable() {
   useAction('pagesize:2-20', {
     label: '20 rows',
     group: 'Table: Page Size',
-    defaultBindings: ['2'],
+    defaultBindings: ['P 2', '2 p'],
     handler: useCallback(() => {
       setPageSize(20)
       setCurrentPage(1)
@@ -350,7 +475,7 @@ function DataTable() {
   useAction('pagesize:3-50', {
     label: '50 rows',
     group: 'Table: Page Size',
-    defaultBindings: ['5'],
+    defaultBindings: ['P 5', '5 p'],
     handler: useCallback(() => {
       setPageSize(50)
       setCurrentPage(1)
@@ -360,7 +485,7 @@ function DataTable() {
   useAction('pagesize:4-100', {
     label: '100 rows',
     group: 'Table: Page Size',
-    defaultBindings: ['0'],
+    defaultBindings: ['P 0', '0 p'],
     handler: useCallback(() => {
       setPageSize(100)
       setCurrentPage(1)
@@ -476,7 +601,9 @@ function DataTable() {
     headers: ['', 'Up', 'Down'],
     getRows: () => [
       { label: 'Move', leftAction: 'nav:up', rightAction: 'nav:down' },
+      { label: 'Move N', leftAction: 'nav:up-n', rightAction: 'nav:down-n' },
       { label: 'Extend', leftAction: 'nav:extend-up', rightAction: 'nav:extend-down' },
+      { label: 'Extend N', leftAction: 'nav:extend-up-n', rightAction: 'nav:extend-down-n' },
       { label: 'Jump', leftAction: 'nav:first', rightAction: 'nav:last' },
       { label: 'Select to', leftAction: 'nav:select-to-first', rightAction: 'nav:select-to-last' },
     ],
@@ -646,6 +773,7 @@ function DataTable() {
           'Table: Row Navigation': RowNavRenderer,
           'Table: Page Navigation': PageNavRenderer,
         }}
+        TooltipComponent={MuiTooltip}
       />
     </div>
   )

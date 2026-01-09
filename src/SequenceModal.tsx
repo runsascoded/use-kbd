@@ -100,7 +100,7 @@ export function SequenceModal() {
           <div className="kbd-sequence-completions">
             {Array.from(groupedCompletions.entries()).map(([nextKey, comps]) => (
               <div key={nextKey} className="kbd-sequence-completion">
-                <kbd className="kbd-kbd">{nextKey.toUpperCase()}</kbd>
+                <kbd className="kbd-kbd">{nextKey}</kbd>
                 <span className="kbd-sequence-arrow">→</span>
                 <span className="kbd-sequence-actions">
                   {comps.flatMap(c => c.actions).map((action, i) => (

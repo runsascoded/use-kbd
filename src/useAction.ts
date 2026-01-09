@@ -1,6 +1,24 @@
 import { useContext, useEffect, useRef } from 'react'
 import { ActionsRegistryContext } from './ActionsRegistry'
 
+/**
+ * Handler function for actions.
+ * Optionally receives captured values from digit placeholders in bindings.
+ *
+ * @example
+ * ```tsx
+ * // Simple handler (no captures)
+ * handler: () => setPage(1)
+ *
+ * // Handler with captures (e.g., for binding "\d+ j")
+ * handler: (e, captures) => {
+ *   const n = captures?.[0] ?? 1
+ *   setRow(row + n)
+ * }
+ * ```
+ */
+export type ActionHandler = (e?: KeyboardEvent, captures?: number[]) => void
+
 export interface ActionConfig {
   /** Human-readable label for omnibar/modal */
   label: string
@@ -10,8 +28,8 @@ export interface ActionConfig {
   defaultBindings?: string[]
   /** Search keywords for omnibar */
   keywords?: string[]
-  /** The action handler */
-  handler: () => void
+  /** The action handler (optionally receives KeyboardEvent and captured values) */
+  handler: ActionHandler
   /** Whether action is currently enabled (default: true) */
   enabled?: boolean
   /** Priority for conflict resolution (higher wins, default: 0) */
@@ -66,9 +84,9 @@ export function useAction(id: string, config: ActionConfig): void {
   useEffect(() => {
     registryRef.current.register(id, {
       ...config,
-      handler: () => {
+      handler: (e, captures) => {
         if (enabledRef.current) {
-          handlerRef.current()
+          handlerRef.current(e, captures)
         }
       },
     })
@@ -110,7 +128,7 @@ export function useActions(actions: Record<string, ActionConfig>): void {
   registryRef.current = registry
 
   // Keep handlers in refs
-  const handlersRef = useRef<Record<string, () => void>>({})
+  const handlersRef = useRef<Record<string, ActionHandler>>({})
   const enabledRef = useRef<Record<string, boolean>>({})
 
   for (const [id, config] of Object.entries(actions)) {
@@ -122,9 +140,9 @@ export function useActions(actions: Record<string, ActionConfig>): void {
     for (const [id, config] of Object.entries(actions)) {
       registryRef.current.register(id, {
         ...config,
-        handler: () => {
+        handler: (e, captures) => {
           if (enabledRef.current[id]) {
-            handlersRef.current[id]?.()
+            handlersRef.current[id]?.(e, captures)
           }
         },
       })

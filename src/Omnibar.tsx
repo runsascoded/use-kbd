@@ -4,7 +4,8 @@ import { useMaybeHotkeysContext } from './HotkeysProvider'
 import { ModifierIcon } from './ModifierIcons'
 import { useAction } from './useAction'
 import { useOmnibar } from './useOmnibar'
-import { parseHotkeyString } from './utils'
+import { parseKeySeq, formatKeyForDisplay } from './utils'
+import type { SeqElem } from './types'
 import type { ActionRegistry, ActionSearchResult, HotkeySequence, SequenceCompletion } from './types'
 import type { HandlerMap, HotkeyMap } from './useHotkeys'
 
@@ -75,21 +76,39 @@ export interface OmnibarRenderProps {
 }
 
 /**
- * Render a key binding with modifier icons
+ * Render a single sequence element
+ */
+function SeqElemBadge({ elem }: { elem: SeqElem }) {
+  if (elem.type === 'digit') {
+    return <span className="kbd-placeholder" title="Any single digit (0-9)">#</span>
+  }
+  if (elem.type === 'digits') {
+    return <span className="kbd-placeholder" title="One or more digits (0-9)">##</span>
+  }
+  // Regular key with modifiers
+  return (
+    <>
+      {elem.modifiers.meta && <ModifierIcon modifier="meta" className="kbd-modifier-icon" />}
+      {elem.modifiers.ctrl && <ModifierIcon modifier="ctrl" className="kbd-modifier-icon" />}
+      {elem.modifiers.alt && <ModifierIcon modifier="alt" className="kbd-modifier-icon" />}
+      {elem.modifiers.shift && <ModifierIcon modifier="shift" className="kbd-modifier-icon" />}
+      <span>{formatKeyForDisplay(elem.key)}</span>
+    </>
+  )
+}
+
+/**
+ * Render a key binding with modifier icons and digit placeholders
  */
 function BindingBadge({ binding }: { binding: string }) {
-  const sequence = parseHotkeyString(binding)
+  const keySeq = parseKeySeq(binding)
 
   return (
     <kbd className="kbd-kbd">
-      {sequence.map((combo, i) => (
+      {keySeq.map((elem, i) => (
         <Fragment key={i}>
           {i > 0 && <span className="kbd-sequence-sep"> </span>}
-          {combo.modifiers.meta && <ModifierIcon modifier="meta" className="kbd-modifier-icon" />}
-          {combo.modifiers.ctrl && <ModifierIcon modifier="ctrl" className="kbd-modifier-icon" />}
-          {combo.modifiers.alt && <ModifierIcon modifier="alt" className="kbd-modifier-icon" />}
-          {combo.modifiers.shift && <ModifierIcon modifier="shift" className="kbd-modifier-icon" />}
-          <span>{combo.key.length === 1 ? combo.key.toUpperCase() : combo.key}</span>
+          <SeqElemBadge elem={elem} />
         </Fragment>
       ))}
     </kbd>

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { DEFAULT_SEQUENCE_TIMEOUT } from './constants'
-import { formatCombination, isModifierKey, normalizeKey } from './utils'
+import { DIGIT_PLACEHOLDER, DIGITS_PLACEHOLDER, formatCombination, isModifierKey, isShiftedSymbol, normalizeKey } from './utils'
 import type { KeyCombination, HotkeySequence, RecordHotkeyOptions, RecordHotkeyResult } from './types'
 
 /** Store callback in ref to avoid effect re-runs when callback changes */
@@ -78,6 +78,10 @@ export function useRecordHotkey(options: RecordHotkeyOptions = {}): RecordHotkey
   // (React 18 batching can delay useState updates)
   const pendingKeysRef = useRef<HotkeySequence>([])
 
+  // Track # key cycling for digit placeholder insertion
+  // 0 = no hash, 1 = single (#), 2 = double (##), 3 = literal #
+  const hashCycleRef = useRef<0 | 1 | 2 | 3>(0)
+
   const clearTimeout_ = useCallback(() => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current)
@@ -114,6 +118,7 @@ export function useRecordHotkey(options: RecordHotkeyOptions = {}): RecordHotkey
     pressedKeysRef.current.clear()
     hasNonModifierRef.current = false
     currentComboRef.current = null
+    hashCycleRef.current = 0
     onCancel?.()
   }, [clearTimeout_, onCancel])
 
@@ -138,6 +143,7 @@ export function useRecordHotkey(options: RecordHotkeyOptions = {}): RecordHotkey
     pressedKeysRef.current.clear()
     hasNonModifierRef.current = false
     currentComboRef.current = null
+    hashCycleRef.current = 0
 
     // Return cancel function
     return cancel
@@ -245,24 +251,26 @@ export function useRecordHotkey(options: RecordHotkeyOptions = {}): RecordHotkey
       }
       pressedKeysRef.current.add(key)
 
-      // Build current combination from pressed keys
-      const combo: KeyCombination = {
-        key: '',
-        modifiers: {
-          ctrl: e.ctrlKey,
-          alt: e.altKey,
-          shift: e.shiftKey,
-          meta: e.metaKey,
-        },
-      }
-
-      // Find the non-modifier key
+      // Find the non-modifier key first
+      let nonModifierKey = ''
       for (const k of pressedKeysRef.current) {
         if (!isModifierKey(k)) {
-          combo.key = normalizeKey(k)
+          nonModifierKey = normalizeKey(k)
           hasNonModifierRef.current = true
           break
         }
+      }
+
+      // Build current combination from pressed keys
+      // Strip shift modifier for shifted symbols (e.g., # already implies shift)
+      const combo: KeyCombination = {
+        key: nonModifierKey,
+        modifiers: {
+          ctrl: e.ctrlKey,
+          alt: e.altKey,
+          shift: e.shiftKey && !isShiftedSymbol(nonModifierKey),
+          meta: e.metaKey,
+        },
       }
 
       // Only update if we have a non-modifier key
@@ -300,7 +308,7 @@ export function useRecordHotkey(options: RecordHotkeyOptions = {}): RecordHotkey
         (e.key === 'Meta' && hasNonModifierRef.current)
 
       if (shouldComplete && hasNonModifierRef.current && currentComboRef.current) {
-        const combo = currentComboRef.current
+        let combo = currentComboRef.current
 
         // Clear for next key in sequence
         pressedKeysRef.current.clear()
@@ -308,8 +316,43 @@ export function useRecordHotkey(options: RecordHotkeyOptions = {}): RecordHotkey
         currentComboRef.current = null
         setActiveKeys(null)
 
-        // Add to pending sequence (update both ref and state)
-        const newSequence = [...pendingKeysRef.current, combo]
+        // Handle # key cycling for digit placeholders:
+        // 1st #: single digit placeholder (#)
+        // 2nd #: multi-digit placeholder (##)
+        // 3rd #: literal #
+        // 4th #: commit literal, start new single digit placeholder
+        let newSequence: HotkeySequence
+        const noModifiers = !combo.modifiers.ctrl && !combo.modifiers.alt && !combo.modifiers.meta && !combo.modifiers.shift
+
+        if (combo.key === '#' && noModifiers) {
+          const pending = pendingKeysRef.current
+          const lastCombo = pending[pending.length - 1]
+
+          if (hashCycleRef.current === 0) {
+            // First #: insert single digit placeholder
+            combo = { key: DIGIT_PLACEHOLDER, modifiers: { ctrl: false, alt: false, shift: false, meta: false } }
+            newSequence = [...pending, combo]
+            hashCycleRef.current = 1
+          } else if (hashCycleRef.current === 1 && lastCombo?.key === DIGIT_PLACEHOLDER) {
+            // Second #: replace with multi-digit placeholder
+            newSequence = [...pending.slice(0, -1), { key: DIGITS_PLACEHOLDER, modifiers: { ctrl: false, alt: false, shift: false, meta: false } }]
+            hashCycleRef.current = 2
+          } else if (hashCycleRef.current === 2 && lastCombo?.key === DIGITS_PLACEHOLDER) {
+            // Third #: replace with literal #
+            newSequence = [...pending.slice(0, -1), { key: '#', modifiers: { ctrl: false, alt: false, shift: false, meta: false } }]
+            hashCycleRef.current = 3
+          } else {
+            // Fourth # (or any other state): commit literal, add new single digit placeholder
+            combo = { key: DIGIT_PLACEHOLDER, modifiers: { ctrl: false, alt: false, shift: false, meta: false } }
+            newSequence = [...pending, combo]
+            hashCycleRef.current = 1
+          }
+        } else {
+          // Non-# key: reset hash cycle and add normally
+          hashCycleRef.current = 0
+          newSequence = [...pendingKeysRef.current, combo]
+        }
+
         pendingKeysRef.current = newSequence
         setPendingKeys(newSequence)
 

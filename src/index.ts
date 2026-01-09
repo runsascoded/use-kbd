@@ -6,12 +6,20 @@ export type {
   HotkeySequence,
   KeyCombination,
   KeyCombinationDisplay,
+  KeySeq,
+  Modifiers,
   RecordHotkeyOptions,
   RecordHotkeyResult,
+  SeqElem,
+  SeqElemState,
+  SeqMatchState,
   SequenceCompletion,
 } from './types'
 
-export type { HandlerMap, HotkeyMap, UseHotkeysOptions, UseHotkeysResult } from './useHotkeys'
+// Sequence type utilities
+export { countPlaceholders, extractCaptures, isDigitPlaceholder } from './types'
+
+export type { HandlerMap, HotkeyHandler, HotkeyMap, UseHotkeysOptions, UseHotkeysResult } from './useHotkeys'
 export type { UseEditableHotkeysOptions, UseEditableHotkeysResult } from './useEditableHotkeys'
 export type { UseOmnibarOptions, UseOmnibarResult } from './useOmnibar'
 export type {
@@ -19,7 +27,7 @@ export type {
   KeybindingEditorProps,
   KeybindingEditorRenderProps,
 } from './KeybindingEditor'
-export type { GroupRenderer, GroupRendererProps, ShortcutGroup, ShortcutsModalProps, ShortcutsModalRenderProps } from './ShortcutsModal'
+export type { GroupRenderer, GroupRendererProps, ShortcutGroup, ShortcutsModalProps, ShortcutsModalRenderProps, TooltipComponent, TooltipProps } from './ShortcutsModal'
 export type { TwoColumnConfig, TwoColumnRow } from './TwoColumnRenderer'
 export { createTwoColumnRenderer } from './TwoColumnRenderer'
 export type { OmnibarProps, OmnibarRenderProps } from './Omnibar'
@@ -29,7 +37,7 @@ export type { HotkeysConfig, HotkeysContextValue, HotkeysProviderProps } from '.
 export { HotkeysProvider, useHotkeysContext, useMaybeHotkeysContext } from './HotkeysProvider'
 
 // Action registration
-export type { ActionConfig } from './useAction'
+export type { ActionConfig, ActionHandler } from './useAction'
 export { useAction, useActions } from './useAction'
 export type { ActionsRegistryValue, RegisteredAction } from './ActionsRegistry'
 export { ActionsRegistryContext, useActionsRegistry } from './ActionsRegistry'
@@ -75,17 +83,26 @@ export {
   formatBinding,
   formatCombination,
   formatKeyForDisplay,
+  formatKeySeq,
   fuzzyMatch,
   getActionBindings,
   getConflictsArray,
   getSequenceCompletions,
   hasConflicts,
+  hasDigitPlaceholders,
+  hotkeySequenceToKeySeq,
   isMac,
   isModifierKey,
   isSequence,
+  isPlaceholderSentinel,
+  isShiftedSymbol,
+  DIGIT_PLACEHOLDER,
+  DIGITS_PLACEHOLDER,
+  keySeqToHotkeySequence,
   normalizeKey,
   parseCombinationId,
   parseHotkeyString,
+  parseKeySeq,
   searchActions,
 } from './utils'
 

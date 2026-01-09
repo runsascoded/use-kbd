@@ -3,8 +3,8 @@ import { ACTION_LOOKUP, ACTION_MODAL, ACTION_OMNIBAR } from './constants'
 import { useMaybeHotkeysContext } from './HotkeysProvider'
 import { getKeyIcon } from './KeyIcons'
 import { ModifierIcon } from './ModifierIcons'
-import { formatKeyForDisplay, parseHotkeyString } from './utils'
-import type { KeyCombination } from './types'
+import { formatKeyForDisplay, parseKeySeq } from './utils'
+import type { KeyCombination, SeqElem } from './types'
 
 export interface KbdProps {
   /** Action ID to display binding(s) for */
@@ -53,17 +53,31 @@ function KeyCombo({ combo }: { combo: KeyCombination }) {
 }
 
 /**
+ * Render a single sequence element (key, digit placeholder, or digits placeholder)
+ */
+function SeqElemDisplay({ elem }: { elem: SeqElem }) {
+  if (elem.type === 'digit') {
+    return <span className="kbd-placeholder" title="Any single digit (0-9)">#</span>
+  }
+  if (elem.type === 'digits') {
+    return <span className="kbd-placeholder" title="One or more digits (0-9)">##</span>
+  }
+  // Regular key
+  return <KeyCombo combo={{ key: elem.key, modifiers: elem.modifiers }} />
+}
+
+/**
  * Render a binding string (possibly a sequence) with icons
  */
 function BindingDisplay({ binding }: { binding: string }) {
-  const sequence = parseHotkeyString(binding)
+  const sequence = parseKeySeq(binding)
 
   return (
     <>
-      {sequence.map((combo, i) => (
+      {sequence.map((elem, i) => (
         <Fragment key={i}>
           {i > 0 && <span className="kbd-sequence-sep"> </span>}
-          <KeyCombo combo={combo} />
+          <SeqElemDisplay elem={elem} />
         </Fragment>
       ))}
     </>

@@ -224,7 +224,7 @@ export function HotkeysProvider({
 
   // Build handlers map from registered actions
   const handlers = useMemo(() => {
-    const map: Record<string, () => void> = {}
+    const map: Record<string, (e: KeyboardEvent, captures?: number[]) => void> = {}
 
     for (const [id, action] of registry.actions) {
       map[id] = action.config.handler

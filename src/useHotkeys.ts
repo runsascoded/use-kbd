@@ -5,8 +5,9 @@ import {
   isShiftedChar,
   normalizeKey,
   parseHotkeyString,
+  parseKeySeq,
 } from './utils'
-import type { KeyCombination, HotkeySequence } from './types'
+import type { KeyCombination, HotkeySequence, KeySeq, SeqElem, SeqElemState, SeqMatchState } from './types'
 
 /**
  * Hotkey definition - maps key combinations/sequences to action names
@@ -14,9 +15,14 @@ import type { KeyCombination, HotkeySequence } from './types'
 export type HotkeyMap = Record<string, string | string[]>
 
 /**
+ * Handler function type - can optionally receive captured values
+ */
+export type HotkeyHandler = (e: KeyboardEvent, captures?: number[]) => void
+
+/**
  * Handler map - maps action names to handler functions
  */
-export type HandlerMap = Record<string, (e: KeyboardEvent) => void>
+export type HandlerMap = Record<string, HotkeyHandler>
 
 export interface UseHotkeysOptions {
   /** Whether hotkeys are enabled (default: true) */
@@ -52,26 +58,6 @@ export interface UseHotkeysResult {
   timeoutStartedAt: number | null
   /** The sequence timeout duration in ms */
   sequenceTimeout: number
-}
-
-/**
- * Check if a keyboard event matches a KeyCombination
- */
-function matchesCombination(e: KeyboardEvent, combo: KeyCombination): boolean {
-  const eventKey = normalizeKey(e.key)
-
-  // For shifted characters (like ?, !, @), ignore shift key mismatch
-  const shiftMatches = isShiftedChar(e.key)
-    ? (combo.modifiers.shift ? e.shiftKey : true)
-    : e.shiftKey === combo.modifiers.shift
-
-  return (
-    e.ctrlKey === combo.modifiers.ctrl &&
-    e.altKey === combo.modifiers.alt &&
-    shiftMatches &&
-    e.metaKey === combo.modifiers.meta &&
-    eventKey === combo.key
-  )
 }
 
 /**
@@ -133,6 +119,170 @@ function sequencesMatch(a: HotkeySequence, b: HotkeySequence): boolean {
   return true
 }
 
+// ============================================================================
+// New KeySeq Matching (with digit placeholder support)
+// ============================================================================
+
+/**
+ * Check if a key is a digit (0-9)
+ */
+function isDigit(key: string): boolean {
+  return /^[0-9]$/.test(key)
+}
+
+/**
+ * Initialize match state from a KeySeq pattern
+ */
+function initMatchState(seq: KeySeq): SeqMatchState {
+  return seq.map((elem): SeqElemState => {
+    if (elem.type === 'digit') return { type: 'digit' }
+    if (elem.type === 'digits') return { type: 'digits' }
+    return { type: 'key', key: elem.key, modifiers: elem.modifiers }
+  })
+}
+
+/**
+ * Check if a KeyCombination matches a SeqElem (for 'key' type)
+ */
+function matchesKeyElem(combo: KeyCombination, elem: SeqElem & { type: 'key' }): boolean {
+  const shiftMatches = isShiftedChar(combo.key)
+    ? (elem.modifiers.shift ? combo.modifiers.shift : true)
+    : combo.modifiers.shift === elem.modifiers.shift
+
+  return (
+    combo.modifiers.ctrl === elem.modifiers.ctrl &&
+    combo.modifiers.alt === elem.modifiers.alt &&
+    shiftMatches &&
+    combo.modifiers.meta === elem.modifiers.meta &&
+    combo.key === elem.key
+  )
+}
+
+/**
+ * Result of advancing a match state with a key press
+ */
+type AdvanceResult =
+  | { status: 'matched'; state: SeqMatchState; captures: number[] }
+  | { status: 'partial'; state: SeqMatchState }
+  | { status: 'failed' }
+
+/**
+ * Advance a match state with a key press.
+ * Returns the new state (partial match), captures (complete match), or null (no match).
+ */
+function advanceMatchState(
+  state: SeqMatchState,
+  pattern: KeySeq,
+  combo: KeyCombination,
+): AdvanceResult {
+  // Create mutable state copy
+  const newState: SeqMatchState = [...state]
+
+  // Find current position in match
+  let pos = 0
+  for (let i = 0; i < state.length; i++) {
+    const elem = state[i]
+    if (elem.type === 'key' && !elem.matched) break
+    if (elem.type === 'digit' && elem.value === undefined) break
+    if (elem.type === 'digits' && elem.value === undefined) {
+      // digits can still be in-progress (partial)
+      if (!elem.partial) break
+      // Check if current key is a digit (continue) or not (finalize)
+      if (isDigit(combo.key)) {
+        // Accumulate digit
+        const newPartial = (elem.partial || '') + combo.key
+        newState[i] = { type: 'digits', partial: newPartial }
+        // Still at same position, return partial
+        return { status: 'partial', state: newState }
+      } else {
+        // Non-digit key: finalize the digits value and try to match next element
+        const digitValue = parseInt(elem.partial, 10)
+        newState[i] = { type: 'digits', value: digitValue }
+        // Continue to next element with this key
+        pos = i + 1
+        break
+      }
+    }
+    pos++
+  }
+
+  if (pos >= pattern.length) {
+    // Already fully matched
+    return { status: 'failed' }
+  }
+
+  const currentPattern = pattern[pos]
+
+  if (currentPattern.type === 'digit') {
+    // Match single digit
+    if (!isDigit(combo.key) || combo.modifiers.ctrl || combo.modifiers.alt || combo.modifiers.meta) {
+      return { status: 'failed' }
+    }
+    newState[pos] = { type: 'digit', value: parseInt(combo.key, 10) }
+  } else if (currentPattern.type === 'digits') {
+    // Start or continue digits match
+    if (!isDigit(combo.key) || combo.modifiers.ctrl || combo.modifiers.alt || combo.modifiers.meta) {
+      return { status: 'failed' }
+    }
+    newState[pos] = { type: 'digits', partial: combo.key }
+  } else {
+    // Match key
+    if (!matchesKeyElem(combo, currentPattern)) {
+      return { status: 'failed' }
+    }
+    newState[pos] = { type: 'key', key: currentPattern.key, modifiers: currentPattern.modifiers, matched: true }
+  }
+
+  // Check if fully matched
+  const isComplete = newState.every((elem) => {
+    if (elem.type === 'key') return elem.matched === true
+    if (elem.type === 'digit') return elem.value !== undefined
+    if (elem.type === 'digits') return elem.value !== undefined
+    return false
+  })
+
+  if (isComplete) {
+    const captures = newState
+      .filter((e): e is { type: 'digit'; value: number } | { type: 'digits'; value: number } =>
+        (e.type === 'digit' || e.type === 'digits') && e.value !== undefined
+      )
+      .map(e => e.value)
+    return { status: 'matched', state: newState, captures }
+  }
+
+  return { status: 'partial', state: newState }
+}
+
+/**
+ * Check if a SeqMatchState is in the middle of collecting digits
+ */
+function isCollectingDigits(state: SeqMatchState): boolean {
+  return state.some(elem => elem.type === 'digits' && elem.partial !== undefined && elem.value === undefined)
+}
+
+/**
+ * Finalize any in-progress digits collection in state
+ */
+function finalizeDigits(state: SeqMatchState): SeqMatchState {
+  return state.map(elem => {
+    if (elem.type === 'digits' && elem.partial !== undefined && elem.value === undefined) {
+      return { type: 'digits', value: parseInt(elem.partial, 10) }
+    }
+    return elem
+  })
+}
+
+/**
+ * Extract captures from a match state
+ */
+function extractMatchCaptures(state: SeqMatchState): number[] {
+  return state
+    .filter((e): e is { type: 'digit'; value: number } | { type: 'digits'; value: number } =>
+      (e.type === 'digit' || e.type === 'digits') && e.value !== undefined
+    )
+    .map(e => e.value)
+}
+
 /**
  * Hook to register keyboard shortcuts with sequence support.
  *
@@ -186,13 +336,22 @@ export function useHotkeys(
   const pendingKeysRef = useRef<HotkeySequence>([])
   pendingKeysRef.current = pendingKeys
 
+  // Track match states for patterns with digit placeholders
+  const matchStatesRef = useRef<Map<string, SeqMatchState>>(new Map())
+
   // Parse keymap into sequences for matching
-  const parsedKeymapRef = useRef<Array<{ key: string; sequence: HotkeySequence; actions: string[] }>>([])
+  const parsedKeymapRef = useRef<Array<{
+    key: string
+    sequence: HotkeySequence
+    keySeq: KeySeq
+    actions: string[]
+  }>>([])
 
   useEffect(() => {
     parsedKeymapRef.current = Object.entries(keymap).map(([key, actionOrActions]) => ({
       key,
       sequence: parseHotkeyString(key),
+      keySeq: parseKeySeq(key),
       actions: Array.isArray(actionOrActions) ? actionOrActions : [actionOrActions],
     }))
   }, [keymap])
@@ -201,6 +360,7 @@ export function useHotkeys(
     setPendingKeys([])
     setIsAwaitingSequence(false)
     setTimeoutStartedAt(null)
+    matchStatesRef.current.clear()
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current)
       timeoutRef.current = null
@@ -212,10 +372,11 @@ export function useHotkeys(
     onSequenceCancel?.()
   }, [clearPending, onSequenceCancel])
 
-  // Try to execute a handler for the given sequence
+  // Try to execute a handler for the given sequence (with optional captures)
   const tryExecute = useCallback((
     sequence: HotkeySequence,
     e: KeyboardEvent,
+    captures?: number[],
   ): boolean => {
     for (const entry of parsedKeymapRef.current) {
       if (sequencesMatch(sequence, entry.sequence)) {
@@ -228,7 +389,34 @@ export function useHotkeys(
             if (stopPropagation) {
               e.stopPropagation()
             }
-            handler(e)
+            handler(e, captures)
+            return true
+          }
+        }
+      }
+    }
+    return false
+  }, [preventDefault, stopPropagation])
+
+  // Try to execute using KeySeq matching (with digit placeholders)
+  const tryExecuteKeySeq = useCallback((
+    matchKey: string,
+    matchState: SeqMatchState,
+    captures: number[],
+    e: KeyboardEvent,
+  ): boolean => {
+    for (const entry of parsedKeymapRef.current) {
+      if (entry.key === matchKey) {
+        for (const action of entry.actions) {
+          const handler = handlersRef.current[action]
+          if (handler) {
+            if (preventDefault) {
+              e.preventDefault()
+            }
+            if (stopPropagation) {
+              e.stopPropagation()
+            }
+            handler(e, captures.length > 0 ? captures : undefined)
             return true
           }
         }
@@ -312,14 +500,112 @@ export function useHotkeys(
       const currentCombo = eventToCombination(e)
       const newSequence = [...pendingKeysRef.current, currentCombo]
 
-      // Check for exact match first
+      // Try KeySeq matching first (handles digit placeholders)
+      let keySeqMatched = false
+      let keySeqPartial = false
+      const matchStates = matchStatesRef.current
+
+      // Check if we have any partial matches in progress
+      const hasPartialMatches = matchStates.size > 0
+
+      for (const entry of parsedKeymapRef.current) {
+        // Get existing match state for this pattern
+        let state = matchStates.get(entry.key)
+
+        // If we have partial matches in progress, only check patterns with existing state
+        // This prevents a fresh "j" pattern from matching when we're trying to complete "\d+ j"
+        if (hasPartialMatches && !state) {
+          continue
+        }
+
+        if (!state) {
+          state = initMatchState(entry.keySeq)
+          matchStates.set(entry.key, state)
+        }
+
+        const result = advanceMatchState(state, entry.keySeq, currentCombo)
+
+        if (result.status === 'matched') {
+          // Complete match with captures
+          if (tryExecuteKeySeq(entry.key, result.state, result.captures, e)) {
+            clearPending()
+            keySeqMatched = true
+            break
+          }
+        } else if (result.status === 'partial') {
+          // Update state and continue
+          matchStates.set(entry.key, result.state)
+          keySeqPartial = true
+        } else {
+          // Failed - reset this pattern's state
+          matchStates.delete(entry.key)
+        }
+      }
+
+      if (keySeqMatched) {
+        return
+      }
+
+      if (keySeqPartial) {
+        // We have partial matches, wait for more keys
+        setPendingKeys(newSequence)
+        setIsAwaitingSequence(true)
+
+        if (pendingKeysRef.current.length === 0) {
+          onSequenceStart?.(newSequence)
+        } else {
+          onSequenceProgress?.(newSequence)
+        }
+
+        if (preventDefault) {
+          e.preventDefault()
+        }
+
+        // Set timeout for digit sequences
+        if (Number.isFinite(sequenceTimeout)) {
+          setTimeoutStartedAt(Date.now())
+          timeoutRef.current = setTimeout(() => {
+            // On timeout, try to finalize any in-progress digits
+            for (const [key, state] of matchStates.entries()) {
+              if (isCollectingDigits(state)) {
+                const finalizedState = finalizeDigits(state)
+                // Check if finalized state is complete
+                const entry = parsedKeymapRef.current.find(e => e.key === key)
+                if (entry) {
+                  const isComplete = finalizedState.every((elem) => {
+                    if (elem.type === 'key') return elem.matched === true
+                    if (elem.type === 'digit') return elem.value !== undefined
+                    if (elem.type === 'digits') return elem.value !== undefined
+                    return false
+                  })
+                  if (isComplete) {
+                    // Note: We can't execute without the event, but the pattern matched
+                    // In practice, digit sequences should match on the terminating key
+                    void extractMatchCaptures(finalizedState)
+                  }
+                }
+              }
+            }
+            setPendingKeys([])
+            setIsAwaitingSequence(false)
+            setTimeoutStartedAt(null)
+            matchStatesRef.current.clear()
+            onSequenceCancel?.()
+            timeoutRef.current = null
+          }, sequenceTimeout)
+        }
+
+        return
+      }
+
+      // Fall back to legacy exact matching for non-placeholder patterns
       const exactMatch = tryExecute(newSequence, e)
       if (exactMatch) {
         clearPending()
         return
       }
 
-      // Check if this could be the start of a longer sequence
+      // Check if this could be the start of a longer sequence (legacy)
       if (hasPotentialMatch(newSequence)) {
         // Check if there are longer sequences this could match
         if (hasSequenceExtension(newSequence)) {
@@ -429,6 +715,7 @@ export function useHotkeys(
     clearPending,
     cancelSequence,
     tryExecute,
+    tryExecuteKeySeq,
     hasPotentialMatch,
     hasSequenceExtension,
     onSequenceStart,

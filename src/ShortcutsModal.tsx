@@ -1,4 +1,4 @@
-import { Fragment, MouseEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ComponentType, createContext, Fragment, MouseEvent, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { ACTION_MODAL, DEFAULT_SEQUENCE_TIMEOUT } from './constants'
 import { useMaybeHotkeysContext } from './HotkeysProvider'
 import { getKeyIcon } from './KeyIcons'
@@ -6,9 +6,35 @@ import { ModifierIcon } from './ModifierIcons'
 import { useAction } from './useAction'
 import { useHotkeys } from './useHotkeys'
 import { useRecordHotkey } from './useRecordHotkey'
-import { findConflicts, formatCombination, formatKeyForDisplay, getActionBindings, parseHotkeyString } from './utils'
-import type { ActionRegistry, HotkeySequence, KeyCombination, KeyCombinationDisplay } from './types'
+import { findConflicts, formatCombination, formatKeyForDisplay, getActionBindings, parseHotkeyString, parseKeySeq, formatKeySeq } from './utils'
+import type { ActionRegistry, HotkeySequence, KeyCombination, KeyCombinationDisplay, SeqElem } from './types'
 import type { HotkeyMap } from './useHotkeys'
+
+/**
+ * Props for a tooltip wrapper component.
+ * Compatible with MUI Tooltip and similar libraries.
+ */
+export interface TooltipProps {
+  title: string
+  children: ReactNode
+}
+
+/**
+ * A component that wraps children with a tooltip.
+ * Default uses native title attribute; can be replaced with MUI Tooltip etc.
+ */
+export type TooltipComponent = ComponentType<TooltipProps>
+
+/**
+ * Default tooltip renders children without any tooltip.
+ * Pass a custom TooltipComponent (e.g., MUI Tooltip) to show tooltips.
+ */
+const DefaultTooltip: TooltipComponent = ({ children }) => <>{children}</>
+
+/**
+ * Context for tooltip component (allows nested components to access it)
+ */
+const TooltipContext = createContext<TooltipComponent>(DefaultTooltip)
 
 export interface ShortcutGroup {
   name: string
@@ -118,6 +144,12 @@ export interface ShortcutsModalProps {
   hint?: string
   /** Whether to show actions with no bindings (default: true in editable mode, false otherwise) */
   showUnbound?: boolean
+  /**
+   * Custom tooltip component for digit placeholders.
+   * Should accept { title: string, children: ReactNode } props.
+   * Default uses native title attribute. Can be MUI Tooltip, etc.
+   */
+  TooltipComponent?: TooltipComponent
 }
 
 export interface ShortcutsModalRenderProps {
@@ -282,6 +314,30 @@ function KeyDisplay({
 }
 
 /**
+ * Render a single sequence element (key, digit, or digits placeholder)
+ */
+function SeqElemDisplay({ elem, className }: { elem: SeqElem; className?: string }) {
+  const Tooltip = useContext(TooltipContext)
+
+  if (elem.type === 'digit') {
+    return (
+      <Tooltip title="Any single digit (0-9)">
+        <span className={`kbd-placeholder ${className || ''}`}>#</span>
+      </Tooltip>
+    )
+  }
+  if (elem.type === 'digits') {
+    return (
+      <Tooltip title="One or more digits (0-9)">
+        <span className={`kbd-placeholder ${className || ''}`}>##</span>
+      </Tooltip>
+    )
+  }
+  // Regular key - use KeyDisplay
+  return <KeyDisplay combo={{ key: elem.key, modifiers: elem.modifiers }} className={className} />
+}
+
+/**
  * Render a hotkey binding (single key or sequence)
  */
 function BindingDisplay({
@@ -312,7 +368,8 @@ function BindingDisplay({
   timeoutDuration?: number
 }) {
   const sequence = parseHotkeyString(binding)
-  const display = formatCombination(sequence)
+  const keySeq = parseKeySeq(binding)
+  const _display = formatKeySeq(keySeq)
 
   let kbdClassName = 'kbd-kbd'
   if (editable && !isEditing) kbdClassName += ' editable'
@@ -365,17 +422,20 @@ function BindingDisplay({
     )
   }
 
-  // Render normal binding
+  // Render normal binding (using keySeq to support digit placeholders)
   return (
     <kbd className={kbdClassName} onClick={handleClick} tabIndex={editable ? 0 : undefined} onKeyDown={editable && onEdit ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onEdit() } } : undefined}>
-      {display.isSequence ? (
-        sequence.map((combo, i) => (
+      {keySeq.length > 1 ? (
+        keySeq.map((elem, i) => (
           <Fragment key={i}>
             {i > 0 && <span className="kbd-sequence-sep"> </span>}
-            <KeyDisplay combo={combo} />
+            <SeqElemDisplay elem={elem} />
           </Fragment>
         ))
+      ) : keySeq.length === 1 ? (
+        <SeqElemDisplay elem={keySeq[0]} />
       ) : (
+        // Fallback for legacy parsing
         <KeyDisplay combo={sequence[0]} />
       )}
       {editable && onRemove && (
@@ -450,6 +510,7 @@ export function ShortcutsModal({
   title = 'Keyboard Shortcuts',
   hint,
   showUnbound,
+  TooltipComponent: TooltipComponentProp = DefaultTooltip,
 }: ShortcutsModalProps) {
   // Try to get context (returns null if not within HotkeysProvider)
   const ctx = useMaybeHotkeysContext()
@@ -555,7 +616,7 @@ export function ShortcutsModal({
     }
   }, [onCloseProp, ctx])
 
-  const open = useCallback(() => {
+  const _open = useCallback(() => {
     if (ctx?.openModal) {
       ctx.openModal()
     } else {
@@ -1058,88 +1119,90 @@ export function ShortcutsModal({
 
   // Default render
   return (
-    <div className={backdropClassName} onClick={handleBackdropClick}>
-      <div className={modalClassName} role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" onClick={handleModalClick}>
-        <div className="kbd-modal-header">
-          <h2 className="kbd-modal-title">{title}</h2>
-          <div className="kbd-modal-header-buttons">
-            {editable && handleReset && (
-              <button className="kbd-reset-btn" onClick={reset}>
+    <TooltipContext.Provider value={TooltipComponentProp}>
+      <div className={backdropClassName} onClick={handleBackdropClick}>
+        <div className={modalClassName} role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" onClick={handleModalClick}>
+          <div className="kbd-modal-header">
+            <h2 className="kbd-modal-title">{title}</h2>
+            <div className="kbd-modal-header-buttons">
+              {editable && handleReset && (
+                <button className="kbd-reset-btn" onClick={reset}>
                 Reset
-              </button>
-            )}
-            <button className="kbd-modal-close" onClick={close} aria-label="Close">
+                </button>
+              )}
+              <button className="kbd-modal-close" onClick={close} aria-label="Close">
               ×
-            </button>
-          </div>
-        </div>
-
-        {hint && <p className="kbd-hint">{hint}</p>}
-
-        {shortcutGroups.map((group) => (
-          <div key={group.name} className="kbd-group">
-            <h3 className="kbd-group-title">{group.name}</h3>
-            {renderGroup(group)}
-          </div>
-        ))}
-
-        {/* Pending conflict warning */}
-        {pendingConflict && (
-          <div className="kbd-conflict-warning" style={{
-            padding: '12px',
-            marginTop: '16px',
-            backgroundColor: 'var(--kbd-warning-bg)',
-            borderRadius: 'var(--kbd-radius-sm)',
-            border: '1px solid var(--kbd-warning)',
-          }}>
-            <p style={{ margin: '0 0 8px', color: 'var(--kbd-warning)' }}>
-              This key is already bound to: {pendingConflict.conflictsWith.join(', ')}
-            </p>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button
-                onClick={() => {
-                  // Accept and override
-                  if (addingActionRef.current) {
-                    handleBindingAdd?.(pendingConflict.action, pendingConflict.key)
-                  } else if (editingKeyRef.current) {
-                    handleBindingChange?.(pendingConflict.action, editingKeyRef.current, pendingConflict.key)
-                  }
-                  editingActionRef.current = null
-                  editingKeyRef.current = null
-                  addingActionRef.current = null
-                  setEditingAction(null)
-                  setEditingKey(null)
-                  setAddingAction(null)
-                  setPendingConflict(null)
-                }}
-                style={{
-                  padding: '4px 12px',
-                  backgroundColor: 'var(--kbd-accent)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: 'var(--kbd-radius-sm)',
-                  cursor: 'pointer',
-                }}
-              >
-                Override
-              </button>
-              <button
-                onClick={cancelEditing}
-                style={{
-                  padding: '4px 12px',
-                  backgroundColor: 'var(--kbd-bg-secondary)',
-                  border: '1px solid var(--kbd-border)',
-                  borderRadius: 'var(--kbd-radius-sm)',
-                  cursor: 'pointer',
-                }}
-              >
-                Cancel
               </button>
             </div>
           </div>
-        )}
 
+          {hint && <p className="kbd-hint">{hint}</p>}
+
+          {shortcutGroups.map((group) => (
+            <div key={group.name} className="kbd-group">
+              <h3 className="kbd-group-title">{group.name}</h3>
+              {renderGroup(group)}
+            </div>
+          ))}
+
+          {/* Pending conflict warning */}
+          {pendingConflict && (
+            <div className="kbd-conflict-warning" style={{
+              padding: '12px',
+              marginTop: '16px',
+              backgroundColor: 'var(--kbd-warning-bg)',
+              borderRadius: 'var(--kbd-radius-sm)',
+              border: '1px solid var(--kbd-warning)',
+            }}>
+              <p style={{ margin: '0 0 8px', color: 'var(--kbd-warning)' }}>
+              This key is already bound to: {pendingConflict.conflictsWith.join(', ')}
+              </p>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  onClick={() => {
+                  // Accept and override
+                    if (addingActionRef.current) {
+                      handleBindingAdd?.(pendingConflict.action, pendingConflict.key)
+                    } else if (editingKeyRef.current) {
+                      handleBindingChange?.(pendingConflict.action, editingKeyRef.current, pendingConflict.key)
+                    }
+                    editingActionRef.current = null
+                    editingKeyRef.current = null
+                    addingActionRef.current = null
+                    setEditingAction(null)
+                    setEditingKey(null)
+                    setAddingAction(null)
+                    setPendingConflict(null)
+                  }}
+                  style={{
+                    padding: '4px 12px',
+                    backgroundColor: 'var(--kbd-accent)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: 'var(--kbd-radius-sm)',
+                    cursor: 'pointer',
+                  }}
+                >
+                Override
+                </button>
+                <button
+                  onClick={cancelEditing}
+                  style={{
+                    padding: '4px 12px',
+                    backgroundColor: 'var(--kbd-bg-secondary)',
+                    border: '1px solid var(--kbd-border)',
+                    borderRadius: 'var(--kbd-radius-sm)',
+                    cursor: 'pointer',
+                  }}
+                >
+                Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+        </div>
       </div>
-    </div>
+    </TooltipContext.Provider>
   )
 }

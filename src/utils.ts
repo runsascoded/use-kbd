@@ -1,6 +1,24 @@
-import type { KeyCombination, KeyCombinationDisplay, HotkeySequence } from './types'
+import type { KeyCombination, KeyCombinationDisplay, HotkeySequence, SeqElem, KeySeq, Modifiers } from './types'
 
 const { max } = Math
+
+/**
+ * Symbols that require Shift key on US keyboard layout.
+ * When these are the key, we should not show/store the shift modifier
+ * since it's implicit in the symbol itself.
+ */
+const SHIFTED_SYMBOLS = new Set([
+  '!', '@', '#', '$', '%', '^', '&', '*', '(', ')',
+  '_', '+', '{', '}', '|', ':', '"', '<', '>', '?', '~',
+])
+
+/**
+ * Check if a key is a shifted symbol (requires Shift on US keyboard).
+ * For these keys, shift modifier should be implicit, not shown separately.
+ */
+export function isShiftedSymbol(key: string): boolean {
+  return SHIFTED_SYMBOLS.has(key)
+}
 
 /**
  * Detect if running on macOS
@@ -88,9 +106,32 @@ export function formatKeyForDisplay(key: string): string {
 }
 
 /**
+ * Sentinel values for digit placeholders in KeyCombination.key
+ * These are used during recording to represent placeholder patterns.
+ */
+export const DIGIT_PLACEHOLDER = '__DIGIT__'
+export const DIGITS_PLACEHOLDER = '__DIGITS__'
+
+/**
+ * Check if a key string is a digit placeholder sentinel value.
+ * Used during recording to identify placeholder keys.
+ */
+export function isPlaceholderSentinel(key: string): boolean {
+  return key === DIGIT_PLACEHOLDER || key === DIGITS_PLACEHOLDER
+}
+
+/**
  * Format a single KeyCombination (internal helper)
  */
 function formatSingleCombination(combo: KeyCombination): { display: string; id: string } {
+  // Handle digit placeholder sentinels
+  if (combo.key === DIGIT_PLACEHOLDER) {
+    return { display: '#', id: '\\d' }
+  }
+  if (combo.key === DIGITS_PLACEHOLDER) {
+    return { display: '##', id: '\\d+' }
+  }
+
   const mac = isMac()
   const parts: string[] = []
   const idParts: string[] = []
@@ -249,6 +290,172 @@ export function parseCombinationId(id: string): KeyCombination {
   return sequence[0]
 }
 
+// ============================================================================
+// New KeySeq Parsing (with digit placeholder support)
+// ============================================================================
+
+const NO_MODIFIERS: Modifiers = { ctrl: false, alt: false, shift: false, meta: false }
+
+/**
+ * Parse a single sequence element string to SeqElem.
+ * Handles:
+ * - `\d` → digit placeholder
+ * - `\d+` → digits placeholder (one or more)
+ * - Regular keys with modifiers (e.g., "ctrl+k", "J", "2")
+ */
+function parseSeqElem(str: string): SeqElem {
+  // Check for digit placeholders
+  if (str === '\\d') {
+    return { type: 'digit' }
+  }
+  if (str === '\\d+') {
+    return { type: 'digits' }
+  }
+
+  // Single uppercase letter (A-Z) is shorthand for shift+<lowercase>
+  if (str.length === 1 && /^[A-Z]$/.test(str)) {
+    return {
+      type: 'key',
+      key: str.toLowerCase(),
+      modifiers: { ctrl: false, alt: false, shift: true, meta: false },
+    }
+  }
+
+  const parts = str.toLowerCase().split('+')
+  const key = parts[parts.length - 1]
+
+  return {
+    type: 'key',
+    key,
+    modifiers: {
+      ctrl: parts.includes('ctrl') || parts.includes('control'),
+      alt: parts.includes('alt') || parts.includes('option'),
+      shift: parts.includes('shift'),
+      meta: parts.includes('meta') || parts.includes('cmd') || parts.includes('command'),
+    },
+  }
+}
+
+/**
+ * Parse a hotkey string to a KeySeq (new sequence type with digit placeholders).
+ * Handles both single keys ("ctrl+k") and sequences ("2 w", "\\d+ d")
+ *
+ * @example
+ * parseKeySeq('\\d+ d')  // [{ type: 'digits' }, { type: 'key', key: 'd', ... }]
+ * parseKeySeq('ctrl+k')  // [{ type: 'key', key: 'k', modifiers: { ctrl: true, ... } }]
+ */
+export function parseKeySeq(hotkeyStr: string): KeySeq {
+  if (!hotkeyStr.trim()) return []
+
+  // Split by space to get sequence parts
+  const parts = hotkeyStr.trim().split(/\s+/)
+  return parts.map(parseSeqElem)
+}
+
+/**
+ * Format a single SeqElem for display
+ */
+function formatSeqElem(elem: SeqElem): { display: string; id: string } {
+  if (elem.type === 'digit') {
+    return { display: '⟨#⟩', id: '\\d' }
+  }
+  if (elem.type === 'digits') {
+    return { display: '⟨##⟩', id: '\\d+' }
+  }
+
+  // Regular key
+  const mac = isMac()
+  const parts: string[] = []
+  const idParts: string[] = []
+
+  if (elem.modifiers.ctrl) {
+    parts.push(mac ? '⌃' : 'Ctrl')
+    idParts.push('ctrl')
+  }
+  if (elem.modifiers.meta) {
+    parts.push(mac ? '⌘' : 'Win')
+    idParts.push('meta')
+  }
+  if (elem.modifiers.alt) {
+    parts.push(mac ? '⌥' : 'Alt')
+    idParts.push('alt')
+  }
+  if (elem.modifiers.shift) {
+    parts.push(mac ? '⇧' : 'Shift')
+    idParts.push('shift')
+  }
+
+  parts.push(formatKeyForDisplay(elem.key))
+  idParts.push(elem.key)
+
+  return {
+    display: mac ? parts.join('') : parts.join('+'),
+    id: idParts.join('+'),
+  }
+}
+
+/**
+ * Format a KeySeq to display format
+ */
+export function formatKeySeq(seq: KeySeq): KeyCombinationDisplay {
+  if (seq.length === 0) {
+    return { display: '', id: '', isSequence: false }
+  }
+
+  const formatted = seq.map(formatSeqElem)
+
+  if (seq.length === 1) {
+    return { ...formatted[0], isSequence: false }
+  }
+
+  return {
+    display: formatted.map(f => f.display).join(' '),
+    id: formatted.map(f => f.id).join(' '),
+    isSequence: true,
+  }
+}
+
+/**
+ * Check if a KeySeq contains any digit placeholders
+ */
+export function hasDigitPlaceholders(seq: KeySeq): boolean {
+  return seq.some(elem => elem.type === 'digit' || elem.type === 'digits')
+}
+
+/**
+ * Convert a KeySeq to HotkeySequence (for backwards compatibility).
+ * Note: Digit placeholders become literal '\d' or '\d+' keys.
+ * This is only useful for legacy code paths.
+ */
+export function keySeqToHotkeySequence(seq: KeySeq): HotkeySequence {
+  return seq.map(elem => {
+    if (elem.type === 'digit') {
+      return { key: '\\d', modifiers: NO_MODIFIERS }
+    }
+    if (elem.type === 'digits') {
+      return { key: '\\d+', modifiers: NO_MODIFIERS }
+    }
+    return { key: elem.key, modifiers: elem.modifiers }
+  })
+}
+
+/**
+ * Convert a HotkeySequence to KeySeq (for migration).
+ * Note: This does NOT detect digit patterns - use parseKeySeq for that.
+ */
+export function hotkeySequenceToKeySeq(seq: HotkeySequence): KeySeq {
+  return seq.map(combo => {
+    // Check if it's a digit placeholder (from keySeqToHotkeySequence)
+    if (combo.key === '\\d' && !combo.modifiers.ctrl && !combo.modifiers.alt && !combo.modifiers.shift && !combo.modifiers.meta) {
+      return { type: 'digit' }
+    }
+    if (combo.key === '\\d+' && !combo.modifiers.ctrl && !combo.modifiers.alt && !combo.modifiers.shift && !combo.modifiers.meta) {
+      return { type: 'digits' }
+    }
+    return { type: 'key', key: combo.key, modifiers: combo.modifiers }
+  })
+}
+
 /**
  * Conflict detection result
  */
@@ -285,13 +492,68 @@ function combinationsEqual(a: KeyCombination, b: KeyCombination): boolean {
   )
 }
 
+// ============================================================================
+// KeySeq Conflict Detection
+// ============================================================================
+
 /**
- * Check if two HotkeySequences are equal
+ * Check if a key is a digit (0-9)
  */
-function sequencesEqual(a: HotkeySequence, b: HotkeySequence): boolean {
+function isDigitKey(key: string): boolean {
+  return /^[0-9]$/.test(key)
+}
+
+/**
+ * Check if two SeqElems could potentially match the same input.
+ * - digit matches any single digit key
+ * - digits matches any sequence of digit keys
+ * - key matches itself exactly
+ */
+function seqElemsCouldConflict(a: SeqElem, b: SeqElem): boolean {
+  // digit matches any single digit
+  if (a.type === 'digit' && b.type === 'digit') return true
+  if (a.type === 'digit' && b.type === 'key' && isDigitKey(b.key)) return true
+  if (a.type === 'key' && isDigitKey(a.key) && b.type === 'digit') return true
+
+  // digits matches any sequence starting with digits
+  if (a.type === 'digits' && b.type === 'digits') return true
+  if (a.type === 'digits' && b.type === 'digit') return true
+  if (a.type === 'digit' && b.type === 'digits') return true
+  if (a.type === 'digits' && b.type === 'key' && isDigitKey(b.key)) return true
+  if (a.type === 'key' && isDigitKey(a.key) && b.type === 'digits') return true
+
+  // key vs key - exact match
+  if (a.type === 'key' && b.type === 'key') {
+    return (
+      a.key === b.key &&
+      a.modifiers.ctrl === b.modifiers.ctrl &&
+      a.modifiers.alt === b.modifiers.alt &&
+      a.modifiers.shift === b.modifiers.shift &&
+      a.modifiers.meta === b.modifiers.meta
+    )
+  }
+
+  return false
+}
+
+/**
+ * Check if KeySeq A could be a prefix of KeySeq B (considering digit patterns)
+ */
+function keySeqIsPrefix(a: KeySeq, b: KeySeq): boolean {
+  if (a.length >= b.length) return false
+  for (let i = 0; i < a.length; i++) {
+    if (!seqElemsCouldConflict(a[i], b[i])) return false
+  }
+  return true
+}
+
+/**
+ * Check if two KeySeqs could match the same input (exact match)
+ */
+function keySeqsCouldConflict(a: KeySeq, b: KeySeq): boolean {
   if (a.length !== b.length) return false
   for (let i = 0; i < a.length; i++) {
-    if (!combinationsEqual(a[i], b[i])) return false
+    if (!seqElemsCouldConflict(a[i], b[i])) return false
   }
   return true
 }
@@ -300,6 +562,7 @@ function sequencesEqual(a: HotkeySequence, b: HotkeySequence): boolean {
  * Find conflicts in a keymap.
  * Detects:
  * - Duplicate: multiple actions bound to the exact same key/sequence
+ * - Pattern overlap: digit patterns that could match the same input (e.g., "\d d" and "5 d")
  * - Prefix: one hotkey is a prefix of another (e.g., "2" and "2 w")
  *
  * @param keymap - HotkeyMap to check for conflicts
@@ -312,6 +575,7 @@ export function findConflicts(keymap: Record<string, string | string[]>): Map<st
   const entries = Object.entries(keymap).map(([key, actionOrActions]) => ({
     key,
     sequence: parseHotkeyString(key),
+    keySeq: parseKeySeq(key),
     actions: Array.isArray(actionOrActions) ? actionOrActions : [actionOrActions],
   }))
 
@@ -327,14 +591,28 @@ export function findConflicts(keymap: Record<string, string | string[]>): Map<st
     }
   }
 
-  // Check for prefix conflicts
+  // Check for pattern conflicts and prefix conflicts
   for (let i = 0; i < entries.length; i++) {
     for (let j = i + 1; j < entries.length; j++) {
       const a = entries[i]
       const b = entries[j]
 
-      // Check if a is prefix of b or b is prefix of a
-      if (isPrefix(a.sequence, b.sequence)) {
+      // Check for exact conflict (including digit patterns)
+      if (keySeqsCouldConflict(a.keySeq, b.keySeq) && a.key !== b.key) {
+        // These patterns could match the same input
+        const existingA = conflicts.get(a.key) ?? []
+        if (!existingA.includes(`conflicts with: ${b.key}`)) {
+          conflicts.set(a.key, [...existingA, ...a.actions, `conflicts with: ${b.key}`])
+        }
+        const existingB = conflicts.get(b.key) ?? []
+        if (!existingB.includes(`conflicts with: ${a.key}`)) {
+          conflicts.set(b.key, [...existingB, ...b.actions, `conflicts with: ${a.key}`])
+        }
+        continue
+      }
+
+      // Check if a is prefix of b (with digit pattern support)
+      if (keySeqIsPrefix(a.keySeq, b.keySeq)) {
         // a is a prefix of b - both are conflicted
         const existingA = conflicts.get(a.key) ?? []
         if (!existingA.includes(`prefix of: ${b.key}`)) {
@@ -344,8 +622,28 @@ export function findConflicts(keymap: Record<string, string | string[]>): Map<st
         if (!existingB.includes(`has prefix: ${a.key}`)) {
           conflicts.set(b.key, [...existingB, ...b.actions, `has prefix: ${a.key}`])
         }
-      } else if (isPrefix(b.sequence, a.sequence)) {
+      } else if (keySeqIsPrefix(b.keySeq, a.keySeq)) {
         // b is a prefix of a
+        const existingB = conflicts.get(b.key) ?? []
+        if (!existingB.includes(`prefix of: ${a.key}`)) {
+          conflicts.set(b.key, [...existingB, ...b.actions, `prefix of: ${a.key}`])
+        }
+        const existingA = conflicts.get(a.key) ?? []
+        if (!existingA.includes(`has prefix: ${b.key}`)) {
+          conflicts.set(a.key, [...existingA, ...a.actions, `has prefix: ${b.key}`])
+        }
+      } else if (isPrefix(a.sequence, b.sequence)) {
+        // Legacy check for non-pattern sequences
+        const existingA = conflicts.get(a.key) ?? []
+        if (!existingA.includes(`prefix of: ${b.key}`)) {
+          conflicts.set(a.key, [...existingA, ...a.actions, `prefix of: ${b.key}`])
+        }
+        const existingB = conflicts.get(b.key) ?? []
+        if (!existingB.includes(`has prefix: ${a.key}`)) {
+          conflicts.set(b.key, [...existingB, ...b.actions, `has prefix: ${a.key}`])
+        }
+      } else if (isPrefix(b.sequence, a.sequence)) {
+        // Legacy check for non-pattern sequences
         const existingB = conflicts.get(b.key) ?? []
         if (!existingB.includes(`prefix of: ${a.key}`)) {
           conflicts.set(b.key, [...existingB, ...b.actions, `prefix of: ${a.key}`])
@@ -411,6 +709,7 @@ export function getSequenceCompletions(
 
   for (const [hotkeyStr, actionOrActions] of Object.entries(keymap)) {
     const sequence = parseHotkeyString(hotkeyStr)
+    const keySeq = parseKeySeq(hotkeyStr)
 
     // Check if pending is a prefix of this sequence
     if (sequence.length <= pendingKeys.length) continue
@@ -424,16 +723,16 @@ export function getSequenceCompletions(
     }
 
     if (isPrefix) {
-      // Get remaining keys needed
-      const remainingKeys = sequence.slice(pendingKeys.length)
-      const nextKeys = formatCombination(remainingKeys).id
+      // Get remaining keys needed (use KeySeq for proper digit placeholder formatting)
+      const remainingKeySeq = keySeq.slice(pendingKeys.length)
+      const nextKeys = formatKeySeq(remainingKeySeq).display
 
       const actions = Array.isArray(actionOrActions) ? actionOrActions : [actionOrActions]
 
       completions.push({
         nextKeys,
         fullSequence: hotkeyStr,
-        display: formatCombination(sequence),
+        display: formatKeySeq(keySeq),
         actions,
       })
     }

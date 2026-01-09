@@ -1,24 +1,91 @@
 /**
+ * Modifier keys state
+ */
+export interface Modifiers {
+  ctrl: boolean
+  alt: boolean
+  shift: boolean
+  meta: boolean
+}
+
+/**
  * Represents a single key press (possibly with modifiers)
  */
 export interface KeyCombination {
   /** The main key (lowercase, e.g., 'k', 'enter', 'arrowup') */
   key: string
   /** Modifier keys pressed */
-  modifiers: {
-    ctrl: boolean
-    alt: boolean
-    shift: boolean
-    meta: boolean
-  }
+  modifiers: Modifiers
 }
 
 /**
  * Represents a hotkey - either a single key or a sequence of keys.
  * Single key: [{ key: 'k', modifiers: {...} }]
  * Sequence: [{ key: '2', ... }, { key: 'w', ... }]
+ * @deprecated Use KeySeq for new code
  */
 export type HotkeySequence = KeyCombination[]
+
+// ============================================================================
+// New sequence types with digit placeholder support
+// ============================================================================
+
+/**
+ * A single element in a key sequence (sum type).
+ * - 'key': exact key match (with optional modifiers)
+ * - 'digit': matches any single digit 0-9 (\d)
+ * - 'digits': matches one or more digits (\d+)
+ */
+export type SeqElem =
+  | { type: 'key'; key: string; modifiers: Modifiers }
+  | { type: 'digit' }
+  | { type: 'digits' }
+
+/**
+ * A key sequence pattern (array of sequence elements)
+ */
+export type KeySeq = SeqElem[]
+
+/**
+ * Sequence element with match state (for tracking during input).
+ * - 'key': has `matched` flag
+ * - 'digit': has captured `value`
+ * - 'digits': has captured `value` or in-progress `partial` string
+ */
+export type SeqElemState =
+  | { type: 'key'; key: string; modifiers: Modifiers; matched?: true }
+  | { type: 'digit'; value?: number }
+  | { type: 'digits'; value?: number; partial?: string }
+
+/**
+ * Sequence match state - tracks progress through a sequence with captures
+ */
+export type SeqMatchState = SeqElemState[]
+
+/**
+ * Extract captured values from a completed sequence match
+ */
+export function extractCaptures(state: SeqMatchState): number[] {
+  return state
+    .filter((e): e is { type: 'digit'; value: number } | { type: 'digits'; value: number } =>
+      (e.type === 'digit' || e.type === 'digits') && e.value !== undefined
+    )
+    .map(e => e.value)
+}
+
+/**
+ * Check if a SeqElem is a digit placeholder
+ */
+export function isDigitPlaceholder(elem: SeqElem): elem is { type: 'digit' } | { type: 'digits' } {
+  return elem.type === 'digit' || elem.type === 'digits'
+}
+
+/**
+ * Count digit placeholders in a sequence
+ */
+export function countPlaceholders(seq: KeySeq): number {
+  return seq.filter(isDigitPlaceholder).length
+}
 
 /**
  * Platform-aware display format for a key combination or sequence

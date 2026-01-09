@@ -172,6 +172,48 @@ test.describe('Data Table Demo', () => {
     await expect(rows.first()).toHaveClass(/selected/)
   })
 
+  test('numeric navigation moves by N rows', async ({ page }) => {
+    // Click first row to select it and focus the table
+    const rows = page.locator('.data-table tbody tr')
+    await rows.first().click()
+    await expect(rows.first()).toHaveClass(/selected/)
+
+    // Type "5j" to move down 5 rows
+    await page.keyboard.press('5')
+    await page.waitForTimeout(50)
+    await page.keyboard.press('j')
+    await page.waitForTimeout(100)
+    await expect(rows.nth(5)).toHaveClass(/selected/)
+
+    // Type "3k" to move up 3 rows (should be at row 2)
+    await page.keyboard.press('3')
+    await page.waitForTimeout(50)
+    await page.keyboard.press('k')
+    await page.waitForTimeout(100)
+    await expect(rows.nth(2)).toHaveClass(/selected/)
+  })
+
+  test('numeric extend selection selects N rows', async ({ page }) => {
+    // Click first row to select it
+    const rows = page.locator('.data-table tbody tr')
+    await rows.first().click()
+    await expect(rows.first()).toHaveClass(/selected/)
+
+    // Type "3" then Shift+J to extend selection down 3 rows
+    await page.keyboard.press('3')
+    await page.waitForTimeout(50)
+    await page.keyboard.press('Shift+j')
+    await page.waitForTimeout(100)
+
+    // Rows 0, 1, 2, 3 should be selected (anchor at 0, cursor at 3)
+    await expect(rows.nth(0)).toHaveClass(/selected/)
+    await expect(rows.nth(1)).toHaveClass(/selected/)
+    await expect(rows.nth(2)).toHaveClass(/selected/)
+    await expect(rows.nth(3)).toHaveClass(/selected/)
+    // Row 4 should NOT be selected
+    await expect(rows.nth(4)).not.toHaveClass(/selected/)
+  })
+
   test('can sort columns with single keys', async ({ page }) => {
     await page.locator('body').click({ position: { x: 10, y: 10 } })
 

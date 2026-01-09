@@ -3,11 +3,13 @@ import { ACTION_LOOKUP } from './constants'
 import { useHotkeysContext } from './HotkeysProvider'
 import { useAction } from './useAction'
 import type { HotkeySequence, KeyCombination } from './types'
-import { formatCombination, parseHotkeyString, normalizeKey, isModifierKey } from './utils'
+import { formatCombination, formatKeySeq, parseHotkeyString, parseKeySeq, normalizeKey, isModifierKey } from './utils'
+import type { KeySeq } from './types'
 
 interface LookupResult {
   binding: string
   sequence: HotkeySequence
+  keySeq: KeySeq
   display: string
   actions: string[]
   labels: string[]
@@ -66,7 +68,9 @@ export function LookupModal({ defaultBinding = 'meta+shift+k' }: LookupModalProp
 
       const actions = Array.isArray(actionOrActions) ? actionOrActions : [actionOrActions]
       const sequence = parseHotkeyString(binding)
-      const display = formatCombination(sequence).display
+      const keySeq = parseKeySeq(binding)
+      // Use formatKeySeq to properly display digit placeholders and arrow keys
+      const display = formatKeySeq(keySeq).display
 
       // Get labels for actions
       const labels = actions.map(actionId => {
@@ -74,7 +78,7 @@ export function LookupModal({ defaultBinding = 'meta+shift+k' }: LookupModalProp
         return action?.config.label || actionId
       })
 
-      results.push({ binding, sequence, display, actions, labels })
+      results.push({ binding, sequence, keySeq, display, actions, labels })
     }
 
     // Sort by binding for consistent ordering
