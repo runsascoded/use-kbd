@@ -239,6 +239,18 @@
   flex-shrink: 0;
 }
 
+/* === Digit placeholder (for \d and \d+ patterns) === */
+.kbd-placeholder {
+  font-family: monospace;
+  font-weight: 600;
+  color: var(--kbd-text);
+  background: var(--kbd-bg-secondary);
+  border: 1px solid var(--kbd-border);
+  border-radius: var(--kbd-radius-sm);
+  padding: 0 3px;
+  margin: 0 1px;
+}
+
 /* === Sequence separator === */
 .kbd-sequence-sep {
   color: var(--kbd-text-secondary);

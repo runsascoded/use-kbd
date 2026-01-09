@@ -1,7 +1,16 @@
 import * as react_jsx_runtime from 'react/jsx-runtime';
 import * as react from 'react';
-import { ReactNode, RefObject, SVGProps, CSSProperties } from 'react';
+import { ReactNode, ComponentType, RefObject, SVGProps, CSSProperties } from 'react';
 
+/**
+ * Modifier keys state
+ */
+interface Modifiers {
+    ctrl: boolean;
+    alt: boolean;
+    shift: boolean;
+    meta: boolean;
+}
 /**
  * Represents a single key press (possibly with modifiers)
  */
@@ -9,19 +18,73 @@ interface KeyCombination {
     /** The main key (lowercase, e.g., 'k', 'enter', 'arrowup') */
     key: string;
     /** Modifier keys pressed */
-    modifiers: {
-        ctrl: boolean;
-        alt: boolean;
-        shift: boolean;
-        meta: boolean;
-    };
+    modifiers: Modifiers;
 }
 /**
  * Represents a hotkey - either a single key or a sequence of keys.
  * Single key: [{ key: 'k', modifiers: {...} }]
  * Sequence: [{ key: '2', ... }, { key: 'w', ... }]
+ * @deprecated Use KeySeq for new code
  */
 type HotkeySequence = KeyCombination[];
+/**
+ * A single element in a key sequence (sum type).
+ * - 'key': exact key match (with optional modifiers)
+ * - 'digit': matches any single digit 0-9 (\d)
+ * - 'digits': matches one or more digits (\d+)
+ */
+type SeqElem = {
+    type: 'key';
+    key: string;
+    modifiers: Modifiers;
+} | {
+    type: 'digit';
+} | {
+    type: 'digits';
+};
+/**
+ * A key sequence pattern (array of sequence elements)
+ */
+type KeySeq = SeqElem[];
+/**
+ * Sequence element with match state (for tracking during input).
+ * - 'key': has `matched` flag
+ * - 'digit': has captured `value`
+ * - 'digits': has captured `value` or in-progress `partial` string
+ */
+type SeqElemState = {
+    type: 'key';
+    key: string;
+    modifiers: Modifiers;
+    matched?: true;
+} | {
+    type: 'digit';
+    value?: number;
+} | {
+    type: 'digits';
+    value?: number;
+    partial?: string;
+};
+/**
+ * Sequence match state - tracks progress through a sequence with captures
+ */
+type SeqMatchState = SeqElemState[];
+/**
+ * Extract captured values from a completed sequence match
+ */
+declare function extractCaptures(state: SeqMatchState): number[];
+/**
+ * Check if a SeqElem is a digit placeholder
+ */
+declare function isDigitPlaceholder(elem: SeqElem): elem is {
+    type: 'digit';
+} | {
+    type: 'digits';
+};
+/**
+ * Count digit placeholders in a sequence
+ */
+declare function countPlaceholders(seq: KeySeq): number;
 /**
  * Platform-aware display format for a key combination or sequence
  */
@@ -136,9 +199,13 @@ interface SequenceCompletion {
  */
 type HotkeyMap = Record<string, string | string[]>;
 /**
+ * Handler function type - can optionally receive captured values
+ */
+type HotkeyHandler = (e: KeyboardEvent, captures?: number[]) => void;
+/**
  * Handler map - maps action names to handler functions
  */
-type HandlerMap = Record<string, (e: KeyboardEvent) => void>;
+type HandlerMap = Record<string, HotkeyHandler>;
 interface UseHotkeysOptions {
     /** Whether hotkeys are enabled (default: true) */
     enabled?: boolean;
@@ -402,6 +469,19 @@ interface BindingInfo {
  */
 declare function KeybindingEditor({ keymap, defaults, descriptions, onChange, onReset, className, children, }: KeybindingEditorProps): react_jsx_runtime.JSX.Element;
 
+/**
+ * Props for a tooltip wrapper component.
+ * Compatible with MUI Tooltip and similar libraries.
+ */
+interface TooltipProps {
+    title: string;
+    children: ReactNode;
+}
+/**
+ * A component that wraps children with a tooltip.
+ * Default uses native title attribute; can be replaced with MUI Tooltip etc.
+ */
+type TooltipComponent = ComponentType<TooltipProps>;
 interface ShortcutGroup {
     name: string;
     shortcuts: Array<{
@@ -507,6 +587,12 @@ interface ShortcutsModalProps {
     hint?: string;
     /** Whether to show actions with no bindings (default: true in editable mode, false otherwise) */
     showUnbound?: boolean;
+    /**
+     * Custom tooltip component for digit placeholders.
+     * Should accept { title: string, children: ReactNode } props.
+     * Default uses native title attribute. Can be MUI Tooltip, etc.
+     */
+    TooltipComponent?: TooltipComponent;
 }
 interface ShortcutsModalRenderProps {
     groups: ShortcutGroup[];
@@ -558,7 +644,7 @@ interface ShortcutsModalRenderProps {
  * />
  * ```
  */
-declare function ShortcutsModal({ keymap: keymapProp, defaults: defaultsProp, labels: labelsProp, descriptions: descriptionsProp, groups: groupNamesProp, groupOrder, groupRenderers, isOpen: isOpenProp, onClose: onCloseProp, defaultBinding, editable, onBindingChange, onBindingAdd, onBindingRemove, onReset, multipleBindings, children, backdropClassName, modalClassName, title, hint, showUnbound, }: ShortcutsModalProps): react_jsx_runtime.JSX.Element | null;
+declare function ShortcutsModal({ keymap: keymapProp, defaults: defaultsProp, labels: labelsProp, descriptions: descriptionsProp, groups: groupNamesProp, groupOrder, groupRenderers, isOpen: isOpenProp, onClose: onCloseProp, defaultBinding, editable, onBindingChange, onBindingAdd, onBindingRemove, onReset, multipleBindings, children, backdropClassName, modalClassName, title, hint, showUnbound, TooltipComponent: TooltipComponentProp, }: ShortcutsModalProps): react_jsx_runtime.JSX.Element | null;
 
 /**
  * Configuration for a row in a two-column table
@@ -713,6 +799,11 @@ interface OmnibarRenderProps {
 declare function Omnibar({ actions: actionsProp, handlers: handlersProp, keymap: keymapProp, defaultBinding, isOpen: isOpenProp, onOpen: onOpenProp, onClose: onCloseProp, onExecute: onExecuteProp, maxResults, placeholder, children, backdropClassName, omnibarClassName, }: OmnibarProps): react_jsx_runtime.JSX.Element | null;
 
 /**
+ * Check if a key is a shifted symbol (requires Shift on US keyboard).
+ * For these keys, shift modifier should be implicit, not shown separately.
+ */
+declare function isShiftedSymbol(key: string): boolean;
+/**
  * Detect if running on macOS
  */
 declare function isMac(): boolean;
@@ -724,6 +815,17 @@ declare function normalizeKey(key: string): string;
  * Format a key for display (platform-aware)
  */
 declare function formatKeyForDisplay(key: string): string;
+/**
+ * Sentinel values for digit placeholders in KeyCombination.key
+ * These are used during recording to represent placeholder patterns.
+ */
+declare const DIGIT_PLACEHOLDER = "__DIGIT__";
+declare const DIGITS_PLACEHOLDER = "__DIGITS__";
+/**
+ * Check if a key string is a digit placeholder sentinel value.
+ * Used during recording to identify placeholder keys.
+ */
+declare function isPlaceholderSentinel(key: string): boolean;
 /**
  * Convert a KeyCombination or HotkeySequence to display format
  */
@@ -758,6 +860,34 @@ declare function parseHotkeyString(hotkeyStr: string): HotkeySequence;
  */
 declare function parseCombinationId(id: string): KeyCombination;
 /**
+ * Parse a hotkey string to a KeySeq (new sequence type with digit placeholders).
+ * Handles both single keys ("ctrl+k") and sequences ("2 w", "\\d+ d")
+ *
+ * @example
+ * parseKeySeq('\\d+ d')  // [{ type: 'digits' }, { type: 'key', key: 'd', ... }]
+ * parseKeySeq('ctrl+k')  // [{ type: 'key', key: 'k', modifiers: { ctrl: true, ... } }]
+ */
+declare function parseKeySeq(hotkeyStr: string): KeySeq;
+/**
+ * Format a KeySeq to display format
+ */
+declare function formatKeySeq(seq: KeySeq): KeyCombinationDisplay;
+/**
+ * Check if a KeySeq contains any digit placeholders
+ */
+declare function hasDigitPlaceholders(seq: KeySeq): boolean;
+/**
+ * Convert a KeySeq to HotkeySequence (for backwards compatibility).
+ * Note: Digit placeholders become literal '\d' or '\d+' keys.
+ * This is only useful for legacy code paths.
+ */
+declare function keySeqToHotkeySequence(seq: KeySeq): HotkeySequence;
+/**
+ * Convert a HotkeySequence to KeySeq (for migration).
+ * Note: This does NOT detect digit patterns - use parseKeySeq for that.
+ */
+declare function hotkeySequenceToKeySeq(seq: HotkeySequence): KeySeq;
+/**
  * Conflict detection result
  */
 interface KeyConflict {
@@ -772,6 +902,7 @@ interface KeyConflict {
  * Find conflicts in a keymap.
  * Detects:
  * - Duplicate: multiple actions bound to the exact same key/sequence
+ * - Pattern overlap: digit patterns that could match the same input (e.g., "\d d" and "5 d")
  * - Prefix: one hotkey is a prefix of another (e.g., "2" and "2 w")
  *
  * @param keymap - HotkeyMap to check for conflicts
@@ -839,6 +970,23 @@ declare function fuzzyMatch(pattern: string, text: string): FuzzyMatchResult;
  */
 declare function searchActions(query: string, actions: ActionRegistry, keymap?: Record<string, string | string[]>): ActionSearchResult[];
 
+/**
+ * Handler function for actions.
+ * Optionally receives captured values from digit placeholders in bindings.
+ *
+ * @example
+ * ```tsx
+ * // Simple handler (no captures)
+ * handler: () => setPage(1)
+ *
+ * // Handler with captures (e.g., for binding "\d+ j")
+ * handler: (e, captures) => {
+ *   const n = captures?.[0] ?? 1
+ *   setRow(row + n)
+ * }
+ * ```
+ */
+type ActionHandler = (e?: KeyboardEvent, captures?: number[]) => void;
 interface ActionConfig {
     /** Human-readable label for omnibar/modal */
     label: string;
@@ -848,8 +996,8 @@ interface ActionConfig {
     defaultBindings?: string[];
     /** Search keywords for omnibar */
     keywords?: string[];
-    /** The action handler */
-    handler: () => void;
+    /** The action handler (optionally receives KeyboardEvent and captured values) */
+    handler: ActionHandler;
     /** Whether action is currently enabled (default: true) */
     enabled?: boolean;
     /** Priority for conflict resolution (higher wins, default: 0) */
@@ -1262,4 +1410,4 @@ declare const ACTION_MODAL = "__hotkeys:modal";
 declare const ACTION_OMNIBAR = "__hotkeys:omnibar";
 declare const ACTION_LOOKUP = "__hotkeys:lookup";
 
-export { ACTION_LOOKUP, ACTION_MODAL, ACTION_OMNIBAR, type ActionConfig, type ActionDefinition, type ActionRegistry, type ActionSearchResult, ActionsRegistryContext, type ActionsRegistryValue, Alt, Backspace, type BindingInfo, Command, Ctrl, DEFAULT_SEQUENCE_TIMEOUT, Down, Enter, type FuzzyMatchResult, type GroupRenderer, type GroupRendererProps, type HandlerMap, type HotkeyMap, type HotkeySequence, type HotkeysConfig, type HotkeysContextValue, HotkeysProvider, type HotkeysProviderProps, Kbd, KbdLookup, KbdModal, KbdOmnibar, type KbdProps, Kbds, Key, type KeyCombination, type KeyCombinationDisplay, type KeyConflict, type KeyIconProps, type KeyIconType, KeybindingEditor, type KeybindingEditorProps, type KeybindingEditorRenderProps, Left, LookupModal, ModifierIcon, type ModifierIconProps, type ModifierType, Omnibar, type OmnibarProps, type OmnibarRenderProps, Option, type RecordHotkeyOptions, type RecordHotkeyResult, type RegisteredAction, Right, type SequenceCompletion, SequenceModal, Shift, type ShortcutGroup, ShortcutsModal, type ShortcutsModalProps, type ShortcutsModalRenderProps, type TwoColumnConfig, type TwoColumnRow, Up, type UseEditableHotkeysOptions, type UseEditableHotkeysResult, type UseHotkeysOptions, type UseHotkeysResult, type UseOmnibarOptions, type UseOmnibarResult, createTwoColumnRenderer, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasConflicts, isMac, isModifierKey, isSequence, normalizeKey, parseCombinationId, parseHotkeyString, searchActions, useAction, useActions, useActionsRegistry, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useOmnibar, useRecordHotkey };
+export { ACTION_LOOKUP, ACTION_MODAL, ACTION_OMNIBAR, type ActionConfig, type ActionDefinition, type ActionHandler, type ActionRegistry, type ActionSearchResult, ActionsRegistryContext, type ActionsRegistryValue, Alt, Backspace, type BindingInfo, Command, Ctrl, DEFAULT_SEQUENCE_TIMEOUT, DIGITS_PLACEHOLDER, DIGIT_PLACEHOLDER, Down, Enter, type FuzzyMatchResult, type GroupRenderer, type GroupRendererProps, type HandlerMap, type HotkeyHandler, type HotkeyMap, type HotkeySequence, type HotkeysConfig, type HotkeysContextValue, HotkeysProvider, type HotkeysProviderProps, Kbd, KbdLookup, KbdModal, KbdOmnibar, type KbdProps, Kbds, Key, type KeyCombination, type KeyCombinationDisplay, type KeyConflict, type KeyIconProps, type KeyIconType, type KeySeq, KeybindingEditor, type KeybindingEditorProps, type KeybindingEditorRenderProps, Left, LookupModal, ModifierIcon, type ModifierIconProps, type ModifierType, type Modifiers, Omnibar, type OmnibarProps, type OmnibarRenderProps, Option, type RecordHotkeyOptions, type RecordHotkeyResult, type RegisteredAction, Right, type SeqElem, type SeqElemState, type SeqMatchState, type SequenceCompletion, SequenceModal, Shift, type ShortcutGroup, ShortcutsModal, type ShortcutsModalProps, type ShortcutsModalRenderProps, type TooltipComponent, type TooltipProps, type TwoColumnConfig, type TwoColumnRow, Up, type UseEditableHotkeysOptions, type UseEditableHotkeysResult, type UseHotkeysOptions, type UseHotkeysResult, type UseOmnibarOptions, type UseOmnibarResult, countPlaceholders, createTwoColumnRenderer, extractCaptures, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, formatKeySeq, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasConflicts, hasDigitPlaceholders, hotkeySequenceToKeySeq, isDigitPlaceholder, isMac, isModifierKey, isPlaceholderSentinel, isSequence, isShiftedSymbol, keySeqToHotkeySequence, normalizeKey, parseCombinationId, parseHotkeyString, parseKeySeq, searchActions, useAction, useActions, useActionsRegistry, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useOmnibar, useRecordHotkey };

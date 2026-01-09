@@ -3,7 +3,18 @@
 var jsxRuntime = require('react/jsx-runtime');
 var react = require('react');
 
-// src/TwoColumnRenderer.tsx
+// src/types.ts
+function extractCaptures(state) {
+  return state.filter(
+    (e) => (e.type === "digit" || e.type === "digits") && e.value !== void 0
+  ).map((e) => e.value);
+}
+function isDigitPlaceholder(elem) {
+  return elem.type === "digit" || elem.type === "digits";
+}
+function countPlaceholders(seq) {
+  return seq.filter(isDigitPlaceholder).length;
+}
 function createTwoColumnRenderer(config) {
   const { headers, getRows } = config;
   const [labelHeader, leftHeader, rightHeader] = headers;
@@ -281,6 +292,32 @@ var ACTION_LOOKUP = "__hotkeys:lookup";
 
 // src/utils.ts
 var { max } = Math;
+var SHIFTED_SYMBOLS = /* @__PURE__ */ new Set([
+  "!",
+  "@",
+  "#",
+  "$",
+  "%",
+  "^",
+  "&",
+  "*",
+  "(",
+  ")",
+  "_",
+  "+",
+  "{",
+  "}",
+  "|",
+  ":",
+  '"',
+  "<",
+  ">",
+  "?",
+  "~"
+]);
+function isShiftedSymbol(key) {
+  return SHIFTED_SYMBOLS.has(key);
+}
 function isMac() {
   if (typeof navigator === "undefined") return false;
   return /Mac|iPod|iPhone|iPad/.test(navigator.platform);
@@ -341,7 +378,18 @@ function formatKeyForDisplay(key) {
   }
   return key;
 }
+var DIGIT_PLACEHOLDER = "__DIGIT__";
+var DIGITS_PLACEHOLDER = "__DIGITS__";
+function isPlaceholderSentinel(key) {
+  return key === DIGIT_PLACEHOLDER || key === DIGITS_PLACEHOLDER;
+}
 function formatSingleCombination(combo) {
+  if (combo.key === DIGIT_PLACEHOLDER) {
+    return { display: "#", id: "\\d" };
+  }
+  if (combo.key === DIGITS_PLACEHOLDER) {
+    return { display: "##", id: "\\d+" };
+  }
   const mac = isMac();
   const parts = [];
   const idParts = [];
@@ -454,6 +502,111 @@ function parseCombinationId(id) {
   }
   return sequence[0];
 }
+var NO_MODIFIERS = { ctrl: false, alt: false, shift: false, meta: false };
+function parseSeqElem(str) {
+  if (str === "\\d") {
+    return { type: "digit" };
+  }
+  if (str === "\\d+") {
+    return { type: "digits" };
+  }
+  if (str.length === 1 && /^[A-Z]$/.test(str)) {
+    return {
+      type: "key",
+      key: str.toLowerCase(),
+      modifiers: { ctrl: false, alt: false, shift: true, meta: false }
+    };
+  }
+  const parts = str.toLowerCase().split("+");
+  const key = parts[parts.length - 1];
+  return {
+    type: "key",
+    key,
+    modifiers: {
+      ctrl: parts.includes("ctrl") || parts.includes("control"),
+      alt: parts.includes("alt") || parts.includes("option"),
+      shift: parts.includes("shift"),
+      meta: parts.includes("meta") || parts.includes("cmd") || parts.includes("command")
+    }
+  };
+}
+function parseKeySeq(hotkeyStr) {
+  if (!hotkeyStr.trim()) return [];
+  const parts = hotkeyStr.trim().split(/\s+/);
+  return parts.map(parseSeqElem);
+}
+function formatSeqElem(elem) {
+  if (elem.type === "digit") {
+    return { display: "\u27E8#\u27E9", id: "\\d" };
+  }
+  if (elem.type === "digits") {
+    return { display: "\u27E8##\u27E9", id: "\\d+" };
+  }
+  const mac = isMac();
+  const parts = [];
+  const idParts = [];
+  if (elem.modifiers.ctrl) {
+    parts.push(mac ? "\u2303" : "Ctrl");
+    idParts.push("ctrl");
+  }
+  if (elem.modifiers.meta) {
+    parts.push(mac ? "\u2318" : "Win");
+    idParts.push("meta");
+  }
+  if (elem.modifiers.alt) {
+    parts.push(mac ? "\u2325" : "Alt");
+    idParts.push("alt");
+  }
+  if (elem.modifiers.shift) {
+    parts.push(mac ? "\u21E7" : "Shift");
+    idParts.push("shift");
+  }
+  parts.push(formatKeyForDisplay(elem.key));
+  idParts.push(elem.key);
+  return {
+    display: mac ? parts.join("") : parts.join("+"),
+    id: idParts.join("+")
+  };
+}
+function formatKeySeq(seq) {
+  if (seq.length === 0) {
+    return { display: "", id: "", isSequence: false };
+  }
+  const formatted = seq.map(formatSeqElem);
+  if (seq.length === 1) {
+    return { ...formatted[0], isSequence: false };
+  }
+  return {
+    display: formatted.map((f) => f.display).join(" "),
+    id: formatted.map((f) => f.id).join(" "),
+    isSequence: true
+  };
+}
+function hasDigitPlaceholders(seq) {
+  return seq.some((elem) => elem.type === "digit" || elem.type === "digits");
+}
+function keySeqToHotkeySequence(seq) {
+  return seq.map((elem) => {
+    if (elem.type === "digit") {
+      return { key: "\\d", modifiers: NO_MODIFIERS };
+    }
+    if (elem.type === "digits") {
+      return { key: "\\d+", modifiers: NO_MODIFIERS };
+    }
+    return { key: elem.key, modifiers: elem.modifiers };
+  });
+}
+function hotkeySequenceToKeySeq(seq) {
+  return seq.map((combo) => {
+    if (combo.key === "\\d" && !combo.modifiers.ctrl && !combo.modifiers.alt && !combo.modifiers.shift && !combo.modifiers.meta) {
+      return { type: "digit" };
+    }
+    if (combo.key === "\\d+" && !combo.modifiers.ctrl && !combo.modifiers.alt && !combo.modifiers.shift && !combo.modifiers.meta) {
+      return { type: "digits" };
+    }
+    return { type: "key", key: combo.key, modifiers: combo.modifiers };
+  });
+}
 function isPrefix(a, b) {
   if (a.length >= b.length) return false;
   for (let i = 0; i < a.length; i++) {
@@ -464,11 +617,43 @@ function isPrefix(a, b) {
 function combinationsEqual(a, b) {
   return a.key === b.key && a.modifiers.ctrl === b.modifiers.ctrl && a.modifiers.alt === b.modifiers.alt && a.modifiers.shift === b.modifiers.shift && a.modifiers.meta === b.modifiers.meta;
 }
+function isDigitKey(key) {
+  return /^[0-9]$/.test(key);
+}
+function seqElemsCouldConflict(a, b) {
+  if (a.type === "digit" && b.type === "digit") return true;
+  if (a.type === "digit" && b.type === "key" && isDigitKey(b.key)) return true;
+  if (a.type === "key" && isDigitKey(a.key) && b.type === "digit") return true;
+  if (a.type === "digits" && b.type === "digits") return true;
+  if (a.type === "digits" && b.type === "digit") return true;
+  if (a.type === "digit" && b.type === "digits") return true;
+  if (a.type === "digits" && b.type === "key" && isDigitKey(b.key)) return true;
+  if (a.type === "key" && isDigitKey(a.key) && b.type === "digits") return true;
+  if (a.type === "key" && b.type === "key") {
+    return a.key === b.key && a.modifiers.ctrl === b.modifiers.ctrl && a.modifiers.alt === b.modifiers.alt && a.modifiers.shift === b.modifiers.shift && a.modifiers.meta === b.modifiers.meta;
+  }
+  return false;
+}
+function keySeqIsPrefix(a, b) {
+  if (a.length >= b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (!seqElemsCouldConflict(a[i], b[i])) return false;
+  }
+  return true;
+}
+function keySeqsCouldConflict(a, b) {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (!seqElemsCouldConflict(a[i], b[i])) return false;
+  }
+  return true;
+}
 function findConflicts(keymap) {
   const conflicts = /* @__PURE__ */ new Map();
   const entries = Object.entries(keymap).map(([key, actionOrActions]) => ({
     key,
     sequence: parseHotkeyString(key),
+    keySeq: parseKeySeq(key),
     actions: Array.isArray(actionOrActions) ? actionOrActions : [actionOrActions]
   }));
   const keyToActions = /* @__PURE__ */ new Map();
@@ -485,7 +670,36 @@ function findConflicts(keymap) {
     for (let j = i + 1; j < entries.length; j++) {
       const a = entries[i];
       const b = entries[j];
-      if (isPrefix(a.sequence, b.sequence)) {
+      if (keySeqsCouldConflict(a.keySeq, b.keySeq) && a.key !== b.key) {
+        const existingA = conflicts.get(a.key) ?? [];
+        if (!existingA.includes(`conflicts with: ${b.key}`)) {
+          conflicts.set(a.key, [...existingA, ...a.actions, `conflicts with: ${b.key}`]);
+        }
+        const existingB = conflicts.get(b.key) ?? [];
+        if (!existingB.includes(`conflicts with: ${a.key}`)) {
+          conflicts.set(b.key, [...existingB, ...b.actions, `conflicts with: ${a.key}`]);
+        }
+        continue;
+      }
+      if (keySeqIsPrefix(a.keySeq, b.keySeq)) {
+        const existingA = conflicts.get(a.key) ?? [];
+        if (!existingA.includes(`prefix of: ${b.key}`)) {
+          conflicts.set(a.key, [...existingA, ...a.actions, `prefix of: ${b.key}`]);
+        }
+        const existingB = conflicts.get(b.key) ?? [];
+        if (!existingB.includes(`has prefix: ${a.key}`)) {
+          conflicts.set(b.key, [...existingB, ...b.actions, `has prefix: ${a.key}`]);
+        }
+      } else if (keySeqIsPrefix(b.keySeq, a.keySeq)) {
+        const existingB = conflicts.get(b.key) ?? [];
+        if (!existingB.includes(`prefix of: ${a.key}`)) {
+          conflicts.set(b.key, [...existingB, ...b.actions, `prefix of: ${a.key}`]);
+        }
+        const existingA = conflicts.get(a.key) ?? [];
+        if (!existingA.includes(`has prefix: ${b.key}`)) {
+          conflicts.set(a.key, [...existingA, ...a.actions, `has prefix: ${b.key}`]);
+        }
+      } else if (isPrefix(a.sequence, b.sequence)) {
         const existingA = conflicts.get(a.key) ?? [];
         if (!existingA.includes(`prefix of: ${b.key}`)) {
           conflicts.set(a.key, [...existingA, ...a.actions, `prefix of: ${b.key}`]);
@@ -524,6 +738,7 @@ function getSequenceCompletions(pendingKeys, keymap) {
   const completions = [];
   for (const [hotkeyStr, actionOrActions] of Object.entries(keymap)) {
     const sequence = parseHotkeyString(hotkeyStr);
+    const keySeq = parseKeySeq(hotkeyStr);
     if (sequence.length <= pendingKeys.length) continue;
     let isPrefix2 = true;
     for (let i = 0; i < pendingKeys.length; i++) {
@@ -533,13 +748,13 @@ function getSequenceCompletions(pendingKeys, keymap) {
       }
     }
     if (isPrefix2) {
-      const remainingKeys = sequence.slice(pendingKeys.length);
-      const nextKeys = formatCombination(remainingKeys).id;
+      const remainingKeySeq = keySeq.slice(pendingKeys.length);
+      const nextKeys = formatKeySeq(remainingKeySeq).display;
       const actions = Array.isArray(actionOrActions) ? actionOrActions : [actionOrActions];
       completions.push({
         nextKeys,
         fullSequence: hotkeyStr,
-        display: formatCombination(sequence),
+        display: formatKeySeq(keySeq),
         actions
       });
     }
@@ -681,6 +896,92 @@ function sequencesMatch(a, b) {
   }
   return true;
 }
+function isDigit(key) {
+  return /^[0-9]$/.test(key);
+}
+function initMatchState(seq) {
+  return seq.map((elem) => {
+    if (elem.type === "digit") return { type: "digit" };
+    if (elem.type === "digits") return { type: "digits" };
+    return { type: "key", key: elem.key, modifiers: elem.modifiers };
+  });
+}
+function matchesKeyElem(combo, elem) {
+  const shiftMatches = isShiftedChar(combo.key) ? elem.modifiers.shift ? combo.modifiers.shift : true : combo.modifiers.shift === elem.modifiers.shift;
+  return combo.modifiers.ctrl === elem.modifiers.ctrl && combo.modifiers.alt === elem.modifiers.alt && shiftMatches && combo.modifiers.meta === elem.modifiers.meta && combo.key === elem.key;
+}
+function advanceMatchState(state, pattern, combo) {
+  const newState = [...state];
+  let pos = 0;
+  for (let i = 0; i < state.length; i++) {
+    const elem = state[i];
+    if (elem.type === "key" && !elem.matched) break;
+    if (elem.type === "digit" && elem.value === void 0) break;
+    if (elem.type === "digits" && elem.value === void 0) {
+      if (!elem.partial) break;
+      if (isDigit(combo.key)) {
+        const newPartial = (elem.partial || "") + combo.key;
+        newState[i] = { type: "digits", partial: newPartial };
+        return { status: "partial", state: newState };
+      } else {
+        const digitValue = parseInt(elem.partial, 10);
+        newState[i] = { type: "digits", value: digitValue };
+        pos = i + 1;
+        break;
+      }
+    }
+    pos++;
+  }
+  if (pos >= pattern.length) {
+    return { status: "failed" };
+  }
+  const currentPattern = pattern[pos];
+  if (currentPattern.type === "digit") {
+    if (!isDigit(combo.key) || combo.modifiers.ctrl || combo.modifiers.alt || combo.modifiers.meta) {
+      return { status: "failed" };
+    }
+    newState[pos] = { type: "digit", value: parseInt(combo.key, 10) };
+  } else if (currentPattern.type === "digits") {
+    if (!isDigit(combo.key) || combo.modifiers.ctrl || combo.modifiers.alt || combo.modifiers.meta) {
+      return { status: "failed" };
+    }
+    newState[pos] = { type: "digits", partial: combo.key };
+  } else {
+    if (!matchesKeyElem(combo, currentPattern)) {
+      return { status: "failed" };
+    }
+    newState[pos] = { type: "key", key: currentPattern.key, modifiers: currentPattern.modifiers, matched: true };
+  }
+  const isComplete = newState.every((elem) => {
+    if (elem.type === "key") return elem.matched === true;
+    if (elem.type === "digit") return elem.value !== void 0;
+    if (elem.type === "digits") return elem.value !== void 0;
+    return false;
+  });
+  if (isComplete) {
+    const captures = newState.filter(
+      (e) => (e.type === "digit" || e.type === "digits") && e.value !== void 0
+    ).map((e) => e.value);
+    return { status: "matched", state: newState, captures };
+  }
+  return { status: "partial", state: newState };
+}
+function isCollectingDigits(state) {
+  return state.some((elem) => elem.type === "digits" && elem.partial !== void 0 && elem.value === void 0);
+}
+function finalizeDigits(state) {
+  return state.map((elem) => {
+    if (elem.type === "digits" && elem.partial !== void 0 && elem.value === void 0) {
+      return { type: "digits", value: parseInt(elem.partial, 10) };
+    }
+    return elem;
+  });
+}
+function extractMatchCaptures(state) {
+  return state.filter(
+    (e) => (e.type === "digit" || e.type === "digits") && e.value !== void 0
+  ).map((e) => e.value);
+}
 function useHotkeys(keymap, handlers, options = {}) {
   const {
     enabled = true,
@@ -704,11 +1005,13 @@ function useHotkeys(keymap, handlers, options = {}) {
   const timeoutRef = react.useRef(null);
   const pendingKeysRef = react.useRef([]);
   pendingKeysRef.current = pendingKeys;
+  const matchStatesRef = react.useRef(/* @__PURE__ */ new Map());
   const parsedKeymapRef = react.useRef([]);
   react.useEffect(() => {
     parsedKeymapRef.current = Object.entries(keymap).map(([key, actionOrActions]) => ({
       key,
       sequence: parseHotkeyString(key),
+      keySeq: parseKeySeq(key),
       actions: Array.isArray(actionOrActions) ? actionOrActions : [actionOrActions]
     }));
   }, [keymap]);
@@ -716,6 +1019,7 @@ function useHotkeys(keymap, handlers, options = {}) {
     setPendingKeys([]);
     setIsAwaitingSequence(false);
     setTimeoutStartedAt(null);
+    matchStatesRef.current.clear();
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
@@ -725,7 +1029,7 @@ function useHotkeys(keymap, handlers, options = {}) {
     clearPending();
     onSequenceCancel?.();
   }, [clearPending, onSequenceCancel]);
-  const tryExecute = react.useCallback((sequence, e) => {
+  const tryExecute = react.useCallback((sequence, e, captures) => {
     for (const entry of parsedKeymapRef.current) {
       if (sequencesMatch(sequence, entry.sequence)) {
         for (const action of entry.actions) {
@@ -737,7 +1041,27 @@ function useHotkeys(keymap, handlers, options = {}) {
             if (stopPropagation) {
               e.stopPropagation();
             }
-            handler(e);
+            handler(e, captures);
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }, [preventDefault, stopPropagation]);
+  const tryExecuteKeySeq = react.useCallback((matchKey, matchState, captures, e) => {
+    for (const entry of parsedKeymapRef.current) {
+      if (entry.key === matchKey) {
+        for (const action of entry.actions) {
+          const handler = handlersRef.current[action];
+          if (handler) {
+            if (preventDefault) {
+              e.preventDefault();
+            }
+            if (stopPropagation) {
+              e.stopPropagation();
+            }
+            handler(e, captures.length > 0 ? captures : void 0);
             return true;
           }
         }
@@ -795,6 +1119,77 @@ function useHotkeys(keymap, handlers, options = {}) {
       }
       const currentCombo = eventToCombination(e);
       const newSequence = [...pendingKeysRef.current, currentCombo];
+      let keySeqMatched = false;
+      let keySeqPartial = false;
+      const matchStates = matchStatesRef.current;
+      const hasPartialMatches = matchStates.size > 0;
+      for (const entry of parsedKeymapRef.current) {
+        let state = matchStates.get(entry.key);
+        if (hasPartialMatches && !state) {
+          continue;
+        }
+        if (!state) {
+          state = initMatchState(entry.keySeq);
+          matchStates.set(entry.key, state);
+        }
+        const result = advanceMatchState(state, entry.keySeq, currentCombo);
+        if (result.status === "matched") {
+          if (tryExecuteKeySeq(entry.key, result.state, result.captures, e)) {
+            clearPending();
+            keySeqMatched = true;
+            break;
+          }
+        } else if (result.status === "partial") {
+          matchStates.set(entry.key, result.state);
+          keySeqPartial = true;
+        } else {
+          matchStates.delete(entry.key);
+        }
+      }
+      if (keySeqMatched) {
+        return;
+      }
+      if (keySeqPartial) {
+        setPendingKeys(newSequence);
+        setIsAwaitingSequence(true);
+        if (pendingKeysRef.current.length === 0) {
+          onSequenceStart?.(newSequence);
+        } else {
+          onSequenceProgress?.(newSequence);
+        }
+        if (preventDefault) {
+          e.preventDefault();
+        }
+        if (Number.isFinite(sequenceTimeout)) {
+          setTimeoutStartedAt(Date.now());
+          timeoutRef.current = setTimeout(() => {
+            for (const [key, state] of matchStates.entries()) {
+              if (isCollectingDigits(state)) {
+                const finalizedState = finalizeDigits(state);
+                const entry = parsedKeymapRef.current.find((e2) => e2.key === key);
+                if (entry) {
+                  const isComplete = finalizedState.every((elem) => {
+                    if (elem.type === "key") return elem.matched === true;
+                    if (elem.type === "digit") return elem.value !== void 0;
+                    if (elem.type === "digits") return elem.value !== void 0;
+                    return false;
+                  });
+                  if (isComplete) {
+                    void extractMatchCaptures(finalizedState);
+                  }
+                }
+              }
+            }
+            setPendingKeys([]);
+            setIsAwaitingSequence(false);
+            setTimeoutStartedAt(null);
+            matchStatesRef.current.clear();
+            onSequenceCancel?.();
+            timeoutRef.current = null;
+          }, sequenceTimeout);
+        }
+        return;
+      }
       const exactMatch = tryExecute(newSequence, e);
       if (exactMatch) {
         clearPending();
@@ -887,6 +1282,7 @@ function useHotkeys(keymap, handlers, options = {}) {
     clearPending,
     cancelSequence,
     tryExecute,
+    tryExecuteKeySeq,
     hasPotentialMatch,
     hasSequenceExtension,
     onSequenceStart,
@@ -1080,9 +1476,9 @@ function useAction(id, config) {
   react.useEffect(() => {
     registryRef.current.register(id, {
       ...config,
-      handler: () => {
+      handler: (e, captures) => {
         if (enabledRef.current) {
-          handlerRef.current();
+          handlerRef.current(e, captures);
         }
       }
     });
@@ -1116,9 +1512,9 @@ function useActions(actions) {
     for (const [id, config] of Object.entries(actions)) {
       registryRef.current.register(id, {
         ...config,
-        handler: () => {
+        handler: (e, captures) => {
           if (enabledRef.current[id]) {
-            handlersRef.current[id]?.();
+            handlersRef.current[id]?.(e, captures);
           }
         }
       });
@@ -1172,6 +1568,7 @@ function useRecordHotkey(options = {}) {
   const pauseTimeoutRef = react.useRef(pauseTimeout);
   pauseTimeoutRef.current = pauseTimeout;
   const pendingKeysRef = react.useRef([]);
+  const hashCycleRef = react.useRef(0);
   const clearTimeout_ = react.useCallback(() => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
@@ -1201,6 +1598,7 @@ function useRecordHotkey(options = {}) {
     pressedKeysRef.current.clear();
     hasNonModifierRef.current = false;
     currentComboRef.current = null;
+    hashCycleRef.current = 0;
     onCancel?.();
   }, [clearTimeout_, onCancel]);
   const commit = react.useCallback(() => {
@@ -1221,6 +1619,7 @@ function useRecordHotkey(options = {}) {
     pressedKeysRef.current.clear();
     hasNonModifierRef.current = false;
     currentComboRef.current = null;
+    hashCycleRef.current = 0;
     return cancel;
   }, [cancel, clearTimeout_]);
   react.useEffect(() => {
@@ -1296,22 +1695,23 @@ function useRecordHotkey(options = {}) {
         key = e.code.slice(5);
       }
       pressedKeysRef.current.add(key);
-      const combo = {
-        key: "",
-        modifiers: {
-          ctrl: e.ctrlKey,
-          alt: e.altKey,
-          shift: e.shiftKey,
-          meta: e.metaKey
-        }
-      };
+      let nonModifierKey = "";
       for (const k of pressedKeysRef.current) {
         if (!isModifierKey(k)) {
-          combo.key = normalizeKey(k);
+          nonModifierKey = normalizeKey(k);
           hasNonModifierRef.current = true;
           break;
         }
       }
+      const combo = {
+        key: nonModifierKey,
+        modifiers: {
+          ctrl: e.ctrlKey,
+          alt: e.altKey,
+          shift: e.shiftKey && !isShiftedSymbol(nonModifierKey),
+          meta: e.metaKey
+        }
+      };
       if (combo.key) {
         currentComboRef.current = combo;
         setActiveKeys(combo);
@@ -1336,12 +1736,35 @@ function useRecordHotkey(options = {}) {
       pressedKeysRef.current.delete(key);
       const shouldComplete = pressedKeysRef.current.size === 0 || e.key === "Meta" && hasNonModifierRef.current;
       if (shouldComplete && hasNonModifierRef.current && currentComboRef.current) {
-        const combo = currentComboRef.current;
+        let combo = currentComboRef.current;
         pressedKeysRef.current.clear();
         hasNonModifierRef.current = false;
         currentComboRef.current = null;
         setActiveKeys(null);
-        const newSequence = [...pendingKeysRef.current, combo];
+        let newSequence;
+        const noModifiers = !combo.modifiers.ctrl && !combo.modifiers.alt && !combo.modifiers.meta && !combo.modifiers.shift;
+        if (combo.key === "#" && noModifiers) {
+          const pending = pendingKeysRef.current;
+          const lastCombo = pending[pending.length - 1];
+          if (hashCycleRef.current === 0) {
+            combo = { key: DIGIT_PLACEHOLDER, modifiers: { ctrl: false, alt: false, shift: false, meta: false } };
+            newSequence = [...pending, combo];
+            hashCycleRef.current = 1;
+          } else if (hashCycleRef.current === 1 && lastCombo?.key === DIGIT_PLACEHOLDER) {
+            newSequence = [...pending.slice(0, -1), { key: DIGITS_PLACEHOLDER, modifiers: { ctrl: false, alt: false, shift: false, meta: false } }];
+            hashCycleRef.current = 2;
+          } else if (hashCycleRef.current === 2 && lastCombo?.key === DIGITS_PLACEHOLDER) {
+            newSequence = [...pending.slice(0, -1), { key: "#", modifiers: { ctrl: false, alt: false, shift: false, meta: false } }];
+            hashCycleRef.current = 3;
+          } else {
+            combo = { key: DIGIT_PLACEHOLDER, modifiers: { ctrl: false, alt: false, shift: false, meta: false } };
+            newSequence = [...pending, combo];
+            hashCycleRef.current = 1;
+          }
+        } else {
+          hashCycleRef.current = 0;
+          newSequence = [...pendingKeysRef.current, combo];
+        }
         pendingKeysRef.current = newSequence;
         setPendingKeys(newSequence);
         clearTimeout_();
@@ -1891,11 +2314,20 @@ function KeyCombo({ combo }) {
   }
   return /* @__PURE__ */ jsxRuntime.jsx(jsxRuntime.Fragment, { children: parts });
 }
+function SeqElemDisplay({ elem }) {
+  if (elem.type === "digit") {
+    return /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-placeholder", title: "Any single digit (0-9)", children: "#" });
+  }
+  if (elem.type === "digits") {
+    return /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-placeholder", title: "One or more digits (0-9)", children: "##" });
+  }
+  return /* @__PURE__ */ jsxRuntime.jsx(KeyCombo, { combo: { key: elem.key, modifiers: elem.modifiers } });
+}
 function BindingDisplay({ binding }) {
-  const sequence = parseHotkeyString(binding);
-  return /* @__PURE__ */ jsxRuntime.jsx(jsxRuntime.Fragment, { children: sequence.map((combo, i) => /* @__PURE__ */ jsxRuntime.jsxs(react.Fragment, { children: [
+  const sequence = parseKeySeq(binding);
+  return /* @__PURE__ */ jsxRuntime.jsx(jsxRuntime.Fragment, { children: sequence.map((elem, i) => /* @__PURE__ */ jsxRuntime.jsxs(react.Fragment, { children: [
     i > 0 && /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-sequence-sep", children: " " }),
-    /* @__PURE__ */ jsxRuntime.jsx(KeyCombo, { combo })
+    /* @__PURE__ */ jsxRuntime.jsx(SeqElemDisplay, { elem })
   ] }, i)) });
 }
 function Kbd({
@@ -2175,12 +2607,13 @@ function LookupModal({ defaultBinding = "meta+shift+k" } = {}) {
       if (binding.startsWith("__")) continue;
       const actions = Array.isArray(actionOrActions) ? actionOrActions : [actionOrActions];
       const sequence = parseHotkeyString(binding);
-      const display = formatCombination(sequence).display;
+      const keySeq = parseKeySeq(binding);
+      const display = formatKeySeq(keySeq).display;
       const labels = actions.map((actionId) => {
         const action = registry.actions.get(actionId);
         return action?.config.label || actionId;
       });
-      results.push({ binding, sequence, display, actions, labels });
+      results.push({ binding, sequence, keySeq, display, actions, labels });
     }
     results.sort((a, b) => a.binding.localeCompare(b.binding));
     return results;
@@ -2321,15 +2754,26 @@ function LookupModal({ defaultBinding = "meta+shift+k" } = {}) {
     ] })
   ] }) });
 }
+function SeqElemBadge({ elem }) {
+  if (elem.type === "digit") {
+    return /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-placeholder", title: "Any single digit (0-9)", children: "#" });
+  }
+  if (elem.type === "digits") {
+    return /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-placeholder", title: "One or more digits (0-9)", children: "##" });
+  }
+  return /* @__PURE__ */ jsxRuntime.jsxs(jsxRuntime.Fragment, { children: [
+    elem.modifiers.meta && /* @__PURE__ */ jsxRuntime.jsx(ModifierIcon, { modifier: "meta", className: "kbd-modifier-icon" }),
+    elem.modifiers.ctrl && /* @__PURE__ */ jsxRuntime.jsx(ModifierIcon, { modifier: "ctrl", className: "kbd-modifier-icon" }),
+    elem.modifiers.alt && /* @__PURE__ */ jsxRuntime.jsx(ModifierIcon, { modifier: "alt", className: "kbd-modifier-icon" }),
+    elem.modifiers.shift && /* @__PURE__ */ jsxRuntime.jsx(ModifierIcon, { modifier: "shift", className: "kbd-modifier-icon" }),
+    /* @__PURE__ */ jsxRuntime.jsx("span", { children: formatKeyForDisplay(elem.key) })
+  ] });
+}
 function BindingBadge({ binding }) {
-  const sequence = parseHotkeyString(binding);
-  return /* @__PURE__ */ jsxRuntime.jsx("kbd", { className: "kbd-kbd", children: sequence.map((combo, i) => /* @__PURE__ */ jsxRuntime.jsxs(react.Fragment, { children: [
+  const keySeq = parseKeySeq(binding);
+  return /* @__PURE__ */ jsxRuntime.jsx("kbd", { className: "kbd-kbd", children: keySeq.map((elem, i) => /* @__PURE__ */ jsxRuntime.jsxs(react.Fragment, { children: [
     i > 0 && /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-sequence-sep", children: " " }),
-    combo.modifiers.meta && /* @__PURE__ */ jsxRuntime.jsx(ModifierIcon, { modifier: "meta", className: "kbd-modifier-icon" }),
-    combo.modifiers.ctrl && /* @__PURE__ */ jsxRuntime.jsx(ModifierIcon, { modifier: "ctrl", className: "kbd-modifier-icon" }),
-    combo.modifiers.alt && /* @__PURE__ */ jsxRuntime.jsx(ModifierIcon, { modifier: "alt", className: "kbd-modifier-icon" }),
-    combo.modifiers.shift && /* @__PURE__ */ jsxRuntime.jsx(ModifierIcon, { modifier: "shift", className: "kbd-modifier-icon" }),
-    /* @__PURE__ */ jsxRuntime.jsx("span", { children: combo.key.length === 1 ? combo.key.toUpperCase() : combo.key })
+    /* @__PURE__ */ jsxRuntime.jsx(SeqElemBadge, { elem })
   ] }, i)) });
 }
 function Omnibar({
@@ -2556,7 +3000,7 @@ function SequenceModal() {
       timeoutStartedAt
     ),
     completions.length > 0 && /* @__PURE__ */ jsxRuntime.jsx("div", { className: "kbd-sequence-completions", children: Array.from(groupedCompletions.entries()).map(([nextKey, comps]) => /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "kbd-sequence-completion", children: [
-      /* @__PURE__ */ jsxRuntime.jsx("kbd", { className: "kbd-kbd", children: nextKey.toUpperCase() }),
+      /* @__PURE__ */ jsxRuntime.jsx("kbd", { className: "kbd-kbd", children: nextKey }),
       /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-sequence-arrow", children: "\u2192" }),
       /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-sequence-actions", children: comps.flatMap((c) => c.actions).map((action, i) => /* @__PURE__ */ jsxRuntime.jsxs("span", { children: [
         i > 0 && ", ",
@@ -2566,6 +3010,8 @@ function SequenceModal() {
     completions.length === 0 && /* @__PURE__ */ jsxRuntime.jsx("div", { className: "kbd-sequence-empty", children: "No matching shortcuts" })
   ] }) });
 }
+var DefaultTooltip = ({ children }) => /* @__PURE__ */ jsxRuntime.jsx(jsxRuntime.Fragment, { children });
+var TooltipContext = react.createContext(DefaultTooltip);
 function parseActionId(actionId) {
   const colonIndex = actionId.indexOf(":");
   if (colonIndex > 0) {
@@ -2662,6 +3108,16 @@ function KeyDisplay({
   }
   return /* @__PURE__ */ jsxRuntime.jsx("span", { className, children: parts });
 }
+function SeqElemDisplay2({ elem, className }) {
+  const Tooltip = react.useContext(TooltipContext);
+  if (elem.type === "digit") {
+    return /* @__PURE__ */ jsxRuntime.jsx(Tooltip, { title: "Any single digit (0-9)", children: /* @__PURE__ */ jsxRuntime.jsx("span", { className: `kbd-placeholder ${className || ""}`, children: "#" }) });
+  }
+  if (elem.type === "digits") {
+    return /* @__PURE__ */ jsxRuntime.jsx(Tooltip, { title: "One or more digits (0-9)", children: /* @__PURE__ */ jsxRuntime.jsx("span", { className: `kbd-placeholder ${className || ""}`, children: "##" }) });
+  }
+  return /* @__PURE__ */ jsxRuntime.jsx(KeyDisplay, { combo: { key: elem.key, modifiers: elem.modifiers }, className });
+}
 function BindingDisplay2({
   binding,
   className,
@@ -2677,7 +3133,8 @@ function BindingDisplay2({
   timeoutDuration = DEFAULT_SEQUENCE_TIMEOUT
 }) {
   const sequence = parseHotkeyString(binding);
-  const display = formatCombination(sequence);
+  const keySeq = parseKeySeq(binding);
+  formatKeySeq(keySeq);
   let kbdClassName = "kbd-kbd";
   if (editable && !isEditing) kbdClassName += " editable";
   if (isEditing) kbdClassName += " editing";
@@ -2726,10 +3183,13 @@ function BindingDisplay2({
       onEdit();
     }
   } : void 0, children: [
-    display.isSequence ? sequence.map((combo, i) => /* @__PURE__ */ jsxRuntime.jsxs(react.Fragment, { children: [
+    keySeq.length > 1 ? keySeq.map((elem, i) => /* @__PURE__ */ jsxRuntime.jsxs(react.Fragment, { children: [
       i > 0 && /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-sequence-sep", children: " " }),
-      /* @__PURE__ */ jsxRuntime.jsx(KeyDisplay, { combo })
-    ] }, i)) : /* @__PURE__ */ jsxRuntime.jsx(KeyDisplay, { combo: sequence[0] }),
+      /* @__PURE__ */ jsxRuntime.jsx(SeqElemDisplay2, { elem })
+    ] }, i)) : keySeq.length === 1 ? /* @__PURE__ */ jsxRuntime.jsx(SeqElemDisplay2, { elem: keySeq[0] }) : (
+      // Fallback for legacy parsing
+      /* @__PURE__ */ jsxRuntime.jsx(KeyDisplay, { combo: sequence[0] })
+    ),
     editable && onRemove && /* @__PURE__ */ jsxRuntime.jsx(
       "button",
       {
@@ -2766,7 +3226,8 @@ function ShortcutsModal({
   modalClassName = "kbd-modal",
   title = "Keyboard Shortcuts",
   hint,
-  showUnbound
+  showUnbound,
+  TooltipComponent: TooltipComponentProp = DefaultTooltip
 }) {
   const ctx = useMaybeHotkeysContext();
   const contextLabels = react.useMemo(() => {
@@ -3229,7 +3690,7 @@ function ShortcutsModal({
       renderCell(actionId, bindings)
     ] }, actionId));
   };
-  return /* @__PURE__ */ jsxRuntime.jsx("div", { className: backdropClassName, onClick: handleBackdropClick, children: /* @__PURE__ */ jsxRuntime.jsxs("div", { className: modalClassName, role: "dialog", "aria-modal": "true", "aria-label": "Keyboard shortcuts", onClick: handleModalClick, children: [
+  return /* @__PURE__ */ jsxRuntime.jsx(TooltipContext.Provider, { value: TooltipComponentProp, children: /* @__PURE__ */ jsxRuntime.jsx("div", { className: backdropClassName, onClick: handleBackdropClick, children: /* @__PURE__ */ jsxRuntime.jsxs("div", { className: modalClassName, role: "dialog", "aria-modal": "true", "aria-label": "Keyboard shortcuts", onClick: handleModalClick, children: [
     /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "kbd-modal-header", children: [
       /* @__PURE__ */ jsxRuntime.jsx("h2", { className: "kbd-modal-title", children: title }),
       /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "kbd-modal-header-buttons", children: [
@@ -3298,7 +3759,7 @@ function ShortcutsModal({
         )
       ] })
     ] })
-  ] }) });
+  ] }) }) });
 }
 
 exports.ACTION_LOOKUP = ACTION_LOOKUP;
@@ -3310,6 +3771,8 @@ exports.Backspace = Backspace;
 exports.Command = Command;
 exports.Ctrl = Ctrl;
 exports.DEFAULT_SEQUENCE_TIMEOUT = DEFAULT_SEQUENCE_TIMEOUT;
+exports.DIGITS_PLACEHOLDER = DIGITS_PLACEHOLDER;
+exports.DIGIT_PLACEHOLDER = DIGIT_PLACEHOLDER;
 exports.Down = Down;
 exports.Enter = Enter;
 exports.HotkeysProvider = HotkeysProvider;
@@ -3330,11 +3793,14 @@ exports.SequenceModal = SequenceModal;
 exports.Shift = Shift;
 exports.ShortcutsModal = ShortcutsModal;
 exports.Up = Up;
+exports.countPlaceholders = countPlaceholders;
 exports.createTwoColumnRenderer = createTwoColumnRenderer;
+exports.extractCaptures = extractCaptures;
 exports.findConflicts = findConflicts;
 exports.formatBinding = formatBinding;
 exports.formatCombination = formatCombination;
 exports.formatKeyForDisplay = formatKeyForDisplay;
+exports.formatKeySeq = formatKeySeq;
 exports.fuzzyMatch = fuzzyMatch;
 exports.getActionBindings = getActionBindings;
 exports.getConflictsArray = getConflictsArray;
@@ -3342,12 +3808,19 @@ exports.getKeyIcon = getKeyIcon;
 exports.getModifierIcon = getModifierIcon;
 exports.getSequenceCompletions = getSequenceCompletions;
 exports.hasConflicts = hasConflicts;
+exports.hasDigitPlaceholders = hasDigitPlaceholders;
+exports.hotkeySequenceToKeySeq = hotkeySequenceToKeySeq;
+exports.isDigitPlaceholder = isDigitPlaceholder;
 exports.isMac = isMac;
 exports.isModifierKey = isModifierKey;
+exports.isPlaceholderSentinel = isPlaceholderSentinel;
 exports.isSequence = isSequence;
+exports.isShiftedSymbol = isShiftedSymbol;
+exports.keySeqToHotkeySequence = keySeqToHotkeySequence;
 exports.normalizeKey = normalizeKey;
 exports.parseCombinationId = parseCombinationId;
 exports.parseHotkeyString = parseHotkeyString;
+exports.parseKeySeq = parseKeySeq;
 exports.searchActions = searchActions;
 exports.useAction = useAction;
 exports.useActions = useActions;
