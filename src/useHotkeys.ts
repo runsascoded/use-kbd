@@ -200,6 +200,16 @@ function advanceMatchState(
         newState[i] = { type: 'digits', value: digitValue }
         // Continue to next element with this key
         pos = i + 1
+
+        // If this was the last element, the sequence is complete
+        if (pos >= pattern.length) {
+          const captures = newState
+            .filter((e): e is { type: 'digit'; value: number } | { type: 'digits'; value: number } =>
+              (e.type === 'digit' || e.type === 'digits') && e.value !== undefined
+            )
+            .map(e => e.value)
+          return { status: 'matched', state: newState, captures }
+        }
         break
       }
     }
