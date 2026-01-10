@@ -94,7 +94,7 @@ jobs:
   build-dist:
     needs: build-and-test
     if: github.ref == 'refs/heads/main'
-    uses: runsascoded/pnpm-dist/.github/workflows/build-dist.yml@v1
+    uses: runsascoded/npm-dist/.github/workflows/build-dist.yml@v1
     with:
       extra_files: src/styles.css
 
