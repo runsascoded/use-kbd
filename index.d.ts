@@ -160,6 +160,8 @@ interface ActionDefinition {
     icon?: string;
     /** Whether the action is currently enabled (default: true) */
     enabled?: boolean;
+    /** Hide from ShortcutsModal (still searchable in omnibar) */
+    hideFromModal?: boolean;
 }
 /**
  * Registry of all available actions
@@ -1002,6 +1004,8 @@ interface ActionConfig {
     enabled?: boolean;
     /** Priority for conflict resolution (higher wins, default: 0) */
     priority?: number;
+    /** Hide from ShortcutsModal (still searchable in omnibar) */
+    hideFromModal?: boolean;
 }
 /**
  * Register an action with the hotkeys system.

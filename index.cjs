@@ -3030,6 +3030,7 @@ function organizeShortcuts(keymap, labels, descriptions, groupNames, groupOrder,
     return groupNames?.[groupKey] ?? groupKey;
   };
   for (const [actionId, bindings] of actionBindings) {
+    if (actionRegistry?.[actionId]?.hideFromModal) continue;
     includedActions.add(actionId);
     const { name } = parseActionId(actionId);
     const groupName = getGroupName(actionId);
@@ -3046,6 +3047,7 @@ function organizeShortcuts(keymap, labels, descriptions, groupNames, groupOrder,
   if (actionRegistry && showUnbound) {
     for (const [actionId, action] of Object.entries(actionRegistry)) {
       if (includedActions.has(actionId)) continue;
+      if (action.hideFromModal) continue;
       const { name } = parseActionId(actionId);
       const groupName = getGroupName(actionId);
       if (!groupMap.has(groupName)) {
