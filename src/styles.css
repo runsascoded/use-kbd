@@ -427,6 +427,43 @@
   font-size: 0.875rem;
 }
 
+.kbd-omnibar-loading {
+  padding: var(--kbd-padding);
+  text-align: center;
+  color: var(--kbd-text-secondary);
+  font-size: 0.875rem;
+}
+
+.kbd-omnibar-pagination {
+  padding: 8px var(--kbd-padding);
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--kbd-text-secondary);
+  border-top: 1px solid var(--kbd-border);
+}
+
+.kbd-omnibar-pagination-loading {
+  font-style: italic;
+}
+
+.kbd-omnibar-pagination-info {
+  /* Normal weight for "X of Y" */
+}
+
+.kbd-omnibar-pagination-more {
+  font-style: italic;
+}
+
+.kbd-omnibar-result-description {
+  font-size: 0.75rem;
+  color: var(--kbd-text-secondary);
+  margin-left: auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 150px;
+}
+
 /* === Sequence Modal === */
 .kbd-sequence-backdrop {
   position: fixed;

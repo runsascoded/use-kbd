@@ -1,9 +1,9 @@
-import { Fragment, KeyboardEvent, MouseEvent, ReactNode, RefObject, useCallback, useEffect, useRef } from 'react'
+import { Fragment, KeyboardEvent, MouseEvent, ReactNode, RefObject, useCallback, useEffect, useMemo, useRef } from 'react'
 import { ACTION_OMNIBAR } from './constants'
 import { useMaybeHotkeysContext } from './HotkeysProvider'
 import { ModifierIcon } from './ModifierIcons'
 import { useAction } from './useAction'
-import { useOmnibar, RemoteOmnibarResult } from './useOmnibar'
+import { useOmnibar, RemoteOmnibarResult, EndpointPaginationInfo } from './useOmnibar'
 import { parseKeySeq, formatKeyForDisplay } from './utils'
 import type { SeqElem, OmnibarEntry } from './types'
 import type { ActionRegistry, ActionSearchResult, HotkeySequence, SequenceCompletion } from './types'
@@ -74,6 +74,10 @@ export interface OmnibarRenderProps {
   remoteResults: RemoteOmnibarResult[]
   /** Whether remote endpoints are being queried */
   isLoadingRemote: boolean
+  /** Pagination info per endpoint */
+  endpointPagination: Map<string, EndpointPaginationInfo>
+  /** Load more results for a specific endpoint */
+  loadMore: (endpointId: string) => void
   /** Currently selected index (across local + remote) */
   selectedIndex: number
   /** Total number of results (local + remote) */
@@ -240,6 +244,8 @@ export function Omnibar({
     results,
     remoteResults,
     isLoadingRemote,
+    endpointPagination,
+    loadMore,
     selectedIndex,
     totalResults,
     selectNext,
@@ -265,6 +271,23 @@ export function Omnibar({
   // Use prop, then context, then internal state
   const isOpen = isOpenProp ?? ctx?.isOmnibarOpen ?? internalIsOpen
 
+  // Ref for the results container (IntersectionObserver root)
+  const resultsContainerRef = useRef<HTMLDivElement | null>(null)
+
+  // Refs for sentinel elements (one per endpoint with scroll mode)
+  const sentinelRefs = useRef<Map<string, HTMLDivElement | null>>(new Map())
+
+  // Group remote results by endpoint for rendering sentinels
+  const remoteResultsByEndpoint = useMemo(() => {
+    const grouped = new Map<string, RemoteOmnibarResult[]>()
+    for (const result of remoteResults) {
+      const existing = grouped.get(result.endpointId) ?? []
+      existing.push(result)
+      grouped.set(result.endpointId, existing)
+    }
+    return grouped
+  }, [remoteResults])
+
   // Focus input when opened
   useEffect(() => {
     if (isOpen) {
@@ -274,6 +297,50 @@ export function Omnibar({
       })
     }
   }, [isOpen])
+
+  // IntersectionObserver for scroll-based pagination
+  useEffect(() => {
+    if (!isOpen) return
+
+    const container = resultsContainerRef.current
+    if (!container) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue
+
+          // Get endpoint ID from data attribute
+          const endpointId = (entry.target as HTMLElement).dataset.endpointId
+          if (!endpointId) continue
+
+          // Check if this endpoint uses scroll mode and has more results
+          const paginationInfo = endpointPagination.get(endpointId)
+          if (!paginationInfo) continue
+          if (paginationInfo.mode !== 'scroll') continue
+          if (!paginationInfo.hasMore) continue
+          if (paginationInfo.isLoading) continue
+
+          // Load more!
+          loadMore(endpointId)
+        }
+      },
+      {
+        root: container,
+        rootMargin: '100px', // Trigger slightly before sentinel is visible
+        threshold: 0,
+      },
+    )
+
+    // Observe all sentinel elements
+    for (const [endpointId, sentinel] of sentinelRefs.current) {
+      if (sentinel) {
+        observer.observe(sentinel)
+      }
+    }
+
+    return () => observer.disconnect()
+  }, [isOpen, endpointPagination, loadMore])
 
   // Global ESC handler to close omnibar (works even if input loses focus)
   useEffect(() => {
@@ -339,6 +406,8 @@ export function Omnibar({
           results,
           remoteResults,
           isLoadingRemote,
+          endpointPagination,
+          loadMore,
           selectedIndex,
           totalResults,
           selectNext,
@@ -372,7 +441,7 @@ export function Omnibar({
           spellCheck={false}
         />
 
-        <div className="kbd-omnibar-results">
+        <div className="kbd-omnibar-results" ref={resultsContainerRef}>
           {totalResults === 0 && !isLoadingRemote ? (
             <div className="kbd-omnibar-no-results">
               {query ? 'No matching commands' : 'Start typing to search commands...'}
@@ -404,34 +473,66 @@ export function Omnibar({
                 </div>
               ))}
 
-              {/* Remote endpoint results */}
-              {remoteResults.map((result, i) => {
-                const absoluteIndex = results.length + i
-                return (
-                  <div
-                    key={result.id}
-                    className={`kbd-omnibar-result ${absoluteIndex === selectedIndex ? 'selected' : ''}`}
-                    onClick={() => execute(result.id)}
-                  >
-                    <span className="kbd-omnibar-result-label">
-                      {result.entry.label}
-                    </span>
-                    {result.entry.group && (
-                      <span className="kbd-omnibar-result-category">
-                        {result.entry.group}
-                      </span>
-                    )}
-                    {result.entry.description && (
-                      <span className="kbd-omnibar-result-description">
-                        {result.entry.description}
-                      </span>
-                    )}
-                  </div>
-                )
-              })}
+              {/* Remote endpoint results grouped by endpoint */}
+              {(() => {
+                let remoteIndex = 0
+                return Array.from(remoteResultsByEndpoint.entries()).map(([endpointId, endpointResults]) => {
+                  const paginationInfo = endpointPagination.get(endpointId)
+                  const showPagination = paginationInfo?.mode === 'scroll' && paginationInfo.total !== undefined
 
-              {/* Loading indicator */}
-              {isLoadingRemote && (
+                  return (
+                    <Fragment key={endpointId}>
+                      {endpointResults.map((result) => {
+                        const absoluteIndex = results.length + remoteIndex
+                        remoteIndex++
+                        return (
+                          <div
+                            key={result.id}
+                            className={`kbd-omnibar-result ${absoluteIndex === selectedIndex ? 'selected' : ''}`}
+                            onClick={() => execute(result.id)}
+                          >
+                            <span className="kbd-omnibar-result-label">
+                              {result.entry.label}
+                            </span>
+                            {result.entry.group && (
+                              <span className="kbd-omnibar-result-category">
+                                {result.entry.group}
+                              </span>
+                            )}
+                            {result.entry.description && (
+                              <span className="kbd-omnibar-result-description">
+                                {result.entry.description}
+                              </span>
+                            )}
+                          </div>
+                        )
+                      })}
+
+                      {/* Pagination info and sentinel for scroll mode */}
+                      {paginationInfo?.mode === 'scroll' && (
+                        <div
+                          className="kbd-omnibar-pagination"
+                          ref={(el) => sentinelRefs.current.set(endpointId, el)}
+                          data-endpoint-id={endpointId}
+                        >
+                          {paginationInfo.isLoading ? (
+                            <span className="kbd-omnibar-pagination-loading">Loading more...</span>
+                          ) : showPagination ? (
+                            <span className="kbd-omnibar-pagination-info">
+                              {paginationInfo.loaded} of {paginationInfo.total}
+                            </span>
+                          ) : paginationInfo.hasMore ? (
+                            <span className="kbd-omnibar-pagination-more">Scroll for more...</span>
+                          ) : null}
+                        </div>
+                      )}
+                    </Fragment>
+                  )
+                })
+              })()}
+
+              {/* Loading indicator for initial load */}
+              {isLoadingRemote && remoteResults.length === 0 && (
                 <div className="kbd-omnibar-loading">
                   Searching...
                 </div>
