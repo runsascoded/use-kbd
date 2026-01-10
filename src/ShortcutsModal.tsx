@@ -209,6 +209,9 @@ function organizeShortcuts(
   }
 
   for (const [actionId, bindings] of actionBindings) {
+    // Skip actions marked as hidden from modal
+    if (actionRegistry?.[actionId]?.hideFromModal) continue
+
     includedActions.add(actionId)
     const { name } = parseActionId(actionId)
     const groupName = getGroupName(actionId)
@@ -229,6 +232,8 @@ function organizeShortcuts(
   if (actionRegistry && showUnbound) {
     for (const [actionId, action] of Object.entries(actionRegistry)) {
       if (includedActions.has(actionId)) continue
+      // Skip actions marked as hidden from modal
+      if (action.hideFromModal) continue
 
       const { name } = parseActionId(actionId)
       const groupName = getGroupName(actionId)

@@ -34,6 +34,8 @@ export interface ActionConfig {
   enabled?: boolean
   /** Priority for conflict resolution (higher wins, default: 0) */
   priority?: number
+  /** Hide from ShortcutsModal (still searchable in omnibar) */
+  hideFromModal?: boolean
 }
 
 /**

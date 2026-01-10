@@ -165,6 +165,8 @@ export interface ActionDefinition {
   icon?: string
   /** Whether the action is currently enabled (default: true) */
   enabled?: boolean
+  /** Hide from ShortcutsModal (still searchable in omnibar) */
+  hideFromModal?: boolean
 }
 
 /**
