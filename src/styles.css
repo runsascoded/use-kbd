@@ -47,6 +47,9 @@
   --kbd-sequence-max-height: 300px;
   --kbd-sequence-row-padding: 8px 12px;
   --kbd-sequence-row-gap: 8px;
+
+  /* Omnibar */
+  --kbd-omnibar-max-height: 50vh;
 }
 
 /* === Backdrop === */
@@ -379,7 +382,7 @@
 }
 
 .kbd-omnibar-results {
-  max-height: 300px;
+  max-height: var(--kbd-omnibar-max-height);
   overflow-y: auto;
 }
 
