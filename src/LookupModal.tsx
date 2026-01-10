@@ -3,7 +3,7 @@ import { ACTION_LOOKUP } from './constants'
 import { useHotkeysContext } from './HotkeysProvider'
 import { useAction } from './useAction'
 import type { HotkeySequence, KeyCombination } from './types'
-import { formatCombination, formatKeySeq, parseHotkeyString, parseKeySeq, normalizeKey, isModifierKey } from './utils'
+import { DIGIT_PLACEHOLDER, DIGITS_PLACEHOLDER, formatCombination, formatKeySeq, parseHotkeyString, parseKeySeq, normalizeKey, isModifierKey } from './utils'
 import type { KeySeq } from './types'
 
 interface LookupResult {
@@ -99,7 +99,12 @@ export function LookupModal({ defaultBinding = 'meta+shift+k' }: LookupModalProp
         const pending = pendingKeys[i]
         const target = result.sequence[i]
 
-        if (pending.key !== target.key) return false
+        // Check key match, accounting for digit placeholders
+        const isDigit = /^[0-9]$/.test(pending.key)
+        const targetIsDigitPlaceholder = target.key === DIGIT_PLACEHOLDER || target.key === DIGITS_PLACEHOLDER
+        const keyMatches = pending.key === target.key || (isDigit && targetIsDigitPlaceholder)
+
+        if (!keyMatches) return false
         if (pending.modifiers.ctrl !== target.modifiers.ctrl) return false
         if (pending.modifiers.alt !== target.modifiers.alt) return false
         if (pending.modifiers.shift !== target.modifiers.shift) return false

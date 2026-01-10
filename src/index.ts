@@ -8,6 +8,11 @@ export type {
   KeyCombinationDisplay,
   KeySeq,
   Modifiers,
+  OmnibarActionEntry,
+  OmnibarEndpointConfig,
+  OmnibarEntry,
+  OmnibarEntryBase,
+  OmnibarLinkEntry,
   RecordHotkeyOptions,
   RecordHotkeyResult,
   SeqElem,
@@ -21,7 +26,7 @@ export { countPlaceholders, extractCaptures, isDigitPlaceholder } from './types'
 
 export type { HandlerMap, HotkeyHandler, HotkeyMap, UseHotkeysOptions, UseHotkeysResult } from './useHotkeys'
 export type { UseEditableHotkeysOptions, UseEditableHotkeysResult } from './useEditableHotkeys'
-export type { UseOmnibarOptions, UseOmnibarResult } from './useOmnibar'
+export type { RemoteOmnibarResult, UseOmnibarOptions, UseOmnibarResult } from './useOmnibar'
 export type {
   BindingInfo,
   KeybindingEditorProps,
@@ -41,6 +46,11 @@ export type { ActionConfig, ActionHandler } from './useAction'
 export { useAction, useActions } from './useAction'
 export type { ActionsRegistryValue, RegisteredAction } from './ActionsRegistry'
 export { ActionsRegistryContext, useActionsRegistry } from './ActionsRegistry'
+
+// Omnibar endpoint registration
+export type { EndpointQueryResult, OmnibarEndpointsRegistryValue, RegisteredEndpoint } from './OmnibarEndpointsRegistry'
+export { OmnibarEndpointsRegistryContext, useOmnibarEndpointsRegistry } from './OmnibarEndpointsRegistry'
+export { useOmnibarEndpoint } from './useOmnibarEndpoint'
 
 // Hooks
 export { useHotkeys } from './useHotkeys'

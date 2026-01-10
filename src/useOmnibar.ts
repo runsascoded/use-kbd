@@ -2,9 +2,34 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useHotkeys, HotkeyMap, HandlerMap } from './useHotkeys'
 
 const { max, min } = Math
-import { searchActions, getSequenceCompletions } from './utils'
-import type { ActionRegistry, ActionSearchResult, HotkeySequence } from './types'
+import { searchActions, getSequenceCompletions, fuzzyMatch } from './utils'
+import type { ActionRegistry, ActionSearchResult, HotkeySequence, OmnibarEntry } from './types'
 import type { SequenceCompletion } from './types'
+import type { OmnibarEndpointsRegistryValue } from './OmnibarEndpointsRegistry'
+
+/** Default priority for local actions (higher than remote endpoints) */
+const _LOCAL_ACTION_PRIORITY = 100
+
+/** Default debounce time for remote queries */
+const DEFAULT_DEBOUNCE_MS = 150
+
+/**
+ * Result from remote endpoint, normalized for display
+ */
+export interface RemoteOmnibarResult {
+  /** Unique ID (prefixed with endpoint ID) */
+  id: string
+  /** Entry data from endpoint */
+  entry: OmnibarEntry
+  /** Endpoint ID this came from */
+  endpointId: string
+  /** Priority from endpoint config */
+  priority: number
+  /** Fuzzy match score */
+  score: number
+  /** Matched ranges in label for highlighting */
+  labelMatches: Array<[number, number]>
+}
 
 export interface UseOmnibarOptions {
   /** Registry of available actions */
@@ -19,12 +44,18 @@ export interface UseOmnibarOptions {
   enabled?: boolean
   /** Called when an action is executed (if handlers not provided, or in addition to) */
   onExecute?: (actionId: string) => void
+  /** Called when a remote entry is executed */
+  onExecuteRemote?: (entry: OmnibarEntry) => void
   /** Called when omnibar opens */
   onOpen?: () => void
   /** Called when omnibar closes */
   onClose?: () => void
   /** Maximum number of results to show (default: 10) */
   maxResults?: number
+  /** Remote endpoints registry (optional - enables remote search) */
+  endpointsRegistry?: OmnibarEndpointsRegistryValue
+  /** Debounce time for remote queries in ms (default: 150) */
+  debounceMs?: number
 }
 
 export interface UseOmnibarResult {
@@ -40,10 +71,16 @@ export interface UseOmnibarResult {
   query: string
   /** Set the search query */
   setQuery: (query: string) => void
-  /** Search results (filtered and sorted) */
+  /** Local action search results (filtered and sorted) */
   results: ActionSearchResult[]
-  /** Currently selected result index */
+  /** Remote endpoint results */
+  remoteResults: RemoteOmnibarResult[]
+  /** Whether remote endpoints are being queried */
+  isLoadingRemote: boolean
+  /** Currently selected result index (across local + remote) */
   selectedIndex: number
+  /** Total number of results (local + remote) */
+  totalResults: number
   /** Select the next result */
   selectNext: () => void
   /** Select the previous result */
@@ -125,14 +162,19 @@ export function useOmnibar(options: UseOmnibarOptions): UseOmnibarResult {
     openKey = 'meta+k',
     enabled = true,
     onExecute,
+    onExecuteRemote,
     onOpen,
     onClose,
     maxResults = 10,
+    endpointsRegistry,
+    debounceMs = DEFAULT_DEBOUNCE_MS,
   } = options
 
   const [isOpen, setIsOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
+  const [remoteResults, setRemoteResults] = useState<RemoteOmnibarResult[]>([])
+  const [isLoadingRemote, setIsLoadingRemote] = useState(false)
 
   // Refs for stable callbacks
   const handlersRef = useRef(handlers)
@@ -140,6 +182,13 @@ export function useOmnibar(options: UseOmnibarOptions): UseOmnibarResult {
 
   const onExecuteRef = useRef(onExecute)
   onExecuteRef.current = onExecute
+
+  const onExecuteRemoteRef = useRef(onExecuteRemote)
+  onExecuteRemoteRef.current = onExecuteRemote
+
+  // Refs for abort controller and debounce timer
+  const abortControllerRef = useRef<AbortController | null>(null)
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Register omnibar hotkey
   const omnibarKeymap = useMemo(() => {
@@ -165,11 +214,118 @@ export function useOmnibar(options: UseOmnibarOptions): UseOmnibarResult {
     { enabled },
   )
 
-  // Search results
+  // Search results (local actions)
   const results = useMemo(() => {
     const allResults = searchActions(query, actions, keymap)
     return allResults.slice(0, maxResults)
   }, [query, actions, keymap, maxResults])
+
+  // Query remote endpoints (debounced)
+  useEffect(() => {
+    // Clear any pending debounce timer
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current)
+      debounceTimerRef.current = null
+    }
+
+    // Abort any in-flight request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+      abortControllerRef.current = null
+    }
+
+    // Skip if no endpoints registry or empty query
+    if (!endpointsRegistry || !query.trim()) {
+      setRemoteResults([])
+      setIsLoadingRemote(false)
+      return
+    }
+
+    // Debounce the query
+    setIsLoadingRemote(true)
+    debounceTimerRef.current = setTimeout(async () => {
+      const controller = new AbortController()
+      abortControllerRef.current = controller
+
+      try {
+        const endpointResults = await endpointsRegistry.queryAll(query, controller.signal)
+
+        // Don't update if aborted
+        if (controller.signal.aborted) return
+
+        // Process results: score with fuzzy match and sort by priority then score
+        const processed: RemoteOmnibarResult[] = []
+
+        for (const epResult of endpointResults) {
+          if (epResult.error) continue
+
+          const endpoint = endpointsRegistry.endpoints.get(epResult.endpointId)
+          const priority = endpoint?.config.priority ?? 0
+
+          for (const entry of epResult.entries) {
+            // Score the entry against the query
+            const labelMatch = fuzzyMatch(query, entry.label)
+            const descMatch = entry.description ? fuzzyMatch(query, entry.description) : null
+            const keywordsMatch = entry.keywords?.map(k => fuzzyMatch(query, k)) ?? []
+
+            // Calculate weighted score
+            let score = 0
+            let labelMatches: Array<[number, number]> = []
+            if (labelMatch.matched) {
+              score = Math.max(score, labelMatch.score * 3)
+              labelMatches = labelMatch.ranges
+            }
+            if (descMatch?.matched) {
+              score = Math.max(score, descMatch.score * 1.5)
+            }
+            for (const km of keywordsMatch) {
+              if (km.matched) {
+                score = Math.max(score, km.score * 2)
+              }
+            }
+
+            // Include if any match (or if query is short, be more lenient)
+            if (score > 0 || query.length <= 2) {
+              processed.push({
+                id: `${epResult.endpointId}:${entry.id}`,
+                entry,
+                endpointId: epResult.endpointId,
+                priority,
+                score: score || 1, // Minimum score for short queries
+                labelMatches,
+              })
+            }
+          }
+        }
+
+        // Sort by priority (desc) then score (desc)
+        processed.sort((a, b) => {
+          if (a.priority !== b.priority) return b.priority - a.priority
+          return b.score - a.score
+        })
+
+        setRemoteResults(processed.slice(0, maxResults))
+        setIsLoadingRemote(false)
+      } catch (error) {
+        // Ignore abort errors
+        if (error instanceof Error && error.name === 'AbortError') return
+        console.error('Omnibar endpoint query failed:', error)
+        setIsLoadingRemote(false)
+      }
+    }, debounceMs)
+
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current)
+      }
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+    }
+  }, [query, endpointsRegistry, debounceMs, maxResults])
+
+  // Total results count
+  const totalResults = results.length + remoteResults.length
 
   // Sequence completions (based on pending keys from main hotkey handler, not omnibar)
   const completions = useMemo(() => {
@@ -179,7 +335,7 @@ export function useOmnibar(options: UseOmnibarOptions): UseOmnibarResult {
   // Reset selection when results change
   useEffect(() => {
     setSelectedIndex(0)
-  }, [results])
+  }, [results, remoteResults])
 
   const open = useCallback(() => {
     setIsOpen(true)
@@ -210,8 +366,8 @@ export function useOmnibar(options: UseOmnibarOptions): UseOmnibarResult {
   }, [onOpen, onClose])
 
   const selectNext = useCallback(() => {
-    setSelectedIndex(prev => min(prev + 1, results.length - 1))
-  }, [results.length])
+    setSelectedIndex(prev => min(prev + 1, totalResults - 1))
+  }, [totalResults])
 
   const selectPrev = useCallback(() => {
     setSelectedIndex(prev => max(prev - 1, 0))
@@ -222,22 +378,59 @@ export function useOmnibar(options: UseOmnibarOptions): UseOmnibarResult {
   }, [])
 
   const execute = useCallback((actionId?: string) => {
-    const id = actionId ?? results[selectedIndex]?.id
-    if (!id) return
+    // Determine if executing a local action or remote entry
+    const localCount = results.length
 
-    // Close omnibar
-    close()
+    // If actionId provided, try to find it in local or remote
+    if (actionId) {
+      // Check if it's a remote result ID (contains endpoint prefix)
+      const remoteResult = remoteResults.find(r => r.id === actionId)
+      if (remoteResult) {
+        close()
+        const entry = remoteResult.entry
+        if ('handler' in entry && entry.handler) {
+          entry.handler()
+        }
+        onExecuteRemoteRef.current?.(entry)
+        return
+      }
 
-    // Call handler if available
-    if (handlersRef.current?.[id]) {
-      // Create a synthetic keyboard event
-      const event = new KeyboardEvent('keydown', { key: 'Enter' })
-      handlersRef.current[id](event)
+      // Otherwise treat as local action
+      close()
+      if (handlersRef.current?.[actionId]) {
+        const event = new KeyboardEvent('keydown', { key: 'Enter' })
+        handlersRef.current[actionId](event)
+      }
+      onExecuteRef.current?.(actionId)
+      return
     }
 
-    // Call onExecute callback
-    onExecuteRef.current?.(id)
-  }, [results, selectedIndex, close])
+    // No actionId - use selectedIndex
+    if (selectedIndex < localCount) {
+      // Local action
+      const id = results[selectedIndex]?.id
+      if (!id) return
+
+      close()
+      if (handlersRef.current?.[id]) {
+        const event = new KeyboardEvent('keydown', { key: 'Enter' })
+        handlersRef.current[id](event)
+      }
+      onExecuteRef.current?.(id)
+    } else {
+      // Remote entry
+      const remoteIndex = selectedIndex - localCount
+      const remoteResult = remoteResults[remoteIndex]
+      if (!remoteResult) return
+
+      close()
+      const entry = remoteResult.entry
+      if ('handler' in entry && entry.handler) {
+        entry.handler()
+      }
+      onExecuteRemoteRef.current?.(entry)
+    }
+  }, [results, remoteResults, selectedIndex, close])
 
   // Handle keyboard navigation when open
   useEffect(() => {
@@ -287,7 +480,10 @@ export function useOmnibar(options: UseOmnibarOptions): UseOmnibarResult {
     query,
     setQuery,
     results,
+    remoteResults,
+    isLoadingRemote,
     selectedIndex,
+    totalResults,
     selectNext,
     selectPrev,
     execute,

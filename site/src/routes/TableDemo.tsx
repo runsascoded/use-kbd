@@ -3,9 +3,13 @@ import Tooltip from '@mui/material/Tooltip'
 import {
   createTwoColumnRenderer,
   KbdModal,
+  KbdOmnibar,
+  Omnibar,
   ShortcutsModal,
   useAction,
+  useOmnibarEndpoint,
 } from 'use-kbd'
+import type { OmnibarEntry } from 'use-kbd'
 import type { TooltipProps } from 'use-kbd'
 import 'use-kbd/styles.css'
 
@@ -139,6 +143,75 @@ function DataTable() {
     }
     return result
   }, [pinnedIds, hoveredIndex, rangeAnchor, paginatedData])
+
+  // Navigate to a specific row by ID
+  const navigateToRow = useCallback((rowId: number) => {
+    // Find the row in sortedData to get its position
+    const rowIndex = sortedData.findIndex(r => r.id === rowId)
+    if (rowIndex === -1) return
+
+    // Calculate which page the row is on
+    const targetPage = Math.floor(rowIndex / pageSize) + 1
+    setCurrentPage(targetPage)
+
+    // Calculate the index within the page
+    const indexInPage = rowIndex % pageSize
+
+    // Select the row
+    setHoveredIndex(indexInPage)
+    setRangeAnchor(indexInPage)
+    setPinnedIds(new Set())
+  }, [sortedData, pageSize])
+
+  // Register omnibar endpoint for searching table rows
+  useOmnibarEndpoint('table-rows', useMemo(() => ({
+    fetch: async (query: string, _signal: AbortSignal): Promise<OmnibarEntry[]> => {
+      // Simulate network latency (50-150ms)
+      await new Promise(r => setTimeout(r, 50 + Math.random() * 100))
+
+      const lowerQuery = query.toLowerCase()
+      const matches: Array<{ row: DataRow; score: number }> = []
+
+      for (const row of data) {
+        // Score based on name match
+        const name = row.name.toLowerCase()
+        let score = 0
+
+        if (name === lowerQuery) {
+          score = 100 // Exact match
+        } else if (name.startsWith(lowerQuery)) {
+          score = 80 // Prefix match
+        } else if (name.includes(lowerQuery)) {
+          score = 60 // Contains match
+        } else if (row.status.includes(lowerQuery)) {
+          score = 40 // Status match
+        } else if (row.value.toString().includes(query)) {
+          score = 30 // Value match
+        }
+
+        if (score > 0) {
+          matches.push({ row, score })
+        }
+      }
+
+      // Sort by score and limit
+      matches.sort((a, b) => b.score - a.score)
+      const topMatches = matches.slice(0, 10)
+
+      // Convert to OmnibarEntry format with handlers
+      return topMatches.map(({ row }) => ({
+        id: `row-${row.id}`,
+        label: row.name,
+        description: `${row.status} • Value: ${row.value}`,
+        group: 'Table Rows',
+        keywords: [row.status, row.value.toString()],
+        handler: () => navigateToRow(row.id),
+      }))
+    },
+    group: 'Table Rows',
+    priority: 50, // Lower than local actions
+    minQueryLength: 1,
+  }), [data, navigateToRow]))
 
   // Sort handlers
   const sortNameAsc = useCallback(() => {
@@ -631,7 +704,7 @@ function DataTable() {
     <div className="data-table-app" ref={containerRef}>
       <h1 id="demo">Data Table Demo</h1>
       <p className="hint">
-        Press <KbdModal /> for shortcuts.
+        Press <KbdModal /> for shortcuts, or <KbdOmnibar /> to search rows.
         {selectedIds.size > 1 && <strong> ({selectedIds.size} selected)</strong>}
       </p>
 
@@ -775,6 +848,7 @@ function DataTable() {
         }}
         TooltipComponent={MuiTooltip}
       />
+      <Omnibar placeholder="Search rows or actions..." />
     </div>
   )
 }

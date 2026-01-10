@@ -1,9 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { ActionsRegistryContext, useActionsRegistry } from './ActionsRegistry'
+import { OmnibarEndpointsRegistryContext, useOmnibarEndpointsRegistry } from './OmnibarEndpointsRegistry'
 import { DEFAULT_SEQUENCE_TIMEOUT } from './constants'
 import { useHotkeys } from './useHotkeys'
 import { findConflicts, getSequenceCompletions, searchActions } from './utils'
 import type { ActionsRegistryValue } from './ActionsRegistry'
+import type { OmnibarEndpointsRegistryValue } from './OmnibarEndpointsRegistry'
 import type { HotkeySequence } from './types'
 
 /**
@@ -32,6 +34,8 @@ export interface HotkeysConfig {
 export interface HotkeysContextValue {
   /** The actions registry */
   registry: ActionsRegistryValue
+  /** The omnibar endpoints registry */
+  endpointsRegistry: OmnibarEndpointsRegistryValue
   /** Whether hotkeys are enabled (based on viewport/touch) */
   isEnabled: boolean
   /** Modal open state */
@@ -142,6 +146,9 @@ export function HotkeysProvider({
 
   // Create the actions registry
   const registry = useActionsRegistry({ storageKey: config.storageKey })
+
+  // Create the omnibar endpoints registry
+  const endpointsRegistry = useOmnibarEndpointsRegistry()
 
   // Check if hotkeys should be enabled
   const [isEnabled, setIsEnabled] = useState(true)
@@ -267,6 +274,7 @@ export function HotkeysProvider({
 
   const value = useMemo<HotkeysContextValue>(() => ({
     registry,
+    endpointsRegistry,
     isEnabled,
     isModalOpen,
     openModal,
@@ -294,6 +302,7 @@ export function HotkeysProvider({
     getCompletions,
   }), [
     registry,
+    endpointsRegistry,
     isEnabled,
     isModalOpen,
     openModal,
@@ -321,9 +330,11 @@ export function HotkeysProvider({
 
   return (
     <ActionsRegistryContext.Provider value={registry}>
-      <HotkeysContext.Provider value={value}>
-        {children}
-      </HotkeysContext.Provider>
+      <OmnibarEndpointsRegistryContext.Provider value={endpointsRegistry}>
+        <HotkeysContext.Provider value={value}>
+          {children}
+        </HotkeysContext.Provider>
+      </OmnibarEndpointsRegistryContext.Provider>
     </ActionsRegistryContext.Provider>
   )
 }

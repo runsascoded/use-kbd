@@ -3,9 +3,9 @@ import { ACTION_OMNIBAR } from './constants'
 import { useMaybeHotkeysContext } from './HotkeysProvider'
 import { ModifierIcon } from './ModifierIcons'
 import { useAction } from './useAction'
-import { useOmnibar } from './useOmnibar'
+import { useOmnibar, RemoteOmnibarResult } from './useOmnibar'
 import { parseKeySeq, formatKeyForDisplay } from './utils'
-import type { SeqElem } from './types'
+import type { SeqElem, OmnibarEntry } from './types'
 import type { ActionRegistry, ActionSearchResult, HotkeySequence, SequenceCompletion } from './types'
 import type { HandlerMap, HotkeyMap } from './useHotkeys'
 
@@ -44,10 +44,15 @@ export interface OmnibarProps {
    */
   onClose?: () => void
   /**
-   * Called when an action is executed.
+   * Called when a local action is executed.
    * If not provided, uses executeAction from HotkeysContext.
    */
   onExecute?: (actionId: string) => void
+  /**
+   * Called when a remote omnibar entry is executed.
+   * Use this to handle navigation for entries with `href`.
+   */
+  onExecuteRemote?: (entry: OmnibarEntry) => void
   /** Maximum number of results to show (default: 10) */
   maxResults?: number
   /** Placeholder text for input (default: 'Type a command...') */
@@ -63,8 +68,16 @@ export interface OmnibarProps {
 export interface OmnibarRenderProps {
   query: string
   setQuery: (query: string) => void
+  /** Local action search results */
   results: ActionSearchResult[]
+  /** Remote endpoint results */
+  remoteResults: RemoteOmnibarResult[]
+  /** Whether remote endpoints are being queried */
+  isLoadingRemote: boolean
+  /** Currently selected index (across local + remote) */
   selectedIndex: number
+  /** Total number of results (local + remote) */
+  totalResults: number
   selectNext: () => void
   selectPrev: () => void
   execute: (actionId?: string) => void
@@ -158,6 +171,7 @@ export function Omnibar({
   onOpen: onOpenProp,
   onClose: onCloseProp,
   onExecute: onExecuteProp,
+  onExecuteRemote: onExecuteRemoteProp,
   maxResults = 10,
   placeholder = 'Type a command...',
   children,
@@ -208,13 +222,26 @@ export function Omnibar({
     }
   }, [onOpenProp, ctx])
 
+  // Create remote execute handler
+  const handleExecuteRemote = useCallback((entry: OmnibarEntry) => {
+    if (onExecuteRemoteProp) {
+      onExecuteRemoteProp(entry)
+    } else if ('href' in entry && entry.href) {
+      // Default behavior: navigate to href using window.location
+      window.location.href = entry.href
+    }
+  }, [onExecuteRemoteProp])
+
   const {
     isOpen: internalIsOpen,
     close,
     query,
     setQuery,
     results,
+    remoteResults,
+    isLoadingRemote,
     selectedIndex,
+    totalResults,
     selectNext,
     selectPrev,
     execute,
@@ -230,7 +257,9 @@ export function Omnibar({
     onOpen: handleOpen,
     onClose: handleClose,
     onExecute: handleExecute,
+    onExecuteRemote: handleExecuteRemote,
     maxResults,
+    endpointsRegistry: ctx?.endpointsRegistry,
   })
 
   // Use prop, then context, then internal state
@@ -308,7 +337,10 @@ export function Omnibar({
           query,
           setQuery,
           results,
+          remoteResults,
+          isLoadingRemote,
           selectedIndex,
+          totalResults,
           selectNext,
           selectPrev,
           execute,
@@ -341,35 +373,70 @@ export function Omnibar({
         />
 
         <div className="kbd-omnibar-results">
-          {results.length === 0 ? (
+          {totalResults === 0 && !isLoadingRemote ? (
             <div className="kbd-omnibar-no-results">
               {query ? 'No matching commands' : 'Start typing to search commands...'}
             </div>
           ) : (
-            results.map((result, i) => (
-              <div
-                key={result.id}
-                className={`kbd-omnibar-result ${i === selectedIndex ? 'selected' : ''}`}
-                onClick={() => execute(result.id)}
-                onMouseEnter={() => {/* Could set selectedIndex here for hover selection */}}
-              >
-                <span className="kbd-omnibar-result-label">
-                  {result.action.label}
-                </span>
-                {result.action.group && (
-                  <span className="kbd-omnibar-result-category">
-                    {result.action.group}
+            <>
+              {/* Local action results */}
+              {results.map((result, i) => (
+                <div
+                  key={result.id}
+                  className={`kbd-omnibar-result ${i === selectedIndex ? 'selected' : ''}`}
+                  onClick={() => execute(result.id)}
+                >
+                  <span className="kbd-omnibar-result-label">
+                    {result.action.label}
                   </span>
-                )}
-                {result.bindings.length > 0 && (
-                  <div className="kbd-omnibar-result-bindings">
-                    {result.bindings.slice(0, 2).map((binding) => (
-                      <BindingBadge key={binding} binding={binding} />
-                    ))}
+                  {result.action.group && (
+                    <span className="kbd-omnibar-result-category">
+                      {result.action.group}
+                    </span>
+                  )}
+                  {result.bindings.length > 0 && (
+                    <div className="kbd-omnibar-result-bindings">
+                      {result.bindings.slice(0, 2).map((binding) => (
+                        <BindingBadge key={binding} binding={binding} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {/* Remote endpoint results */}
+              {remoteResults.map((result, i) => {
+                const absoluteIndex = results.length + i
+                return (
+                  <div
+                    key={result.id}
+                    className={`kbd-omnibar-result ${absoluteIndex === selectedIndex ? 'selected' : ''}`}
+                    onClick={() => execute(result.id)}
+                  >
+                    <span className="kbd-omnibar-result-label">
+                      {result.entry.label}
+                    </span>
+                    {result.entry.group && (
+                      <span className="kbd-omnibar-result-category">
+                        {result.entry.group}
+                      </span>
+                    )}
+                    {result.entry.description && (
+                      <span className="kbd-omnibar-result-description">
+                        {result.entry.description}
+                      </span>
+                    )}
                   </div>
-                )}
-              </div>
-            ))
+                )
+              })}
+
+              {/* Loading indicator */}
+              {isLoadingRemote && (
+                <div className="kbd-omnibar-loading">
+                  Searching...
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

@@ -203,3 +203,63 @@ export interface SequenceCompletion {
   /** Actions triggered by this sequence */
   actions: string[]
 }
+
+// ============================================================================
+// Remote omnibar endpoint types
+// ============================================================================
+
+/**
+ * Base fields for all omnibar entries
+ */
+export interface OmnibarEntryBase {
+  /** Unique identifier for this entry */
+  id: string
+  /** Display label */
+  label: string
+  /** Optional description (shown below label) */
+  description?: string
+  /** Group name for organizing results */
+  group?: string
+  /** Additional search keywords */
+  keywords?: string[]
+}
+
+/**
+ * Omnibar entry that navigates to a URL when selected
+ */
+export interface OmnibarLinkEntry extends OmnibarEntryBase {
+  /** URL to navigate to */
+  href: string
+  handler?: never
+}
+
+/**
+ * Omnibar entry that executes a handler when selected
+ */
+export interface OmnibarActionEntry extends OmnibarEntryBase {
+  /** Handler to execute (can close over data) */
+  handler: () => void
+  href?: never
+}
+
+/**
+ * An entry returned from a remote omnibar endpoint.
+ * Must have either `href` (for navigation) or `handler` (for custom action).
+ */
+export type OmnibarEntry = OmnibarLinkEntry | OmnibarActionEntry
+
+/**
+ * Configuration for a remote omnibar endpoint
+ */
+export interface OmnibarEndpointConfig {
+  /** Fetch function that returns entries for a query */
+  fetch: (query: string, signal: AbortSignal) => Promise<OmnibarEntry[]>
+  /** Default group for entries from this endpoint */
+  group?: string
+  /** Priority for result ordering (higher = shown first, default: 0, local actions: 100) */
+  priority?: number
+  /** Minimum query length before fetching (default: 2) */
+  minQueryLength?: number
+  /** Whether this endpoint is enabled (default: true) */
+  enabled?: boolean
+}
