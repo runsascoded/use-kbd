@@ -281,6 +281,70 @@ function useActionsRegistry(options = {}) {
     resetOverrides
   ]);
 }
+var OmnibarEndpointsRegistryContext = createContext(null);
+function useOmnibarEndpointsRegistry() {
+  const endpointsRef = useRef(/* @__PURE__ */ new Map());
+  const [endpointsVersion, setEndpointsVersion] = useState(0);
+  const register = useCallback((id, config) => {
+    endpointsRef.current.set(id, {
+      id,
+      config,
+      registeredAt: Date.now()
+    });
+    setEndpointsVersion((v) => v + 1);
+  }, []);
+  const unregister = useCallback((id) => {
+    endpointsRef.current.delete(id);
+    setEndpointsVersion((v) => v + 1);
+  }, []);
+  const queryEndpoint = useCallback(async (endpointId, query, pagination, signal) => {
+    const ep = endpointsRef.current.get(endpointId);
+    if (!ep) return null;
+    if (ep.config.enabled === false) return null;
+    if (query.length < (ep.config.minQueryLength ?? 2)) return null;
+    try {
+      const response = await ep.config.fetch(query, signal, pagination);
+      const entriesWithGroup = response.entries.map((entry) => ({
+        ...entry,
+        group: entry.group ?? ep.config.group
+      }));
+      return {
+        endpointId: ep.id,
+        entries: entriesWithGroup,
+        total: response.total,
+        hasMore: response.hasMore
+      };
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        return { endpointId: ep.id, entries: [] };
+      }
+      return {
+        endpointId: ep.id,
+        entries: [],
+        error: error instanceof Error ? error : new Error(String(error))
+      };
+    }
+  }, []);
+  const queryAll = useCallback(async (query, signal) => {
+    const endpoints2 = Array.from(endpointsRef.current.values());
+    const promises = endpoints2.filter((ep) => ep.config.enabled !== false).filter((ep) => query.length >= (ep.config.minQueryLength ?? 2)).map(async (ep) => {
+      const pageSize = ep.config.pageSize ?? 10;
+      const result = await queryEndpoint(ep.id, query, { offset: 0, limit: pageSize }, signal);
+      return result ?? { endpointId: ep.id, entries: [] };
+    });
+    return Promise.all(promises);
+  }, [queryEndpoint]);
+  const endpoints = useMemo(() => {
+    return new Map(endpointsRef.current);
+  }, [endpointsVersion]);
+  return useMemo(() => ({
+    register,
+    unregister,
+    endpoints,
+    queryAll,
+    queryEndpoint
+  }), [register, unregister, endpoints, queryAll, queryEndpoint]);
+}
 
 // src/constants.ts
 var DEFAULT_SEQUENCE_TIMEOUT = Infinity;
@@ -615,6 +679,16 @@ function isPrefix(a, b) {
 function combinationsEqual(a, b) {
   return a.key === b.key && a.modifiers.ctrl === b.modifiers.ctrl && a.modifiers.alt === b.modifiers.alt && a.modifiers.shift === b.modifiers.shift && a.modifiers.meta === b.modifiers.meta;
 }
+function keyMatchesPattern(pending, pattern) {
+  if (pending.modifiers.ctrl !== pattern.modifiers.ctrl || pending.modifiers.alt !== pattern.modifiers.alt || pending.modifiers.shift !== pattern.modifiers.shift || pending.modifiers.meta !== pattern.modifiers.meta) {
+    return false;
+  }
+  if (pending.key === pattern.key) return true;
+  if (/^[0-9]$/.test(pending.key) && (pattern.key === DIGIT_PLACEHOLDER || pattern.key === DIGITS_PLACEHOLDER)) {
+    return true;
+  }
+  return false;
+}
 function isDigitKey(key) {
   return /^[0-9]$/.test(key);
 }
@@ -737,26 +811,60 @@ function getSequenceCompletions(pendingKeys, keymap) {
   for (const [hotkeyStr, actionOrActions] of Object.entries(keymap)) {
     const sequence = parseHotkeyString(hotkeyStr);
     const keySeq = parseKeySeq(hotkeyStr);
-    if (sequence.length <= pendingKeys.length) continue;
-    let isPrefix2 = true;
-    for (let i = 0; i < pendingKeys.length; i++) {
-      if (!combinationsEqual(pendingKeys[i], sequence[i])) {
-        isPrefix2 = false;
-        break;
+    if (sequence.length < pendingKeys.length) continue;
+    let keySeqIdx = 0;
+    let isMatch = true;
+    for (let i = 0; i < pendingKeys.length && keySeqIdx < keySeq.length; i++) {
+      const elem = keySeq[keySeqIdx];
+      if (elem.type === "digits") {
+        if (!/^[0-9]$/.test(pendingKeys[i].key)) {
+          isMatch = false;
+          break;
+        }
+        if (i + 1 < pendingKeys.length && /^[0-9]$/.test(pendingKeys[i + 1].key)) {
+          continue;
+        }
+        keySeqIdx++;
+      } else if (elem.type === "digit") {
+        if (!/^[0-9]$/.test(pendingKeys[i].key)) {
+          isMatch = false;
+          break;
+        }
+        keySeqIdx++;
+      } else {
+        if (!keyMatchesPattern(pendingKeys[i], sequence[keySeqIdx])) {
+          isMatch = false;
+          break;
+        }
+        keySeqIdx++;
       }
     }
-    if (isPrefix2) {
-      const remainingKeySeq = keySeq.slice(pendingKeys.length);
+    if (!isMatch) continue;
+    const actions = Array.isArray(actionOrActions) ? actionOrActions : [actionOrActions];
+    if (keySeqIdx === keySeq.length) {
+      completions.push({
+        nextKeys: "",
+        fullSequence: hotkeyStr,
+        display: formatKeySeq(keySeq),
+        actions,
+        isComplete: true
+      });
+    } else {
+      const remainingKeySeq = keySeq.slice(keySeqIdx);
       const nextKeys = formatKeySeq(remainingKeySeq).display;
-      const actions = Array.isArray(actionOrActions) ? actionOrActions : [actionOrActions];
       completions.push({
         nextKeys,
         fullSequence: hotkeyStr,
         display: formatKeySeq(keySeq),
-        actions
+        actions,
+        isComplete: false
       });
     }
   }
+  completions.sort((a, b) => {
+    if (a.isComplete !== b.isComplete) return a.isComplete ? -1 : 1;
+    return a.fullSequence.localeCompare(b.fullSequence);
+  });
   return completions;
 }
 function getActionBindings(keymap) {
@@ -925,6 +1033,12 @@ function advanceMatchState(state, pattern, combo) {
         const digitValue = parseInt(elem.partial, 10);
         newState[i] = { type: "digits", value: digitValue };
         pos = i + 1;
+        if (pos >= pattern.length) {
+          const captures = newState.filter(
+            (e) => (e.type === "digit" || e.type === "digits") && e.value !== void 0
+          ).map((e) => e.value);
+          return { status: "matched", state: newState, captures };
+        }
         break;
       }
     }
@@ -1117,13 +1231,13 @@ function useHotkeys(keymap, handlers, options = {}) {
       }
       const currentCombo = eventToCombination(e);
       const newSequence = [...pendingKeysRef.current, currentCombo];
-      let keySeqMatched = false;
-      let keySeqPartial = false;
+      const completeMatches = [];
+      let hasPartials = false;
       const matchStates = matchStatesRef.current;
-      const hasPartialMatches = matchStates.size > 0;
+      const hadPartialMatches = matchStates.size > 0;
       for (const entry of parsedKeymapRef.current) {
         let state = matchStates.get(entry.key);
-        if (hasPartialMatches && !state) {
+        if (hadPartialMatches && !state) {
           continue;
         }
         if (!state) {
@@ -1132,22 +1246,55 @@ function useHotkeys(keymap, handlers, options = {}) {
         }
         const result = advanceMatchState(state, entry.keySeq, currentCombo);
         if (result.status === "matched") {
-          if (tryExecuteKeySeq(entry.key, result.state, result.captures, e)) {
-            clearPending();
-            keySeqMatched = true;
-            break;
-          }
+          completeMatches.push({
+            key: entry.key,
+            state: result.state,
+            captures: result.captures
+          });
+          matchStates.delete(entry.key);
         } else if (result.status === "partial") {
           matchStates.set(entry.key, result.state);
-          keySeqPartial = true;
+          hasPartials = true;
         } else {
           matchStates.delete(entry.key);
         }
       }
-      if (keySeqMatched) {
+      if (e.key === "Backspace" && pendingKeysRef.current.length > 0 && completeMatches.length === 0 && !hasPartials) {
+        e.preventDefault();
+        const newPending = pendingKeysRef.current.slice(0, -1);
+        if (newPending.length === 0) {
+          clearPending();
+          onSequenceCancel?.();
+        } else {
+          setPendingKeys(newPending);
+          matchStatesRef.current.clear();
+          for (const combo of newPending) {
+            for (const entry of parsedKeymapRef.current) {
+              let state = matchStatesRef.current.get(entry.key);
+              if (!state) {
+                state = initMatchState(entry.keySeq);
+              }
+              const result = advanceMatchState(state, entry.keySeq, combo);
+              if (result.status === "partial") {
+                matchStatesRef.current.set(entry.key, result.state);
+              } else if (result.status === "matched") {
+                matchStatesRef.current.delete(entry.key);
+              } else {
+                matchStatesRef.current.delete(entry.key);
+              }
+            }
+          }
+        }
         return;
       }
-      if (keySeqPartial) {
+      if (completeMatches.length === 1 && !hasPartials) {
+        const match = completeMatches[0];
+        if (tryExecuteKeySeq(match.key, match.state, match.captures, e)) {
+          clearPending();
+          return;
+        }
+      }
+      if (completeMatches.length > 0 || hasPartials) {
         setPendingKeys(newSequence);
         setIsAwaitingSequence(true);
         if (pendingKeysRef.current.length === 0) {
@@ -1293,7 +1440,8 @@ var HotkeysContext = createContext(null);
 var DEFAULT_CONFIG = {
   storageKey: "use-kbd",
   sequenceTimeout: DEFAULT_SEQUENCE_TIMEOUT,
-  disableConflicts: true,
+  disableConflicts: false,
+  // Keep conflicting bindings active; SeqM handles disambiguation
   minViewportWidth: 768,
   enableOnTouch: false
 };
@@ -1306,6 +1454,7 @@ function HotkeysProvider({
     ...configProp
   }), [configProp]);
   const registry = useActionsRegistry({ storageKey: config.storageKey });
+  const endpointsRegistry = useOmnibarEndpointsRegistry();
   const [isEnabled, setIsEnabled] = useState(true);
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1397,6 +1546,7 @@ function HotkeysProvider({
   );
   const value = useMemo(() => ({
     registry,
+    endpointsRegistry,
     isEnabled,
     isModalOpen,
     openModal,
@@ -1424,6 +1574,7 @@ function HotkeysProvider({
     getCompletions
   }), [
     registry,
+    endpointsRegistry,
     isEnabled,
     isModalOpen,
     openModal,
@@ -1448,7 +1599,7 @@ function HotkeysProvider({
     searchActionsHelper,
     getCompletions
   ]);
-  return /* @__PURE__ */ jsx(ActionsRegistryContext.Provider, { value: registry, children: /* @__PURE__ */ jsx(HotkeysContext.Provider, { value, children }) });
+  return /* @__PURE__ */ jsx(ActionsRegistryContext.Provider, { value: registry, children: /* @__PURE__ */ jsx(OmnibarEndpointsRegistryContext.Provider, { value: endpointsRegistry, children: /* @__PURE__ */ jsx(HotkeysContext.Provider, { value, children }) }) });
 }
 function useHotkeysContext() {
   const context = useContext(HotkeysContext);
@@ -1534,6 +1685,38 @@ function useActions(actions) {
         c.priority
       ])
     )
+  ]);
+}
+function useOmnibarEndpoint(id, config) {
+  const registry = useContext(OmnibarEndpointsRegistryContext);
+  if (!registry) {
+    throw new Error("useOmnibarEndpoint must be used within a HotkeysProvider");
+  }
+  const registryRef = useRef(registry);
+  registryRef.current = registry;
+  const fetchRef = useRef(config.fetch);
+  fetchRef.current = config.fetch;
+  const enabledRef = useRef(config.enabled ?? true);
+  enabledRef.current = config.enabled ?? true;
+  useEffect(() => {
+    registryRef.current.register(id, {
+      ...config,
+      fetch: async (query, signal, pagination) => {
+        if (!enabledRef.current) return { entries: [] };
+        return fetchRef.current(query, signal, pagination);
+      }
+    });
+    return () => {
+      registryRef.current.unregister(id);
+    };
+  }, [
+    id,
+    config.group,
+    config.priority,
+    config.minQueryLength,
+    config.pageSize,
+    config.pagination
+    // Note: we use refs for fetch and enabled, so they don't cause re-registration
   ]);
 }
 function useEventCallback(fn) {
@@ -1800,7 +1983,7 @@ function useRecordHotkey(options = {}) {
   };
 }
 function useEditableHotkeys(defaults, handlers, options = {}) {
-  const { storageKey, disableConflicts = true, ...hotkeyOptions } = options;
+  const { storageKey, disableConflicts = false, ...hotkeyOptions } = options;
   const [overrides, setOverrides] = useState(() => {
     if (!storageKey || typeof window === "undefined") return {};
     try {
@@ -1896,6 +2079,7 @@ function useEditableHotkeys(defaults, handlers, options = {}) {
   };
 }
 var { max: max2, min } = Math;
+var DEFAULT_DEBOUNCE_MS = 150;
 function useOmnibar(options) {
   const {
     actions,
@@ -1904,17 +2088,27 @@ function useOmnibar(options) {
     openKey = "meta+k",
     enabled = true,
     onExecute,
+    onExecuteRemote,
     onOpen,
     onClose,
-    maxResults = 10
+    maxResults = 10,
+    endpointsRegistry,
+    debounceMs = DEFAULT_DEBOUNCE_MS
   } = options;
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [endpointStates, setEndpointStates] = useState(/* @__PURE__ */ new Map());
   const handlersRef = useRef(handlers);
   handlersRef.current = handlers;
   const onExecuteRef = useRef(onExecute);
   onExecuteRef.current = onExecute;
+  const onExecuteRemoteRef = useRef(onExecuteRemote);
+  onExecuteRemoteRef.current = onExecuteRemote;
+  const abortControllerRef = useRef(null);
+  const debounceTimerRef = useRef(null);
+  const currentQueryRef = useRef(query);
+  currentQueryRef.current = query;
   const omnibarKeymap = useMemo(() => {
     if (!enabled) return {};
     return { [openKey]: "omnibar:toggle" };
@@ -1940,12 +2134,189 @@ function useOmnibar(options) {
     const allResults = searchActions(query, actions, keymap);
     return allResults.slice(0, maxResults);
   }, [query, actions, keymap, maxResults]);
+  useEffect(() => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    if (!endpointsRegistry || !query.trim()) {
+      setEndpointStates(/* @__PURE__ */ new Map());
+      return;
+    }
+    setEndpointStates((prev) => {
+      const next = new Map(prev);
+      for (const [id] of endpointsRegistry.endpoints) {
+        next.set(id, { entries: [], offset: 0, isLoading: true });
+      }
+      return next;
+    });
+    debounceTimerRef.current = setTimeout(async () => {
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+      try {
+        const endpointResults = await endpointsRegistry.queryAll(query, controller.signal);
+        if (controller.signal.aborted) return;
+        setEndpointStates(() => {
+          const next = /* @__PURE__ */ new Map();
+          for (const epResult of endpointResults) {
+            const ep = endpointsRegistry.endpoints.get(epResult.endpointId);
+            const pageSize = ep?.config.pageSize ?? 10;
+            next.set(epResult.endpointId, {
+              entries: epResult.entries,
+              offset: pageSize,
+              total: epResult.total,
+              hasMore: epResult.hasMore ?? (epResult.total !== void 0 ? epResult.entries.length < epResult.total : void 0),
+              isLoading: false
+            });
+          }
+          return next;
+        });
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") return;
+        console.error("Omnibar endpoint query failed:", error);
+        setEndpointStates((prev) => {
+          const next = new Map(prev);
+          for (const [id, state] of next) {
+            next.set(id, { ...state, isLoading: false });
+          }
+          return next;
+        });
+      }
+    }, debounceMs);
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, [query, endpointsRegistry, debounceMs]);
+  const loadMore = useCallback(async (endpointId) => {
+    if (!endpointsRegistry) return;
+    const currentState = endpointStates.get(endpointId);
+    if (!currentState || currentState.isLoading) return;
+    if (currentState.hasMore === false) return;
+    const ep = endpointsRegistry.endpoints.get(endpointId);
+    if (!ep) return;
+    const pageSize = ep.config.pageSize ?? 10;
+    setEndpointStates((prev) => {
+      const next = new Map(prev);
+      const state = next.get(endpointId);
+      if (state) {
+        next.set(endpointId, { ...state, isLoading: true });
+      }
+      return next;
+    });
+    try {
+      const controller = new AbortController();
+      const result = await endpointsRegistry.queryEndpoint(
+        endpointId,
+        currentQueryRef.current,
+        { offset: currentState.offset, limit: pageSize },
+        controller.signal
+      );
+      if (!result) return;
+      setEndpointStates((prev) => {
+        const next = new Map(prev);
+        const state = next.get(endpointId);
+        if (state) {
+          next.set(endpointId, {
+            entries: [...state.entries, ...result.entries],
+            offset: state.offset + pageSize,
+            total: result.total ?? state.total,
+            hasMore: result.hasMore ?? (result.total !== void 0 ? state.entries.length + result.entries.length < result.total : void 0),
+            isLoading: false
+          });
+        }
+        return next;
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") return;
+      console.error(`Omnibar loadMore failed for ${endpointId}:`, error);
+      setEndpointStates((prev) => {
+        const next = new Map(prev);
+        const state = next.get(endpointId);
+        if (state) {
+          next.set(endpointId, { ...state, isLoading: false });
+        }
+        return next;
+      });
+    }
+  }, [endpointsRegistry, endpointStates]);
+  const remoteResults = useMemo(() => {
+    if (!endpointsRegistry) return [];
+    const processed = [];
+    for (const [endpointId, state] of endpointStates) {
+      const endpoint = endpointsRegistry.endpoints.get(endpointId);
+      const priority = endpoint?.config.priority ?? 0;
+      for (const entry of state.entries) {
+        const labelMatch = fuzzyMatch(query, entry.label);
+        const descMatch = entry.description ? fuzzyMatch(query, entry.description) : null;
+        const keywordsMatch = entry.keywords?.map((k) => fuzzyMatch(query, k)) ?? [];
+        let score = 0;
+        let labelMatches = [];
+        if (labelMatch.matched) {
+          score = Math.max(score, labelMatch.score * 3);
+          labelMatches = labelMatch.ranges;
+        }
+        if (descMatch?.matched) {
+          score = Math.max(score, descMatch.score * 1.5);
+        }
+        for (const km of keywordsMatch) {
+          if (km.matched) {
+            score = Math.max(score, km.score * 2);
+          }
+        }
+        processed.push({
+          id: `${endpointId}:${entry.id}`,
+          entry,
+          endpointId,
+          priority,
+          score: score || 1,
+          labelMatches
+        });
+      }
+    }
+    processed.sort((a, b) => {
+      if (a.priority !== b.priority) return b.priority - a.priority;
+      return b.score - a.score;
+    });
+    return processed;
+  }, [endpointStates, endpointsRegistry, query]);
+  const isLoadingRemote = useMemo(() => {
+    for (const [, state] of endpointStates) {
+      if (state.isLoading) return true;
+    }
+    return false;
+  }, [endpointStates]);
+  const endpointPagination = useMemo(() => {
+    const info = /* @__PURE__ */ new Map();
+    if (!endpointsRegistry) return info;
+    for (const [endpointId, state] of endpointStates) {
+      const ep = endpointsRegistry.endpoints.get(endpointId);
+      info.set(endpointId, {
+        endpointId,
+        loaded: state.entries.length,
+        total: state.total,
+        hasMore: state.hasMore ?? false,
+        isLoading: state.isLoading,
+        mode: ep?.config.pagination ?? "none"
+      });
+    }
+    return info;
+  }, [endpointStates, endpointsRegistry]);
+  const totalResults = results.length + remoteResults.length;
   const completions = useMemo(() => {
     return getSequenceCompletions(pendingKeys, keymap);
   }, [pendingKeys, keymap]);
   useEffect(() => {
     setSelectedIndex(0);
-  }, [results]);
+  }, [results, remoteResults]);
   const open = useCallback(() => {
     setIsOpen(true);
     setQuery("");
@@ -1972,8 +2343,8 @@ function useOmnibar(options) {
     });
   }, [onOpen, onClose]);
   const selectNext = useCallback(() => {
-    setSelectedIndex((prev) => min(prev + 1, results.length - 1));
-  }, [results.length]);
+    setSelectedIndex((prev) => min(prev + 1, totalResults - 1));
+  }, [totalResults]);
   const selectPrev = useCallback(() => {
     setSelectedIndex((prev) => max2(prev - 1, 0));
   }, []);
@@ -1981,15 +2352,47 @@ function useOmnibar(options) {
     setSelectedIndex(0);
   }, []);
   const execute = useCallback((actionId) => {
-    const id = actionId ?? results[selectedIndex]?.id;
-    if (!id) return;
-    close();
-    if (handlersRef.current?.[id]) {
-      const event = new KeyboardEvent("keydown", { key: "Enter" });
-      handlersRef.current[id](event);
+    const localCount = results.length;
+    if (actionId) {
+      const remoteResult = remoteResults.find((r) => r.id === actionId);
+      if (remoteResult) {
+        close();
+        const entry = remoteResult.entry;
+        if ("handler" in entry && entry.handler) {
+          entry.handler();
+        }
+        onExecuteRemoteRef.current?.(entry);
+        return;
+      }
+      close();
+      if (handlersRef.current?.[actionId]) {
+        const event = new KeyboardEvent("keydown", { key: "Enter" });
+        handlersRef.current[actionId](event);
+      }
+      onExecuteRef.current?.(actionId);
+      return;
     }
-    onExecuteRef.current?.(id);
-  }, [results, selectedIndex, close]);
+    if (selectedIndex < localCount) {
+      const id = results[selectedIndex]?.id;
+      if (!id) return;
+      close();
+      if (handlersRef.current?.[id]) {
+        const event = new KeyboardEvent("keydown", { key: "Enter" });
+        handlersRef.current[id](event);
+      }
+      onExecuteRef.current?.(id);
+    } else {
+      const remoteIndex = selectedIndex - localCount;
+      const remoteResult = remoteResults[remoteIndex];
+      if (!remoteResult) return;
+      close();
+      const entry = remoteResult.entry;
+      if ("handler" in entry && entry.handler) {
+        entry.handler();
+      }
+      onExecuteRemoteRef.current?.(entry);
+    }
+  }, [results, remoteResults, selectedIndex, close]);
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e) => {
@@ -2031,7 +2434,12 @@ function useOmnibar(options) {
     query,
     setQuery,
     results,
+    remoteResults,
+    isLoadingRemote,
+    endpointPagination,
+    loadMore,
     selectedIndex,
+    totalResults,
     selectNext,
     selectPrev,
     execute,
@@ -2619,15 +3027,30 @@ function LookupModal({ defaultBinding = "meta+shift+k" } = {}) {
   const filteredBindings = useMemo(() => {
     if (pendingKeys.length === 0) return allBindings;
     return allBindings.filter((result) => {
-      if (result.sequence.length < pendingKeys.length) return false;
-      for (let i = 0; i < pendingKeys.length; i++) {
+      const keySeq = result.keySeq;
+      if (keySeq.length < pendingKeys.length) return false;
+      let keySeqIdx = 0;
+      for (let i = 0; i < pendingKeys.length && keySeqIdx < keySeq.length; i++) {
         const pending = pendingKeys[i];
-        const target = result.sequence[i];
-        if (pending.key !== target.key) return false;
-        if (pending.modifiers.ctrl !== target.modifiers.ctrl) return false;
-        if (pending.modifiers.alt !== target.modifiers.alt) return false;
-        if (pending.modifiers.shift !== target.modifiers.shift) return false;
-        if (pending.modifiers.meta !== target.modifiers.meta) return false;
+        const elem = keySeq[keySeqIdx];
+        const isDigit2 = /^[0-9]$/.test(pending.key);
+        if (elem.type === "digits") {
+          if (!isDigit2) return false;
+          if (i + 1 < pendingKeys.length && /^[0-9]$/.test(pendingKeys[i + 1].key)) {
+            continue;
+          }
+          keySeqIdx++;
+        } else if (elem.type === "digit") {
+          if (!isDigit2) return false;
+          keySeqIdx++;
+        } else {
+          if (pending.key !== elem.key) return false;
+          if (pending.modifiers.ctrl !== elem.modifiers.ctrl) return false;
+          if (pending.modifiers.alt !== elem.modifiers.alt) return false;
+          if (pending.modifiers.shift !== elem.modifiers.shift) return false;
+          if (pending.modifiers.meta !== elem.modifiers.meta) return false;
+          keySeqIdx++;
+        }
       }
       return true;
     });
@@ -2783,6 +3206,7 @@ function Omnibar({
   onOpen: onOpenProp,
   onClose: onCloseProp,
   onExecute: onExecuteProp,
+  onExecuteRemote: onExecuteRemoteProp,
   maxResults = 10,
   placeholder = "Type a command...",
   children,
@@ -2820,13 +3244,25 @@ function Omnibar({
       ctx.openOmnibar();
     }
   }, [onOpenProp, ctx]);
+  const handleExecuteRemote = useCallback((entry) => {
+    if (onExecuteRemoteProp) {
+      onExecuteRemoteProp(entry);
+    } else if ("href" in entry && entry.href) {
+      window.location.href = entry.href;
+    }
+  }, [onExecuteRemoteProp]);
   const {
     isOpen: internalIsOpen,
     close,
     query,
     setQuery,
     results,
+    remoteResults,
+    isLoadingRemote,
+    endpointPagination,
+    loadMore,
     selectedIndex,
+    totalResults,
     selectNext,
     selectPrev,
     execute,
@@ -2843,9 +3279,22 @@ function Omnibar({
     onOpen: handleOpen,
     onClose: handleClose,
     onExecute: handleExecute,
-    maxResults
+    onExecuteRemote: handleExecuteRemote,
+    maxResults,
+    endpointsRegistry: ctx?.endpointsRegistry
   });
   const isOpen = isOpenProp ?? ctx?.isOmnibarOpen ?? internalIsOpen;
+  const resultsContainerRef = useRef(null);
+  const sentinelRefs = useRef(/* @__PURE__ */ new Map());
+  const remoteResultsByEndpoint = useMemo(() => {
+    const grouped = /* @__PURE__ */ new Map();
+    for (const result of remoteResults) {
+      const existing = grouped.get(result.endpointId) ?? [];
+      existing.push(result);
+      grouped.set(result.endpointId, existing);
+    }
+    return grouped;
+  }, [remoteResults]);
   useEffect(() => {
     if (isOpen) {
       requestAnimationFrame(() => {
@@ -2853,6 +3302,38 @@ function Omnibar({
       });
     }
   }, [isOpen]);
+  useEffect(() => {
+    if (!isOpen) return;
+    const container = resultsContainerRef.current;
+    if (!container) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          const endpointId = entry.target.dataset.endpointId;
+          if (!endpointId) continue;
+          const paginationInfo = endpointPagination.get(endpointId);
+          if (!paginationInfo) continue;
+          if (paginationInfo.mode !== "scroll") continue;
+          if (!paginationInfo.hasMore) continue;
+          if (paginationInfo.isLoading) continue;
+          loadMore(endpointId);
+        }
+      },
+      {
+        root: container,
+        rootMargin: "100px",
+        // Trigger slightly before sentinel is visible
+        threshold: 0
+      }
+    );
+    for (const [endpointId, sentinel] of sentinelRefs.current) {
+      if (sentinel) {
+        observer.observe(sentinel);
+      }
+    }
+    return () => observer.disconnect();
+  }, [isOpen, endpointPagination, loadMore]);
   useEffect(() => {
     if (!isOpen) return;
     const handleGlobalKeyDown = (e) => {
@@ -2902,7 +3383,12 @@ function Omnibar({
       query,
       setQuery,
       results,
+      remoteResults,
+      isLoadingRemote,
+      endpointPagination,
+      loadMore,
       selectedIndex,
+      totalResults,
       selectNext,
       selectPrev,
       execute,
@@ -2930,21 +3416,61 @@ function Omnibar({
         spellCheck: false
       }
     ),
-    /* @__PURE__ */ jsx("div", { className: "kbd-omnibar-results", children: results.length === 0 ? /* @__PURE__ */ jsx("div", { className: "kbd-omnibar-no-results", children: query ? "No matching commands" : "Start typing to search commands..." }) : results.map((result, i) => /* @__PURE__ */ jsxs(
-      "div",
-      {
-        className: `kbd-omnibar-result ${i === selectedIndex ? "selected" : ""}`,
-        onClick: () => execute(result.id),
-        onMouseEnter: () => {
+    /* @__PURE__ */ jsx("div", { className: "kbd-omnibar-results", ref: resultsContainerRef, children: totalResults === 0 && !isLoadingRemote ? /* @__PURE__ */ jsx("div", { className: "kbd-omnibar-no-results", children: query ? "No matching commands" : "Start typing to search commands..." }) : /* @__PURE__ */ jsxs(Fragment, { children: [
+      results.map((result, i) => /* @__PURE__ */ jsxs(
+        "div",
+        {
+          className: `kbd-omnibar-result ${i === selectedIndex ? "selected" : ""}`,
+          onClick: () => execute(result.id),
+          children: [
+            /* @__PURE__ */ jsx("span", { className: "kbd-omnibar-result-label", children: result.action.label }),
+            result.action.group && /* @__PURE__ */ jsx("span", { className: "kbd-omnibar-result-category", children: result.action.group }),
+            result.bindings.length > 0 && /* @__PURE__ */ jsx("div", { className: "kbd-omnibar-result-bindings", children: result.bindings.slice(0, 2).map((binding) => /* @__PURE__ */ jsx(BindingBadge, { binding }, binding)) })
+          ]
         },
-        children: [
-          /* @__PURE__ */ jsx("span", { className: "kbd-omnibar-result-label", children: result.action.label }),
-          result.action.group && /* @__PURE__ */ jsx("span", { className: "kbd-omnibar-result-category", children: result.action.group }),
-          result.bindings.length > 0 && /* @__PURE__ */ jsx("div", { className: "kbd-omnibar-result-bindings", children: result.bindings.slice(0, 2).map((binding) => /* @__PURE__ */ jsx(BindingBadge, { binding }, binding)) })
-        ]
-      },
-      result.id
-    )) })
+        result.id
+      )),
+      (() => {
+        let remoteIndex = 0;
+        return Array.from(remoteResultsByEndpoint.entries()).map(([endpointId, endpointResults]) => {
+          const paginationInfo = endpointPagination.get(endpointId);
+          const showPagination = paginationInfo?.mode === "scroll" && paginationInfo.total !== void 0;
+          return /* @__PURE__ */ jsxs(Fragment$1, { children: [
+            endpointResults.map((result) => {
+              const absoluteIndex = results.length + remoteIndex;
+              remoteIndex++;
+              return /* @__PURE__ */ jsxs(
+                "div",
+                {
+                  className: `kbd-omnibar-result ${absoluteIndex === selectedIndex ? "selected" : ""}`,
+                  onClick: () => execute(result.id),
+                  children: [
+                    /* @__PURE__ */ jsx("span", { className: "kbd-omnibar-result-label", children: result.entry.label }),
+                    result.entry.group && /* @__PURE__ */ jsx("span", { className: "kbd-omnibar-result-category", children: result.entry.group }),
+                    result.entry.description && /* @__PURE__ */ jsx("span", { className: "kbd-omnibar-result-description", children: result.entry.description })
+                  ]
+                },
+                result.id
+              );
+            }),
+            paginationInfo?.mode === "scroll" && /* @__PURE__ */ jsx(
+              "div",
+              {
+                className: "kbd-omnibar-pagination",
+                ref: (el) => sentinelRefs.current.set(endpointId, el),
+                "data-endpoint-id": endpointId,
+                children: paginationInfo.isLoading ? /* @__PURE__ */ jsx("span", { className: "kbd-omnibar-pagination-loading", children: "Loading more..." }) : showPagination ? /* @__PURE__ */ jsxs("span", { className: "kbd-omnibar-pagination-info", children: [
+                  paginationInfo.loaded,
+                  " of ",
+                  paginationInfo.total
+                ] }) : paginationInfo.hasMore ? /* @__PURE__ */ jsx("span", { className: "kbd-omnibar-pagination-more", children: "Scroll for more..." }) : null
+              }
+            )
+          ] }, endpointId);
+        });
+      })(),
+      isLoadingRemote && remoteResults.length === 0 && /* @__PURE__ */ jsx("div", { className: "kbd-omnibar-loading", children: "Searching..." })
+    ] }) })
   ] }) });
 }
 function SequenceModal() {
@@ -2955,12 +3481,69 @@ function SequenceModal() {
     sequenceTimeoutStartedAt: timeoutStartedAt,
     sequenceTimeout,
     getCompletions,
-    registry
+    registry,
+    executeAction
   } = useHotkeysContext();
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [hasInteracted, setHasInteracted] = useState(false);
   const completions = useMemo(() => {
     if (pendingKeys.length === 0) return [];
     return getCompletions(pendingKeys);
   }, [getCompletions, pendingKeys]);
+  const flatCompletions = useMemo(() => {
+    const items = [];
+    for (const c of completions) {
+      for (const action of c.actions) {
+        const displayKey = c.isComplete ? "\u21B5" : c.nextKeys;
+        items.push({
+          completion: c,
+          action,
+          displayKey,
+          isComplete: c.isComplete
+        });
+      }
+    }
+    return items;
+  }, [completions]);
+  const itemCount = flatCompletions.length;
+  const shouldShowTimeout = timeoutStartedAt !== null && completions.length === 1 && !hasInteracted;
+  useEffect(() => {
+    setSelectedIndex(0);
+    setHasInteracted(false);
+  }, [pendingKeys]);
+  const executeSelected = useCallback(() => {
+    if (selectedIndex >= 0 && selectedIndex < flatCompletions.length) {
+      const item = flatCompletions[selectedIndex];
+      executeAction(item.action);
+      cancelSequence();
+    }
+  }, [selectedIndex, flatCompletions, executeAction, cancelSequence]);
+  useEffect(() => {
+    if (!isAwaitingSequence || pendingKeys.length === 0) return;
+    const handleKeyDown = (e) => {
+      switch (e.key) {
+        case "ArrowDown":
+          e.preventDefault();
+          e.stopPropagation();
+          setSelectedIndex((prev) => Math.min(prev + 1, itemCount - 1));
+          setHasInteracted(true);
+          break;
+        case "ArrowUp":
+          e.preventDefault();
+          e.stopPropagation();
+          setSelectedIndex((prev) => Math.max(prev - 1, 0));
+          setHasInteracted(true);
+          break;
+        case "Enter":
+          e.preventDefault();
+          e.stopPropagation();
+          executeSelected();
+          break;
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown, true);
+    return () => document.removeEventListener("keydown", handleKeyDown, true);
+  }, [isAwaitingSequence, pendingKeys.length, itemCount, executeSelected]);
   const formattedPendingKeys = useMemo(() => {
     if (pendingKeys.length === 0) return "";
     return formatCombination(pendingKeys).display;
@@ -2969,18 +3552,6 @@ function SequenceModal() {
     const action = registry.actions.get(actionId);
     return action?.config.label || actionId;
   };
-  const groupedCompletions = useMemo(() => {
-    const byNextKey = /* @__PURE__ */ new Map();
-    for (const c of completions) {
-      const existing = byNextKey.get(c.nextKeys);
-      if (existing) {
-        existing.push(c);
-      } else {
-        byNextKey.set(c.nextKeys, [c]);
-      }
-    }
-    return byNextKey;
-  }, [completions]);
   if (!isAwaitingSequence || pendingKeys.length === 0) {
     return null;
   }
@@ -2989,7 +3560,7 @@ function SequenceModal() {
       /* @__PURE__ */ jsx("kbd", { className: "kbd-sequence-keys", children: formattedPendingKeys }),
       /* @__PURE__ */ jsx("span", { className: "kbd-sequence-ellipsis", children: "\u2026" })
     ] }),
-    timeoutStartedAt && /* @__PURE__ */ jsx(
+    shouldShowTimeout && /* @__PURE__ */ jsx(
       "div",
       {
         className: "kbd-sequence-timeout",
@@ -2997,15 +3568,19 @@ function SequenceModal() {
       },
       timeoutStartedAt
     ),
-    completions.length > 0 && /* @__PURE__ */ jsx("div", { className: "kbd-sequence-completions", children: Array.from(groupedCompletions.entries()).map(([nextKey, comps]) => /* @__PURE__ */ jsxs("div", { className: "kbd-sequence-completion", children: [
-      /* @__PURE__ */ jsx("kbd", { className: "kbd-kbd", children: nextKey }),
-      /* @__PURE__ */ jsx("span", { className: "kbd-sequence-arrow", children: "\u2192" }),
-      /* @__PURE__ */ jsx("span", { className: "kbd-sequence-actions", children: comps.flatMap((c) => c.actions).map((action, i) => /* @__PURE__ */ jsxs("span", { children: [
-        i > 0 && ", ",
-        getActionLabel(action)
-      ] }, action)) })
-    ] }, nextKey)) }),
-    completions.length === 0 && /* @__PURE__ */ jsx("div", { className: "kbd-sequence-empty", children: "No matching shortcuts" })
+    flatCompletions.length > 0 && /* @__PURE__ */ jsx("div", { className: "kbd-sequence-completions", children: flatCompletions.map((item, index) => /* @__PURE__ */ jsxs(
+      "div",
+      {
+        className: `kbd-sequence-completion ${index === selectedIndex ? "selected" : ""} ${item.isComplete ? "complete" : ""}`,
+        children: [
+          /* @__PURE__ */ jsx("kbd", { className: "kbd-kbd", children: item.displayKey }),
+          /* @__PURE__ */ jsx("span", { className: "kbd-sequence-arrow", children: "\u2192" }),
+          /* @__PURE__ */ jsx("span", { className: "kbd-sequence-actions", children: getActionLabel(item.action) })
+        ]
+      },
+      `${item.completion.fullSequence}-${item.action}`
+    )) }),
+    flatCompletions.length === 0 && /* @__PURE__ */ jsx("div", { className: "kbd-sequence-empty", children: "No matching shortcuts" })
   ] }) });
 }
 var DefaultTooltip = ({ children }) => /* @__PURE__ */ jsx(Fragment, { children });
@@ -3762,6 +4337,6 @@ function ShortcutsModal({
   ] }) }) });
 }
 
-export { ACTION_LOOKUP, ACTION_MODAL, ACTION_OMNIBAR, ActionsRegistryContext, Alt, Backspace, Command, Ctrl, DEFAULT_SEQUENCE_TIMEOUT, DIGITS_PLACEHOLDER, DIGIT_PLACEHOLDER, Down, Enter, HotkeysProvider, Kbd, KbdLookup, KbdModal, KbdOmnibar, Kbds, Key, KeybindingEditor, Left, LookupModal, ModifierIcon, Omnibar, Option, Right, SequenceModal, Shift, ShortcutsModal, Up, countPlaceholders, createTwoColumnRenderer, extractCaptures, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, formatKeySeq, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasConflicts, hasDigitPlaceholders, hotkeySequenceToKeySeq, isDigitPlaceholder, isMac, isModifierKey, isPlaceholderSentinel, isSequence, isShiftedSymbol, keySeqToHotkeySequence, normalizeKey, parseCombinationId, parseHotkeyString, parseKeySeq, searchActions, useAction, useActions, useActionsRegistry, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useOmnibar, useRecordHotkey };
+export { ACTION_LOOKUP, ACTION_MODAL, ACTION_OMNIBAR, ActionsRegistryContext, Alt, Backspace, Command, Ctrl, DEFAULT_SEQUENCE_TIMEOUT, DIGITS_PLACEHOLDER, DIGIT_PLACEHOLDER, Down, Enter, HotkeysProvider, Kbd, KbdLookup, KbdModal, KbdOmnibar, Kbds, Key, KeybindingEditor, Left, LookupModal, ModifierIcon, Omnibar, OmnibarEndpointsRegistryContext, Option, Right, SequenceModal, Shift, ShortcutsModal, Up, countPlaceholders, createTwoColumnRenderer, extractCaptures, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, formatKeySeq, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasConflicts, hasDigitPlaceholders, hotkeySequenceToKeySeq, isDigitPlaceholder, isMac, isModifierKey, isPlaceholderSentinel, isSequence, isShiftedSymbol, keySeqToHotkeySequence, normalizeKey, parseCombinationId, parseHotkeyString, parseKeySeq, searchActions, useAction, useActions, useActionsRegistry, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useOmnibar, useOmnibarEndpoint, useOmnibarEndpointsRegistry, useRecordHotkey };
 //# sourceMappingURL=index.js.map
 //# sourceMappingURL=index.js.map

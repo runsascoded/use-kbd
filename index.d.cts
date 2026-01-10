@@ -1,6 +1,6 @@
-import * as react_jsx_runtime from 'react/jsx-runtime';
 import * as react from 'react';
 import { ReactNode, ComponentType, RefObject, SVGProps, CSSProperties } from 'react';
+import * as react_jsx_runtime from 'react/jsx-runtime';
 
 /**
  * Modifier keys state
@@ -186,7 +186,7 @@ interface ActionSearchResult {
  * A possible completion for a partially-typed sequence
  */
 interface SequenceCompletion {
-    /** The next key(s) needed to complete this sequence */
+    /** The next key(s) needed to complete this sequence (empty string if complete) */
     nextKeys: string;
     /** The full hotkey string */
     fullSequence: string;
@@ -194,6 +194,90 @@ interface SequenceCompletion {
     display: KeyCombinationDisplay;
     /** Actions triggered by this sequence */
     actions: string[];
+    /** Whether the sequence is already complete (can be executed now with Enter) */
+    isComplete: boolean;
+}
+/**
+ * Base fields for all omnibar entries
+ */
+interface OmnibarEntryBase {
+    /** Unique identifier for this entry */
+    id: string;
+    /** Display label */
+    label: string;
+    /** Optional description (shown below label) */
+    description?: string;
+    /** Group name for organizing results */
+    group?: string;
+    /** Additional search keywords */
+    keywords?: string[];
+}
+/**
+ * Omnibar entry that navigates to a URL when selected
+ */
+interface OmnibarLinkEntry extends OmnibarEntryBase {
+    /** URL to navigate to */
+    href: string;
+    handler?: never;
+}
+/**
+ * Omnibar entry that executes a handler when selected
+ */
+interface OmnibarActionEntry extends OmnibarEntryBase {
+    /** Handler to execute (can close over data) */
+    handler: () => void;
+    href?: never;
+}
+/**
+ * An entry returned from a remote omnibar endpoint.
+ * Must have either `href` (for navigation) or `handler` (for custom action).
+ */
+type OmnibarEntry = OmnibarLinkEntry | OmnibarActionEntry;
+/**
+ * Pagination parameters passed to endpoint fetch function
+ */
+interface EndpointPagination {
+    /** Starting offset (0-indexed) */
+    offset: number;
+    /** Maximum number of entries to return */
+    limit: number;
+}
+/**
+ * Response from an endpoint fetch, including pagination metadata
+ */
+interface EndpointResponse {
+    /** Entries for this page */
+    entries: OmnibarEntry[];
+    /** Total count if known (enables "X of Y" display) */
+    total?: number;
+    /** Whether more results exist (fallback when total is expensive to compute) */
+    hasMore?: boolean;
+}
+/**
+ * Pagination mode for an endpoint
+ * - 'scroll': Fetch more when scrolling near bottom (IntersectionObserver)
+ * - 'buttons': Show pagination controls at bottom of endpoint's group
+ * - 'none': Single page, no pagination (default)
+ */
+type EndpointPaginationMode = 'scroll' | 'buttons' | 'none';
+/**
+ * Configuration for a remote omnibar endpoint
+ */
+interface OmnibarEndpointConfig {
+    /** Fetch function that returns entries for a query */
+    fetch: (query: string, signal: AbortSignal, pagination: EndpointPagination) => Promise<EndpointResponse>;
+    /** Default group for entries from this endpoint */
+    group?: string;
+    /** Priority for result ordering (higher = shown first, default: 0, local actions: 100) */
+    priority?: number;
+    /** Minimum query length before fetching (default: 2) */
+    minQueryLength?: number;
+    /** Whether this endpoint is enabled (default: true) */
+    enabled?: boolean;
+    /** Number of results per page (default: 10) */
+    pageSize?: number;
+    /** Pagination mode (default: 'none') */
+    pagination?: EndpointPaginationMode;
 }
 
 /**
@@ -308,6 +392,70 @@ interface UseEditableHotkeysResult {
  */
 declare function useEditableHotkeys(defaults: HotkeyMap, handlers: HandlerMap, options?: UseEditableHotkeysOptions): UseEditableHotkeysResult;
 
+interface RegisteredEndpoint {
+    id: string;
+    config: OmnibarEndpointConfig;
+    registeredAt: number;
+}
+/**
+ * Result from querying an endpoint
+ */
+interface EndpointQueryResult {
+    endpointId: string;
+    entries: OmnibarEntry[];
+    /** Total count from endpoint (if provided) */
+    total?: number;
+    /** Whether endpoint has more results (if provided) */
+    hasMore?: boolean;
+    error?: Error;
+}
+interface OmnibarEndpointsRegistryValue {
+    /** Register an endpoint. Called by useOmnibarEndpoint on mount. */
+    register: (id: string, config: OmnibarEndpointConfig) => void;
+    /** Unregister an endpoint. Called by useOmnibarEndpoint on unmount. */
+    unregister: (id: string) => void;
+    /** Currently registered endpoints */
+    endpoints: Map<string, RegisteredEndpoint>;
+    /** Query all registered endpoints (initial page) */
+    queryAll: (query: string, signal: AbortSignal) => Promise<EndpointQueryResult[]>;
+    /** Query a single endpoint with specific pagination (for load-more) */
+    queryEndpoint: (endpointId: string, query: string, pagination: EndpointPagination, signal: AbortSignal) => Promise<EndpointQueryResult | null>;
+}
+declare const OmnibarEndpointsRegistryContext: react.Context<OmnibarEndpointsRegistryValue | null>;
+/**
+ * Hook to create an omnibar endpoints registry.
+ * Used internally by HotkeysProvider.
+ */
+declare function useOmnibarEndpointsRegistry(): OmnibarEndpointsRegistryValue;
+
+/**
+ * Result from remote endpoint, normalized for display
+ */
+interface RemoteOmnibarResult {
+    /** Unique ID (prefixed with endpoint ID) */
+    id: string;
+    /** Entry data from endpoint */
+    entry: OmnibarEntry;
+    /** Endpoint ID this came from */
+    endpointId: string;
+    /** Priority from endpoint config */
+    priority: number;
+    /** Fuzzy match score */
+    score: number;
+    /** Matched ranges in label for highlighting */
+    labelMatches: Array<[number, number]>;
+}
+/**
+ * Pagination info for an endpoint's results group
+ */
+interface EndpointPaginationInfo {
+    endpointId: string;
+    loaded: number;
+    total?: number;
+    hasMore: boolean;
+    isLoading: boolean;
+    mode: EndpointPaginationMode;
+}
 interface UseOmnibarOptions {
     /** Registry of available actions */
     actions: ActionRegistry;
@@ -321,12 +469,18 @@ interface UseOmnibarOptions {
     enabled?: boolean;
     /** Called when an action is executed (if handlers not provided, or in addition to) */
     onExecute?: (actionId: string) => void;
+    /** Called when a remote entry is executed */
+    onExecuteRemote?: (entry: OmnibarEntry) => void;
     /** Called when omnibar opens */
     onOpen?: () => void;
     /** Called when omnibar closes */
     onClose?: () => void;
     /** Maximum number of results to show (default: 10) */
     maxResults?: number;
+    /** Remote endpoints registry (optional - enables remote search) */
+    endpointsRegistry?: OmnibarEndpointsRegistryValue;
+    /** Debounce time for remote queries in ms (default: 150) */
+    debounceMs?: number;
 }
 interface UseOmnibarResult {
     /** Whether omnibar is open */
@@ -341,10 +495,20 @@ interface UseOmnibarResult {
     query: string;
     /** Set the search query */
     setQuery: (query: string) => void;
-    /** Search results (filtered and sorted) */
+    /** Local action search results (filtered and sorted) */
     results: ActionSearchResult[];
-    /** Currently selected result index */
+    /** Remote endpoint results */
+    remoteResults: RemoteOmnibarResult[];
+    /** Whether any remote endpoint is loading (initial or more) */
+    isLoadingRemote: boolean;
+    /** Pagination info per endpoint */
+    endpointPagination: Map<string, EndpointPaginationInfo>;
+    /** Load more results for a specific endpoint */
+    loadMore: (endpointId: string) => void;
+    /** Currently selected result index (across local + remote) */
     selectedIndex: number;
+    /** Total number of results (local + remote) */
+    totalResults: number;
     /** Select the next result */
     selectNext: () => void;
     /** Select the previous result */
@@ -735,10 +899,15 @@ interface OmnibarProps {
      */
     onClose?: () => void;
     /**
-     * Called when an action is executed.
+     * Called when a local action is executed.
      * If not provided, uses executeAction from HotkeysContext.
      */
     onExecute?: (actionId: string) => void;
+    /**
+     * Called when a remote omnibar entry is executed.
+     * Use this to handle navigation for entries with `href`.
+     */
+    onExecuteRemote?: (entry: OmnibarEntry) => void;
     /** Maximum number of results to show (default: 10) */
     maxResults?: number;
     /** Placeholder text for input (default: 'Type a command...') */
@@ -753,8 +922,20 @@ interface OmnibarProps {
 interface OmnibarRenderProps {
     query: string;
     setQuery: (query: string) => void;
+    /** Local action search results */
     results: ActionSearchResult[];
+    /** Remote endpoint results */
+    remoteResults: RemoteOmnibarResult[];
+    /** Whether remote endpoints are being queried */
+    isLoadingRemote: boolean;
+    /** Pagination info per endpoint */
+    endpointPagination: Map<string, EndpointPaginationInfo>;
+    /** Load more results for a specific endpoint */
+    loadMore: (endpointId: string) => void;
+    /** Currently selected index (across local + remote) */
     selectedIndex: number;
+    /** Total number of results (local + remote) */
+    totalResults: number;
     selectNext: () => void;
     selectPrev: () => void;
     execute: (actionId?: string) => void;
@@ -798,7 +979,7 @@ interface OmnibarRenderProps {
  * />
  * ```
  */
-declare function Omnibar({ actions: actionsProp, handlers: handlersProp, keymap: keymapProp, defaultBinding, isOpen: isOpenProp, onOpen: onOpenProp, onClose: onCloseProp, onExecute: onExecuteProp, maxResults, placeholder, children, backdropClassName, omnibarClassName, }: OmnibarProps): react_jsx_runtime.JSX.Element | null;
+declare function Omnibar({ actions: actionsProp, handlers: handlersProp, keymap: keymapProp, defaultBinding, isOpen: isOpenProp, onOpen: onOpenProp, onClose: onCloseProp, onExecute: onExecuteProp, onExecuteRemote: onExecuteRemoteProp, maxResults, placeholder, children, backdropClassName, omnibarClassName, }: OmnibarProps): react_jsx_runtime.JSX.Element | null;
 
 /**
  * Check if a key is a shifted symbol (requires Shift on US keyboard).
@@ -922,16 +1103,17 @@ declare function getConflictsArray(keymap: Record<string, string | string[]>): K
 
 /**
  * Get possible completions for a partially-typed sequence.
+ * Returns both exact matches (isComplete: true) and continuations (isComplete: false).
  *
  * @example
  * ```tsx
- * const keymap = { '2 w': 'twoWeeks', '2 d': 'twoDays', 't': 'temp' }
- * const pending = parseHotkeyString('2')
+ * const keymap = { 'h': 'humidity', 'h \\d+': 'nHours', '2 w': 'twoWeeks' }
+ * const pending = parseHotkeyString('h')
  * const completions = getSequenceCompletions(pending, keymap)
  * // Returns:
  * // [
- * //   { nextKeys: 'w', fullSequence: '2 w', actions: ['twoWeeks'], ... },
- * //   { nextKeys: 'd', fullSequence: '2 d', actions: ['twoDays'], ... },
+ * //   { nextKeys: '', fullSequence: 'h', actions: ['humidity'], isComplete: true },
+ * //   { nextKeys: '⟨##⟩', fullSequence: 'h \\d+', actions: ['nHours'], isComplete: false },
  * // ]
  * ```
  */
@@ -1111,6 +1293,8 @@ interface HotkeysConfig {
 interface HotkeysContextValue {
     /** The actions registry */
     registry: ActionsRegistryValue;
+    /** The omnibar endpoints registry */
+    endpointsRegistry: OmnibarEndpointsRegistryValue;
     /** Whether hotkeys are enabled (based on viewport/touch) */
     isEnabled: boolean;
     /** Modal open state */
@@ -1208,6 +1392,44 @@ declare function useHotkeysContext(): HotkeysContextValue;
  * Hook to optionally access hotkeys context.
  */
 declare function useMaybeHotkeysContext(): HotkeysContextValue | null;
+
+/**
+ * Register a remote omnibar endpoint.
+ *
+ * Endpoints are automatically unregistered when the component unmounts,
+ * making this ideal for colocating search providers with their data context.
+ *
+ * @example
+ * ```tsx
+ * function UsersPage() {
+ *   const navigate = useNavigate()
+ *
+ *   useOmnibarEndpoint('users', {
+ *     fetch: async (query, signal, pagination) => {
+ *       const res = await fetch(`/api/users?q=${query}&offset=${pagination.offset}&limit=${pagination.limit}`, { signal })
+ *       const { users, total } = await res.json()
+ *       return {
+ *         entries: users.map(u => ({
+ *           id: `user:${u.id}`,
+ *           label: u.name,
+ *           description: u.email,
+ *           handler: () => navigate(`/users/${u.id}`),
+ *         })),
+ *         total,
+ *         hasMore: pagination.offset + users.length < total,
+ *       }
+ *     },
+ *     group: 'Users',
+ *     priority: 10,
+ *     pageSize: 10,
+ *     pagination: 'scroll',
+ *   })
+ *
+ *   return <UsersList />
+ * }
+ * ```
+ */
+declare function useOmnibarEndpoint(id: string, config: OmnibarEndpointConfig): void;
 
 /**
  * Hook to record a keyboard shortcut (single key or sequence) from user input.
@@ -1339,14 +1561,15 @@ declare function LookupModal({ defaultBinding }?: LookupModalProps): react_jsx_r
  * When a user presses a key that starts a sequence, this modal appears showing:
  * - The keys pressed so far
  * - Available completions (what keys can come next)
- * - A timeout indicator
+ * - A timeout indicator (only shown when exactly one completion exists)
+ *
+ * Features:
+ * - Arrow keys navigate between completions (cancels auto-timeout)
+ * - Enter executes the selected completion (even for digit patterns - handler gets undefined captures)
+ * - Escape cancels the sequence
  *
  * Unlike LookupModal (which requires explicit activation and lets you browse/search),
- * SequenceModal appears automatically when you start typing a sequence and auto-executes
- * when a complete sequence is entered.
- *
- * The modal auto-dismisses if no completion is pressed within the sequence timeout,
- * or when the user presses Escape, or when a complete sequence is executed.
+ * SequenceModal appears automatically when you start typing a sequence.
  *
  * @example
  * ```tsx
@@ -1414,4 +1637,4 @@ declare const ACTION_MODAL = "__hotkeys:modal";
 declare const ACTION_OMNIBAR = "__hotkeys:omnibar";
 declare const ACTION_LOOKUP = "__hotkeys:lookup";
 
-export { ACTION_LOOKUP, ACTION_MODAL, ACTION_OMNIBAR, type ActionConfig, type ActionDefinition, type ActionHandler, type ActionRegistry, type ActionSearchResult, ActionsRegistryContext, type ActionsRegistryValue, Alt, Backspace, type BindingInfo, Command, Ctrl, DEFAULT_SEQUENCE_TIMEOUT, DIGITS_PLACEHOLDER, DIGIT_PLACEHOLDER, Down, Enter, type FuzzyMatchResult, type GroupRenderer, type GroupRendererProps, type HandlerMap, type HotkeyHandler, type HotkeyMap, type HotkeySequence, type HotkeysConfig, type HotkeysContextValue, HotkeysProvider, type HotkeysProviderProps, Kbd, KbdLookup, KbdModal, KbdOmnibar, type KbdProps, Kbds, Key, type KeyCombination, type KeyCombinationDisplay, type KeyConflict, type KeyIconProps, type KeyIconType, type KeySeq, KeybindingEditor, type KeybindingEditorProps, type KeybindingEditorRenderProps, Left, LookupModal, ModifierIcon, type ModifierIconProps, type ModifierType, type Modifiers, Omnibar, type OmnibarProps, type OmnibarRenderProps, Option, type RecordHotkeyOptions, type RecordHotkeyResult, type RegisteredAction, Right, type SeqElem, type SeqElemState, type SeqMatchState, type SequenceCompletion, SequenceModal, Shift, type ShortcutGroup, ShortcutsModal, type ShortcutsModalProps, type ShortcutsModalRenderProps, type TooltipComponent, type TooltipProps, type TwoColumnConfig, type TwoColumnRow, Up, type UseEditableHotkeysOptions, type UseEditableHotkeysResult, type UseHotkeysOptions, type UseHotkeysResult, type UseOmnibarOptions, type UseOmnibarResult, countPlaceholders, createTwoColumnRenderer, extractCaptures, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, formatKeySeq, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasConflicts, hasDigitPlaceholders, hotkeySequenceToKeySeq, isDigitPlaceholder, isMac, isModifierKey, isPlaceholderSentinel, isSequence, isShiftedSymbol, keySeqToHotkeySequence, normalizeKey, parseCombinationId, parseHotkeyString, parseKeySeq, searchActions, useAction, useActions, useActionsRegistry, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useOmnibar, useRecordHotkey };
+export { ACTION_LOOKUP, ACTION_MODAL, ACTION_OMNIBAR, type ActionConfig, type ActionDefinition, type ActionHandler, type ActionRegistry, type ActionSearchResult, ActionsRegistryContext, type ActionsRegistryValue, Alt, Backspace, type BindingInfo, Command, Ctrl, DEFAULT_SEQUENCE_TIMEOUT, DIGITS_PLACEHOLDER, DIGIT_PLACEHOLDER, Down, type EndpointPagination, type EndpointPaginationInfo, type EndpointPaginationMode, type EndpointQueryResult, type EndpointResponse, Enter, type FuzzyMatchResult, type GroupRenderer, type GroupRendererProps, type HandlerMap, type HotkeyHandler, type HotkeyMap, type HotkeySequence, type HotkeysConfig, type HotkeysContextValue, HotkeysProvider, type HotkeysProviderProps, Kbd, KbdLookup, KbdModal, KbdOmnibar, type KbdProps, Kbds, Key, type KeyCombination, type KeyCombinationDisplay, type KeyConflict, type KeyIconProps, type KeyIconType, type KeySeq, KeybindingEditor, type KeybindingEditorProps, type KeybindingEditorRenderProps, Left, LookupModal, ModifierIcon, type ModifierIconProps, type ModifierType, type Modifiers, Omnibar, type OmnibarActionEntry, type OmnibarEndpointConfig, OmnibarEndpointsRegistryContext, type OmnibarEndpointsRegistryValue, type OmnibarEntry, type OmnibarEntryBase, type OmnibarLinkEntry, type OmnibarProps, type OmnibarRenderProps, Option, type RecordHotkeyOptions, type RecordHotkeyResult, type RegisteredAction, type RegisteredEndpoint, type RemoteOmnibarResult, Right, type SeqElem, type SeqElemState, type SeqMatchState, type SequenceCompletion, SequenceModal, Shift, type ShortcutGroup, ShortcutsModal, type ShortcutsModalProps, type ShortcutsModalRenderProps, type TooltipComponent, type TooltipProps, type TwoColumnConfig, type TwoColumnRow, Up, type UseEditableHotkeysOptions, type UseEditableHotkeysResult, type UseHotkeysOptions, type UseHotkeysResult, type UseOmnibarOptions, type UseOmnibarResult, countPlaceholders, createTwoColumnRenderer, extractCaptures, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, formatKeySeq, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasConflicts, hasDigitPlaceholders, hotkeySequenceToKeySeq, isDigitPlaceholder, isMac, isModifierKey, isPlaceholderSentinel, isSequence, isShiftedSymbol, keySeqToHotkeySequence, normalizeKey, parseCombinationId, parseHotkeyString, parseKeySeq, searchActions, useAction, useActions, useActionsRegistry, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useOmnibar, useOmnibarEndpoint, useOmnibarEndpointsRegistry, useRecordHotkey };
