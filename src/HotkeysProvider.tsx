@@ -93,7 +93,7 @@ const HotkeysContext = createContext<HotkeysContextValue | null>(null)
 const DEFAULT_CONFIG: Required<HotkeysConfig> = {
   storageKey: 'use-kbd',
   sequenceTimeout: DEFAULT_SEQUENCE_TIMEOUT,
-  disableConflicts: true,
+  disableConflicts: false,  // Keep conflicting bindings active; SeqM handles disambiguation
   minViewportWidth: 768,
   enableOnTouch: false,
 }

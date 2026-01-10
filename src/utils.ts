@@ -711,16 +711,17 @@ import type { SequenceCompletion, ActionRegistry, ActionSearchResult } from './t
 
 /**
  * Get possible completions for a partially-typed sequence.
+ * Returns both exact matches (isComplete: true) and continuations (isComplete: false).
  *
  * @example
  * ```tsx
- * const keymap = { '2 w': 'twoWeeks', '2 d': 'twoDays', 't': 'temp' }
- * const pending = parseHotkeyString('2')
+ * const keymap = { 'h': 'humidity', 'h \\d+': 'nHours', '2 w': 'twoWeeks' }
+ * const pending = parseHotkeyString('h')
  * const completions = getSequenceCompletions(pending, keymap)
  * // Returns:
  * // [
- * //   { nextKeys: 'w', fullSequence: '2 w', actions: ['twoWeeks'], ... },
- * //   { nextKeys: 'd', fullSequence: '2 d', actions: ['twoDays'], ... },
+ * //   { nextKeys: '', fullSequence: 'h', actions: ['humidity'], isComplete: true },
+ * //   { nextKeys: '⟨##⟩', fullSequence: 'h \\d+', actions: ['nHours'], isComplete: false },
  * // ]
  * ```
  */
@@ -736,13 +737,13 @@ export function getSequenceCompletions(
     const sequence = parseHotkeyString(hotkeyStr)
     const keySeq = parseKeySeq(hotkeyStr)
 
-    // Check if pending is a prefix of this sequence
+    // Check if pending could match this sequence
     // For \d+ patterns, pending can be same length if digits are being accumulated
     if (sequence.length < pendingKeys.length) continue
 
     // Track how many keySeq elements we've matched
     let keySeqIdx = 0
-    let isPrefix = true
+    let isMatch = true
 
     for (let i = 0; i < pendingKeys.length && keySeqIdx < keySeq.length; i++) {
       const elem = keySeq[keySeqIdx]
@@ -750,7 +751,7 @@ export function getSequenceCompletions(
       if (elem.type === 'digits') {
         // \d+ can consume multiple pending digit keys
         if (!/^[0-9]$/.test(pendingKeys[i].key)) {
-          isPrefix = false
+          isMatch = false
           break
         }
         // Check if next pending key is also a digit (still accumulating)
@@ -764,36 +765,53 @@ export function getSequenceCompletions(
       } else if (elem.type === 'digit') {
         // \d matches exactly one digit
         if (!/^[0-9]$/.test(pendingKeys[i].key)) {
-          isPrefix = false
+          isMatch = false
           break
         }
         keySeqIdx++
       } else {
         // Regular key - must match exactly (with modifiers)
         if (!keyMatchesPattern(pendingKeys[i], sequence[keySeqIdx])) {
-          isPrefix = false
+          isMatch = false
           break
         }
         keySeqIdx++
       }
     }
 
-    // Must have matched all pending keys AND have more keys remaining in pattern
-    if (isPrefix && keySeqIdx < keySeq.length) {
-      // Get remaining keys needed
+    if (!isMatch) continue
+
+    const actions = Array.isArray(actionOrActions) ? actionOrActions : [actionOrActions]
+
+    if (keySeqIdx === keySeq.length) {
+      // Exact match - pending keys fully match this pattern
+      completions.push({
+        nextKeys: '',
+        fullSequence: hotkeyStr,
+        display: formatKeySeq(keySeq),
+        actions,
+        isComplete: true,
+      })
+    } else {
+      // Continuation - more keys needed
       const remainingKeySeq = keySeq.slice(keySeqIdx)
       const nextKeys = formatKeySeq(remainingKeySeq).display
-
-      const actions = Array.isArray(actionOrActions) ? actionOrActions : [actionOrActions]
 
       completions.push({
         nextKeys,
         fullSequence: hotkeyStr,
         display: formatKeySeq(keySeq),
         actions,
+        isComplete: false,
       })
     }
   }
+
+  // Sort: complete matches first, then by fullSequence
+  completions.sort((a, b) => {
+    if (a.isComplete !== b.isComplete) return a.isComplete ? -1 : 1
+    return a.fullSequence.localeCompare(b.fullSequence)
+  })
 
   return completions
 }

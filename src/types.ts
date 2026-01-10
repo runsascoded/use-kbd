@@ -194,7 +194,7 @@ export interface ActionSearchResult {
  * A possible completion for a partially-typed sequence
  */
 export interface SequenceCompletion {
-  /** The next key(s) needed to complete this sequence */
+  /** The next key(s) needed to complete this sequence (empty string if complete) */
   nextKeys: string
   /** The full hotkey string */
   fullSequence: string
@@ -202,6 +202,8 @@ export interface SequenceCompletion {
   display: KeyCombinationDisplay
   /** Actions triggered by this sequence */
   actions: string[]
+  /** Whether the sequence is already complete (can be executed now with Enter) */
+  isComplete: boolean
 }
 
 // ============================================================================

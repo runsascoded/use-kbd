@@ -54,7 +54,7 @@ export function useEditableHotkeys(
   handlers: HandlerMap,
   options: UseEditableHotkeysOptions = {},
 ): UseEditableHotkeysResult {
-  const { storageKey, disableConflicts = true, ...hotkeyOptions } = options
+  const { storageKey, disableConflicts = false, ...hotkeyOptions } = options
 
   // Load overrides from storage on mount
   const [overrides, setOverrides] = useState<Partial<HotkeyMap>>(() => {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useHotkeysContext } from './HotkeysProvider'
 import type { SequenceCompletion } from './types'
 import { formatCombination } from './utils'
@@ -9,14 +9,15 @@ import { formatCombination } from './utils'
  * When a user presses a key that starts a sequence, this modal appears showing:
  * - The keys pressed so far
  * - Available completions (what keys can come next)
- * - A timeout indicator
+ * - A timeout indicator (only shown when exactly one completion exists)
+ *
+ * Features:
+ * - Arrow keys navigate between completions (cancels auto-timeout)
+ * - Enter executes the selected completion (even for digit patterns - handler gets undefined captures)
+ * - Escape cancels the sequence
  *
  * Unlike LookupModal (which requires explicit activation and lets you browse/search),
- * SequenceModal appears automatically when you start typing a sequence and auto-executes
- * when a complete sequence is entered.
- *
- * The modal auto-dismisses if no completion is pressed within the sequence timeout,
- * or when the user presses Escape, or when a complete sequence is executed.
+ * SequenceModal appears automatically when you start typing a sequence.
  *
  * @example
  * ```tsx
@@ -36,9 +37,12 @@ export function SequenceModal() {
     sequenceTimeout,
     getCompletions,
     registry,
+    executeAction,
   } = useHotkeysContext()
 
   const [selectedIndex, setSelectedIndex] = useState(0)
+  // Track if user has interacted with arrows - cancels timeout
+  const [hasInteracted, setHasInteracted] = useState(false)
 
   // Get completions for the current pending keys
   const completions = useMemo(() => {
@@ -46,27 +50,53 @@ export function SequenceModal() {
     return getCompletions(pendingKeys)
   }, [getCompletions, pendingKeys])
 
-  // Group completions by what happens next
-  // Each completion shows: nextKeys → actionLabel
-  const groupedCompletions = useMemo(() => {
-    const byNextKey = new Map<string, SequenceCompletion[]>()
+  // Flatten completions for navigation (each action gets its own row)
+  // Group complete matches first, then continuations
+  const flatCompletions = useMemo(() => {
+    const items: Array<{
+      completion: SequenceCompletion
+      action: string
+      displayKey: string
+      isComplete: boolean
+    }> = []
+
     for (const c of completions) {
-      const existing = byNextKey.get(c.nextKeys)
-      if (existing) {
-        existing.push(c)
-      } else {
-        byNextKey.set(c.nextKeys, [c])
+      for (const action of c.actions) {
+        // For complete matches, show "↵" as the key
+        // For continuations, show the next keys needed
+        const displayKey = c.isComplete ? '↵' : c.nextKeys
+        items.push({
+          completion: c,
+          action,
+          displayKey,
+          isComplete: c.isComplete,
+        })
       }
     }
-    return byNextKey
+
+    return items
   }, [completions])
 
-  const groupCount = groupedCompletions.size
+  const itemCount = flatCompletions.length
 
-  // Reset selection when completions change
+  // Should show timeout? Only when exactly one completion AND no user interaction
+  const shouldShowTimeout = timeoutStartedAt !== null && completions.length === 1 && !hasInteracted
+
+  // Reset selection and interaction state when pending keys change
   useEffect(() => {
     setSelectedIndex(0)
-  }, [completions])
+    setHasInteracted(false)
+  }, [pendingKeys])
+
+  // Execute selected action
+  const executeSelected = useCallback(() => {
+    if (selectedIndex >= 0 && selectedIndex < flatCompletions.length) {
+      const item = flatCompletions[selectedIndex]
+      // Execute the action - handler should handle undefined captures
+      executeAction(item.action)
+      cancelSequence()
+    }
+  }, [selectedIndex, flatCompletions, executeAction, cancelSequence])
 
   // Keyboard navigation - intercept arrow keys to prevent page actions
   useEffect(() => {
@@ -77,14 +107,21 @@ export function SequenceModal() {
         case 'ArrowDown':
           e.preventDefault()
           e.stopPropagation()
-          setSelectedIndex(prev => Math.min(prev + 1, groupCount - 1))
+          setSelectedIndex(prev => Math.min(prev + 1, itemCount - 1))
+          setHasInteracted(true)
           break
         case 'ArrowUp':
           e.preventDefault()
           e.stopPropagation()
           setSelectedIndex(prev => Math.max(prev - 1, 0))
+          setHasInteracted(true)
           break
-        // Note: Escape and Enter are handled by useHotkeys
+        case 'Enter':
+          e.preventDefault()
+          e.stopPropagation()
+          executeSelected()
+          break
+        // Note: Escape is handled by useHotkeys
         // Other keys continue the sequence via useHotkeys
       }
     }
@@ -92,7 +129,7 @@ export function SequenceModal() {
     // Use capture phase to intercept before useHotkeys
     document.addEventListener('keydown', handleKeyDown, true)
     return () => document.removeEventListener('keydown', handleKeyDown, true)
-  }, [isAwaitingSequence, pendingKeys.length, groupCount])
+  }, [isAwaitingSequence, pendingKeys.length, itemCount, executeSelected])
 
   // Format pending keys for display
   const formattedPendingKeys = useMemo(() => {
@@ -120,8 +157,8 @@ export function SequenceModal() {
           <span className="kbd-sequence-ellipsis">…</span>
         </div>
 
-        {/* Timeout progress bar */}
-        {timeoutStartedAt && (
+        {/* Timeout progress bar - only shown when exactly one completion and no interaction */}
+        {shouldShowTimeout && (
           <div
             className="kbd-sequence-timeout"
             key={timeoutStartedAt}
@@ -130,22 +167,17 @@ export function SequenceModal() {
         )}
 
         {/* Completions list */}
-        {completions.length > 0 && (
+        {flatCompletions.length > 0 && (
           <div className="kbd-sequence-completions">
-            {Array.from(groupedCompletions.entries()).map(([nextKey, comps], index) => (
+            {flatCompletions.map((item, index) => (
               <div
-                key={nextKey}
-                className={`kbd-sequence-completion ${index === selectedIndex ? 'selected' : ''}`}
+                key={`${item.completion.fullSequence}-${item.action}`}
+                className={`kbd-sequence-completion ${index === selectedIndex ? 'selected' : ''} ${item.isComplete ? 'complete' : ''}`}
               >
-                <kbd className="kbd-kbd">{nextKey}</kbd>
+                <kbd className="kbd-kbd">{item.displayKey}</kbd>
                 <span className="kbd-sequence-arrow">→</span>
                 <span className="kbd-sequence-actions">
-                  {comps.flatMap(c => c.actions).map((action, i) => (
-                    <span key={action}>
-                      {i > 0 && ', '}
-                      {getActionLabel(action)}
-                    </span>
-                  ))}
+                  {getActionLabel(item.action)}
                 </span>
               </div>
             ))}
@@ -153,7 +185,7 @@ export function SequenceModal() {
         )}
 
         {/* No completions message */}
-        {completions.length === 0 && (
+        {flatCompletions.length === 0 && (
           <div className="kbd-sequence-empty">
             No matching shortcuts
           </div>

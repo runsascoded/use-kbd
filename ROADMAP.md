@@ -11,31 +11,41 @@ A downstream app should need minimal code to integrate hotkeys:
 
 Everything else comes from the library.
 
-## Current Problems
+## Completed
 
-### 1. Props Drilling for Modal/Omnibar
+### Permissive Conflict Resolution ✓
 
-App.tsx destructures context values just to pass them to components:
-```tsx
-const { isModalOpen, closeModal, keymap, ... } = useHotkeysContext()
+Prefix conflicts (`h` vs `h \d+`) and exact conflicts (`h`→A, `h`→B) no longer disable bindings by default. SeqM handles disambiguation:
 
-<ShortcutsModal
-  keymap={keymap}
-  isOpen={isModalOpen}
-  onClose={closeModal}
-  ...
-/>
-<Omnibar
-  actions={getActionRegistry(ACTIONS)}
-  keymap={keymap}
-  isOpen={isOmnibarOpen}
-  ...
-/>
+1. **Permissive by default** - `disableConflicts` defaults to `false` (set to `true` for strict mode)
+2. **SeqM shows all matching completions** - complete matches show `↵`, continuations show next keys
+3. **Enter executes selected** - first completion selected by default
+4. **Timeout iff exactly one completion** - gives user time to continue or let it auto-execute
+5. **Arrow interaction cancels timeout** - user is actively choosing
+
+Handlers should handle `captures: undefined` with sensible defaults:
+```typescript
+'move:down': (e, captures) => {
+  const n = captures?.[0] ?? 1  // Default to 1 if no digits
+  moveDown(n)
+}
 ```
 
-**Solution**: Components should use context internally. Props become optional overrides.
+### Components Use Context ✓
 
-### 2. Global Static ACTIONS Without Handlers
+ShortcutsModal, Omnibar, LookupModal, and SequenceModal all use `useHotkeysContext()` internally. Props are optional overrides. No more props drilling or `handlersRef` bridges.
+
+### Static Site Deployment ✓
+
+Demo site deployed at [kbd.rbw.sh](https://kbd.rbw.sh) via GitHub Pages.
+
+### Smart Backspace During Sequences ✓
+
+Backspace intelligently handles sequence editing: if no bindings match continuing with Backspace, it removes the last pending key. If a binding like `g backspace` exists and matches, Backspace advances the sequence normally.
+
+## Current Problems
+
+### 1. Global Static ACTIONS Without Handlers
 
 Static `ACTIONS` can't have handlers because handlers need runtime state:
 ```tsx
@@ -63,22 +73,7 @@ export const createActions = (cb: AwairCallbacks) => defineActions({
 })
 ```
 
-### 3. Omnibar Needs `handlersRef` Bridge
-
-Because handlers are registered separately from actions, Omnibar needs a ref to find them:
-```tsx
-const handlersRef = useRef<Record<string, () => void>>({})
-// ... later in useKeyboardShortcuts
-handlersRef.current = handlers
-
-<Omnibar
-  onExecute={(actionId) => handlersRef.current[actionId]?.()}
-/>
-```
-
-**Solution**: Handlers live in context. Omnibar uses `executeAction` from context.
-
-### 4. ShortcutsModalContent Has Generic Logic
+### 2. ShortcutsModalContent Has Generic Logic
 
 680 lines, but most is reusable:
 - Tab navigation between actions
@@ -223,26 +218,11 @@ function AppContent() {
 
 ## Implementation Plan
 
-### Phase 1: Library - Components Use Context (NEXT)
+### Phase 1: Library - Components Use Context ✓ (DONE)
 
-Make ShortcutsModal and Omnibar use context internally:
+Components now use context internally. Props are optional overrides.
 
-1. **ShortcutsModal defaults**
-   - `isOpen` from `useHotkeysContext().isModalOpen`
-   - `onClose` from `useHotkeysContext().closeModal`
-   - `keymap` from `useHotkeysContext().keymap`
-   - `actions` from `useHotkeysContext().actions`
-   - Props become optional overrides
-
-2. **Omnibar defaults**
-   - Same pattern
-   - `onExecute` uses `useHotkeysContext().executeAction`
-   - No more `handlersRef` bridge needed
-
-3. **Update exports**
-   - Ensure `executeAction` works with registered handlers
-
-### Phase 2: Library - Built-in Modal Content
+### Phase 2: Library - Built-in Modal Content (NEXT)
 
 Move generic logic from awair's ShortcutsModalContent into library:
 
@@ -372,13 +352,6 @@ The button could:
 - Show on hover in corner (like awair)
 - Display the trigger key (`?`) as a hint
 - Fade in/out gracefully
-
-### Static Site Deployment
-
-Deploy examples at `use-kbd.rbw.sh`:
-- GitHub Action for building and deploying
-- Examples should link back to source code on GitHub
-- Consider versioned deployments for major releases
 
 ### Action Sort Order
 

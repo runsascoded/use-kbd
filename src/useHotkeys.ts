@@ -511,12 +511,17 @@ export function useHotkeys(
       const newSequence = [...pendingKeysRef.current, currentCombo]
 
       // Try KeySeq matching first (handles digit placeholders)
-      let keySeqMatched = false
-      let keySeqPartial = false
+      // Collect all matches (complete and partial) for permissive conflict resolution
+      const completeMatches: Array<{
+        key: string
+        state: SeqMatchState
+        captures: number[]
+      }> = []
+      let hasPartials = false
       const matchStates = matchStatesRef.current
 
       // Check if we have any partial matches in progress
-      const hasPartialMatches = matchStates.size > 0
+      const hadPartialMatches = matchStates.size > 0
 
       for (const entry of parsedKeymapRef.current) {
         // Get existing match state for this pattern
@@ -524,7 +529,7 @@ export function useHotkeys(
 
         // If we have partial matches in progress, only check patterns with existing state
         // This prevents a fresh "j" pattern from matching when we're trying to complete "\d+ j"
-        if (hasPartialMatches && !state) {
+        if (hadPartialMatches && !state) {
           continue
         }
 
@@ -536,27 +541,71 @@ export function useHotkeys(
         const result = advanceMatchState(state, entry.keySeq, currentCombo)
 
         if (result.status === 'matched') {
-          // Complete match with captures
-          if (tryExecuteKeySeq(entry.key, result.state, result.captures, e)) {
-            clearPending()
-            keySeqMatched = true
-            break
-          }
+          // Complete match - collect it
+          completeMatches.push({
+            key: entry.key,
+            state: result.state,
+            captures: result.captures,
+          })
+          // Also mark as failed so we don't keep stale state
+          matchStates.delete(entry.key)
         } else if (result.status === 'partial') {
           // Update state and continue
           matchStates.set(entry.key, result.state)
-          keySeqPartial = true
+          hasPartials = true
         } else {
           // Failed - reset this pattern's state
           matchStates.delete(entry.key)
         }
       }
 
-      if (keySeqMatched) {
+      // Backspace: if no bindings matched, treat as "delete last key" from pending sequence
+      if (e.key === 'Backspace' && pendingKeysRef.current.length > 0 && completeMatches.length === 0 && !hasPartials) {
+        e.preventDefault()
+        const newPending = pendingKeysRef.current.slice(0, -1)
+        if (newPending.length === 0) {
+          // Back to empty - exit sequence mode
+          clearPending()
+          onSequenceCancel?.()
+        } else {
+          // Remove last key, stay in sequence mode
+          setPendingKeys(newPending)
+          // Replay remaining pending keys to reconstruct match states (preserves digit accumulation)
+          matchStatesRef.current.clear()
+          for (const combo of newPending) {
+            for (const entry of parsedKeymapRef.current) {
+              let state = matchStatesRef.current.get(entry.key)
+              if (!state) {
+                state = initMatchState(entry.keySeq)
+              }
+              const result = advanceMatchState(state, entry.keySeq, combo)
+              if (result.status === 'partial') {
+                matchStatesRef.current.set(entry.key, result.state)
+              } else if (result.status === 'matched') {
+                // Fully matched with fewer keys - keep state for potential continuation
+                matchStatesRef.current.delete(entry.key)
+              } else {
+                matchStatesRef.current.delete(entry.key)
+              }
+            }
+          }
+        }
         return
       }
 
-      if (keySeqPartial) {
+      // Permissive conflict resolution:
+      // - If exactly one complete match AND no partial matches → execute immediately
+      // - Otherwise → enter sequence mode for disambiguation via SeqM
+      if (completeMatches.length === 1 && !hasPartials) {
+        const match = completeMatches[0]
+        if (tryExecuteKeySeq(match.key, match.state, match.captures, e)) {
+          clearPending()
+          return
+        }
+      }
+
+      // Multiple complete matches OR partials exist → enter sequence mode
+      if (completeMatches.length > 0 || hasPartials) {
         // We have partial matches, wait for more keys
         setPendingKeys(newSequence)
         setIsAwaitingSequence(true)
