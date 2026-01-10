@@ -492,6 +492,31 @@ function combinationsEqual(a: KeyCombination, b: KeyCombination): boolean {
   )
 }
 
+/**
+ * Check if a pending key matches a pattern key (handles digit placeholders)
+ */
+function keyMatchesPattern(pending: KeyCombination, pattern: KeyCombination): boolean {
+  // Check modifiers first
+  if (
+    pending.modifiers.ctrl !== pattern.modifiers.ctrl ||
+    pending.modifiers.alt !== pattern.modifiers.alt ||
+    pending.modifiers.shift !== pattern.modifiers.shift ||
+    pending.modifiers.meta !== pattern.modifiers.meta
+  ) {
+    return false
+  }
+
+  // Exact match
+  if (pending.key === pattern.key) return true
+
+  // Check if pending is a digit and pattern expects a digit placeholder
+  if (/^[0-9]$/.test(pending.key) && (pattern.key === DIGIT_PLACEHOLDER || pattern.key === DIGITS_PLACEHOLDER)) {
+    return true
+  }
+
+  return false
+}
+
 // ============================================================================
 // KeySeq Conflict Detection
 // ============================================================================
@@ -712,19 +737,51 @@ export function getSequenceCompletions(
     const keySeq = parseKeySeq(hotkeyStr)
 
     // Check if pending is a prefix of this sequence
-    if (sequence.length <= pendingKeys.length) continue
+    // For \d+ patterns, pending can be same length if digits are being accumulated
+    if (sequence.length < pendingKeys.length) continue
 
+    // Track how many keySeq elements we've matched
+    let keySeqIdx = 0
     let isPrefix = true
-    for (let i = 0; i < pendingKeys.length; i++) {
-      if (!combinationsEqual(pendingKeys[i], sequence[i])) {
-        isPrefix = false
-        break
+
+    for (let i = 0; i < pendingKeys.length && keySeqIdx < keySeq.length; i++) {
+      const elem = keySeq[keySeqIdx]
+
+      if (elem.type === 'digits') {
+        // \d+ can consume multiple pending digit keys
+        if (!/^[0-9]$/.test(pendingKeys[i].key)) {
+          isPrefix = false
+          break
+        }
+        // Check if next pending key is also a digit (still accumulating)
+        // or if we should move to next keySeq element
+        if (i + 1 < pendingKeys.length && /^[0-9]$/.test(pendingKeys[i + 1].key)) {
+          // Next is also digit, stay on this keySeq element
+          continue
+        }
+        // Either no more pending keys, or next pending is not a digit
+        keySeqIdx++
+      } else if (elem.type === 'digit') {
+        // \d matches exactly one digit
+        if (!/^[0-9]$/.test(pendingKeys[i].key)) {
+          isPrefix = false
+          break
+        }
+        keySeqIdx++
+      } else {
+        // Regular key - must match exactly (with modifiers)
+        if (!keyMatchesPattern(pendingKeys[i], sequence[keySeqIdx])) {
+          isPrefix = false
+          break
+        }
+        keySeqIdx++
       }
     }
 
-    if (isPrefix) {
-      // Get remaining keys needed (use KeySeq for proper digit placeholder formatting)
-      const remainingKeySeq = keySeq.slice(pendingKeys.length)
+    // Must have matched all pending keys AND have more keys remaining in pattern
+    if (isPrefix && keySeqIdx < keySeq.length) {
+      // Get remaining keys needed
+      const remainingKeySeq = keySeq.slice(keySeqIdx)
       const nextKeys = formatKeySeq(remainingKeySeq).display
 
       const actions = Array.isArray(actionOrActions) ? actionOrActions : [actionOrActions]

@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useHotkeysContext } from './HotkeysProvider'
 import type { SequenceCompletion } from './types'
 import { formatCombination } from './utils'
@@ -38,11 +38,61 @@ export function SequenceModal() {
     registry,
   } = useHotkeysContext()
 
+  const [selectedIndex, setSelectedIndex] = useState(0)
+
   // Get completions for the current pending keys
   const completions = useMemo(() => {
     if (pendingKeys.length === 0) return []
     return getCompletions(pendingKeys)
   }, [getCompletions, pendingKeys])
+
+  // Group completions by what happens next
+  // Each completion shows: nextKeys → actionLabel
+  const groupedCompletions = useMemo(() => {
+    const byNextKey = new Map<string, SequenceCompletion[]>()
+    for (const c of completions) {
+      const existing = byNextKey.get(c.nextKeys)
+      if (existing) {
+        existing.push(c)
+      } else {
+        byNextKey.set(c.nextKeys, [c])
+      }
+    }
+    return byNextKey
+  }, [completions])
+
+  const groupCount = groupedCompletions.size
+
+  // Reset selection when completions change
+  useEffect(() => {
+    setSelectedIndex(0)
+  }, [completions])
+
+  // Keyboard navigation - intercept arrow keys to prevent page actions
+  useEffect(() => {
+    if (!isAwaitingSequence || pendingKeys.length === 0) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      switch (e.key) {
+        case 'ArrowDown':
+          e.preventDefault()
+          e.stopPropagation()
+          setSelectedIndex(prev => Math.min(prev + 1, groupCount - 1))
+          break
+        case 'ArrowUp':
+          e.preventDefault()
+          e.stopPropagation()
+          setSelectedIndex(prev => Math.max(prev - 1, 0))
+          break
+        // Note: Escape and Enter are handled by useHotkeys
+        // Other keys continue the sequence via useHotkeys
+      }
+    }
+
+    // Use capture phase to intercept before useHotkeys
+    document.addEventListener('keydown', handleKeyDown, true)
+    return () => document.removeEventListener('keydown', handleKeyDown, true)
+  }, [isAwaitingSequence, pendingKeys.length, groupCount])
 
   // Format pending keys for display
   const formattedPendingKeys = useMemo(() => {
@@ -55,22 +105,6 @@ export function SequenceModal() {
     const action = registry.actions.get(actionId)
     return action?.config.label || actionId
   }
-
-  // Group completions by what happens next
-  // Each completion shows: nextKeys → actionLabel
-  const groupedCompletions = useMemo(() => {
-    // Create map of nextKey -> completions
-    const byNextKey = new Map<string, SequenceCompletion[]>()
-    for (const c of completions) {
-      const existing = byNextKey.get(c.nextKeys)
-      if (existing) {
-        existing.push(c)
-      } else {
-        byNextKey.set(c.nextKeys, [c])
-      }
-    }
-    return byNextKey
-  }, [completions])
 
   // Don't render if not awaiting sequence or no pending keys
   if (!isAwaitingSequence || pendingKeys.length === 0) {
@@ -98,8 +132,11 @@ export function SequenceModal() {
         {/* Completions list */}
         {completions.length > 0 && (
           <div className="kbd-sequence-completions">
-            {Array.from(groupedCompletions.entries()).map(([nextKey, comps]) => (
-              <div key={nextKey} className="kbd-sequence-completion">
+            {Array.from(groupedCompletions.entries()).map(([nextKey, comps], index) => (
+              <div
+                key={nextKey}
+                className={`kbd-sequence-completion ${index === selectedIndex ? 'selected' : ''}`}
+              >
                 <kbd className="kbd-kbd">{nextKey}</kbd>
                 <span className="kbd-sequence-arrow">→</span>
                 <span className="kbd-sequence-actions">
