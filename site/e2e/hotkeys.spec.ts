@@ -144,6 +144,68 @@ test.describe('Global Features', () => {
 
     await expect(page).toHaveURL('/canvas')
   })
+
+  test('LookupModal shows digit placeholder shortcuts when typing digit', async ({ page }) => {
+    // Navigate to table page which has digit placeholder shortcuts
+    await page.goto('/table')
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    // Open lookup modal
+    await page.keyboard.press('Meta+Shift+k')
+    await page.waitForSelector('.kbd-lookup', { timeout: 5000 })
+
+    // Type a digit - should show shortcuts with ## placeholder
+    await page.keyboard.press('3')
+    await page.waitForTimeout(100)
+
+    // Should show results (digit placeholder patterns like ## j)
+    const results = page.locator('.kbd-lookup-result')
+    await expect(results.first()).toBeVisible()
+    await expect(page.locator('.kbd-lookup-empty')).not.toBeVisible()
+
+    await page.keyboard.press('Escape')
+  })
+
+  test('SequenceModal shows digit placeholder completions', async ({ page }) => {
+    // Navigate to table page which has digit placeholder shortcuts
+    await page.goto('/table')
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    // Type a digit to start a sequence
+    await page.keyboard.press('5')
+    await page.waitForSelector('.kbd-sequence', { timeout: 5000 })
+
+    // Should show completions like "j → Down N rows"
+    const completions = page.locator('.kbd-sequence-completion')
+    await expect(completions.first()).toBeVisible()
+
+    await page.keyboard.press('Escape')
+  })
+
+  test('SequenceModal arrow keys navigate completions without firing page actions', async ({ page }) => {
+    // Navigate to table page and select a row
+    await page.goto('/table')
+    const rows = page.locator('.data-table tbody tr')
+    await rows.first().click()
+    await expect(rows.first()).toHaveClass(/selected/)
+
+    // Type a digit to open sequence modal
+    await page.keyboard.press('5')
+    await page.waitForSelector('.kbd-sequence', { timeout: 5000 })
+
+    // Arrow down should navigate completions, NOT move table selection
+    await page.keyboard.press('ArrowDown')
+    await page.waitForTimeout(100)
+
+    // First row should still be selected (arrow didn't fire page action)
+    await expect(rows.first()).toHaveClass(/selected/)
+
+    // Second completion should now be selected in the modal
+    const completions = page.locator('.kbd-sequence-completion')
+    await expect(completions.nth(1)).toHaveClass(/selected/)
+
+    await page.keyboard.press('Escape')
+  })
 })
 
 test.describe('Data Table Demo', () => {

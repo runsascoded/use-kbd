@@ -3,7 +3,7 @@ import { ACTION_LOOKUP } from './constants'
 import { useHotkeysContext } from './HotkeysProvider'
 import { useAction } from './useAction'
 import type { HotkeySequence, KeyCombination } from './types'
-import { DIGIT_PLACEHOLDER, DIGITS_PLACEHOLDER, formatCombination, formatKeySeq, parseHotkeyString, parseKeySeq, normalizeKey, isModifierKey } from './utils'
+import { formatCombination, formatKeySeq, parseHotkeyString, parseKeySeq, normalizeKey, isModifierKey } from './utils'
 import type { KeySeq } from './types'
 
 interface LookupResult {
@@ -92,23 +92,39 @@ export function LookupModal({ defaultBinding = 'meta+shift+k' }: LookupModalProp
     if (pendingKeys.length === 0) return allBindings
 
     return allBindings.filter(result => {
-      // Check if pending keys match the start of this binding
-      if (result.sequence.length < pendingKeys.length) return false
+      // Use keySeq for matching (has proper digit/digits types)
+      const keySeq = result.keySeq
+      if (keySeq.length < pendingKeys.length) return false
 
-      for (let i = 0; i < pendingKeys.length; i++) {
+      // Track position in keySeq (may differ from pendingKeys due to \d+ consuming multiple digits)
+      let keySeqIdx = 0
+
+      for (let i = 0; i < pendingKeys.length && keySeqIdx < keySeq.length; i++) {
         const pending = pendingKeys[i]
-        const target = result.sequence[i]
-
-        // Check key match, accounting for digit placeholders
+        const elem = keySeq[keySeqIdx]
         const isDigit = /^[0-9]$/.test(pending.key)
-        const targetIsDigitPlaceholder = target.key === DIGIT_PLACEHOLDER || target.key === DIGITS_PLACEHOLDER
-        const keyMatches = pending.key === target.key || (isDigit && targetIsDigitPlaceholder)
 
-        if (!keyMatches) return false
-        if (pending.modifiers.ctrl !== target.modifiers.ctrl) return false
-        if (pending.modifiers.alt !== target.modifiers.alt) return false
-        if (pending.modifiers.shift !== target.modifiers.shift) return false
-        if (pending.modifiers.meta !== target.modifiers.meta) return false
+        if (elem.type === 'digits') {
+          // \d+ matches one or more digits
+          if (!isDigit) return false
+          // Check if next pending key is also a digit (still accumulating)
+          if (i + 1 < pendingKeys.length && /^[0-9]$/.test(pendingKeys[i + 1].key)) {
+            continue // Stay on this keySeq element
+          }
+          keySeqIdx++
+        } else if (elem.type === 'digit') {
+          // \d matches exactly one digit
+          if (!isDigit) return false
+          keySeqIdx++
+        } else {
+          // Regular key - check exact match with modifiers
+          if (pending.key !== elem.key) return false
+          if (pending.modifiers.ctrl !== elem.modifiers.ctrl) return false
+          if (pending.modifiers.alt !== elem.modifiers.alt) return false
+          if (pending.modifiers.shift !== elem.modifiers.shift) return false
+          if (pending.modifiers.meta !== elem.modifiers.meta) return false
+          keySeqIdx++
+        }
       }
 
       return true
