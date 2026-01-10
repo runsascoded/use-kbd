@@ -8,7 +8,7 @@ import {
   useAction,
   useOmnibarEndpoint,
 } from 'use-kbd'
-import type { OmnibarEntry } from 'use-kbd'
+import type { EndpointPagination, EndpointResponse } from 'use-kbd'
 import type { TooltipProps } from 'use-kbd'
 import 'use-kbd/styles.css'
 
@@ -164,7 +164,7 @@ function DataTable() {
 
   // Register omnibar endpoint for searching table rows
   useOmnibarEndpoint('table-rows', useMemo(() => ({
-    fetch: async (query: string, _signal: AbortSignal): Promise<OmnibarEntry[]> => {
+    fetch: async (query: string, _signal: AbortSignal, pagination: EndpointPagination): Promise<EndpointResponse> => {
       // Simulate network latency (50-150ms)
       await new Promise(r => setTimeout(r, 50 + Math.random() * 100))
 
@@ -193,12 +193,15 @@ function DataTable() {
         }
       }
 
-      // Sort by score and limit
+      // Sort by score
       matches.sort((a, b) => b.score - a.score)
-      const topMatches = matches.slice(0, 10)
+
+      // Apply pagination
+      const total = matches.length
+      const paginatedMatches = matches.slice(pagination.offset, pagination.offset + pagination.limit)
 
       // Convert to OmnibarEntry format with handlers
-      return topMatches.map(({ row }) => ({
+      const entries = paginatedMatches.map(({ row }) => ({
         id: `row-${row.id}`,
         label: row.name,
         description: `${row.status} • Value: ${row.value}`,
@@ -206,10 +209,18 @@ function DataTable() {
         keywords: [row.status, row.value.toString()],
         handler: () => navigateToRow(row.id),
       }))
+
+      return {
+        entries,
+        total,
+        hasMore: pagination.offset + pagination.limit < total,
+      }
     },
     group: 'Table Rows',
     priority: 50, // Lower than local actions
     minQueryLength: 1,
+    pageSize: 10,
+    pagination: 'scroll',
   }), [data, navigateToRow]))
 
   // Sort handlers

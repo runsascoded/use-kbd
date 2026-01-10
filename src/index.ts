@@ -3,6 +3,9 @@ export type {
   ActionDefinition,
   ActionRegistry,
   ActionSearchResult,
+  EndpointPagination,
+  EndpointPaginationMode,
+  EndpointResponse,
   HotkeySequence,
   KeyCombination,
   KeyCombinationDisplay,
@@ -26,7 +29,7 @@ export { countPlaceholders, extractCaptures, isDigitPlaceholder } from './types'
 
 export type { HandlerMap, HotkeyHandler, HotkeyMap, UseHotkeysOptions, UseHotkeysResult } from './useHotkeys'
 export type { UseEditableHotkeysOptions, UseEditableHotkeysResult } from './useEditableHotkeys'
-export type { RemoteOmnibarResult, UseOmnibarOptions, UseOmnibarResult } from './useOmnibar'
+export type { EndpointPaginationInfo, RemoteOmnibarResult, UseOmnibarOptions, UseOmnibarResult } from './useOmnibar'
 export type {
   BindingInfo,
   KeybindingEditorProps,

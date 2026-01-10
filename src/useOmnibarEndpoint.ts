@@ -1,6 +1,6 @@
 import { useContext, useEffect, useRef } from 'react'
 import { OmnibarEndpointsRegistryContext } from './OmnibarEndpointsRegistry'
-import type { OmnibarEndpointConfig } from './types'
+import type { EndpointPagination, OmnibarEndpointConfig } from './types'
 
 /**
  * Register a remote omnibar endpoint.
@@ -14,18 +14,24 @@ import type { OmnibarEndpointConfig } from './types'
  *   const navigate = useNavigate()
  *
  *   useOmnibarEndpoint('users', {
- *     fetch: async (query, signal) => {
- *       const res = await fetch(`/api/users?q=${query}`, { signal })
- *       const users = await res.json()
- *       return users.map(u => ({
- *         id: `user:${u.id}`,
- *         label: u.name,
- *         description: u.email,
- *         handler: () => navigate(`/users/${u.id}`),
- *       }))
+ *     fetch: async (query, signal, pagination) => {
+ *       const res = await fetch(`/api/users?q=${query}&offset=${pagination.offset}&limit=${pagination.limit}`, { signal })
+ *       const { users, total } = await res.json()
+ *       return {
+ *         entries: users.map(u => ({
+ *           id: `user:${u.id}`,
+ *           label: u.name,
+ *           description: u.email,
+ *           handler: () => navigate(`/users/${u.id}`),
+ *         })),
+ *         total,
+ *         hasMore: pagination.offset + users.length < total,
+ *       }
  *     },
  *     group: 'Users',
  *     priority: 10,
+ *     pageSize: 10,
+ *     pagination: 'scroll',
  *   })
  *
  *   return <UsersList />
@@ -53,9 +59,9 @@ export function useOmnibarEndpoint(id: string, config: OmnibarEndpointConfig): v
   useEffect(() => {
     registryRef.current.register(id, {
       ...config,
-      fetch: async (query, signal) => {
-        if (!enabledRef.current) return []
-        return fetchRef.current(query, signal)
+      fetch: async (query, signal, pagination) => {
+        if (!enabledRef.current) return { entries: [] }
+        return fetchRef.current(query, signal, pagination)
       },
     })
 
@@ -67,6 +73,8 @@ export function useOmnibarEndpoint(id: string, config: OmnibarEndpointConfig): v
     config.group,
     config.priority,
     config.minQueryLength,
+    config.pageSize,
+    config.pagination,
     // Note: we use refs for fetch and enabled, so they don't cause re-registration
   ])
 }

@@ -3,15 +3,23 @@ import { useHotkeys, HotkeyMap, HandlerMap } from './useHotkeys'
 
 const { max, min } = Math
 import { searchActions, getSequenceCompletions, fuzzyMatch } from './utils'
-import type { ActionRegistry, ActionSearchResult, HotkeySequence, OmnibarEntry } from './types'
+import type { ActionRegistry, ActionSearchResult, EndpointPaginationMode, HotkeySequence, OmnibarEntry } from './types'
 import type { SequenceCompletion } from './types'
 import type { OmnibarEndpointsRegistryValue } from './OmnibarEndpointsRegistry'
 
-/** Default priority for local actions (higher than remote endpoints) */
-const _LOCAL_ACTION_PRIORITY = 100
-
 /** Default debounce time for remote queries */
 const DEFAULT_DEBOUNCE_MS = 150
+
+/**
+ * Pagination state for a single endpoint
+ */
+interface EndpointState {
+  entries: OmnibarEntry[]
+  offset: number
+  total?: number
+  hasMore?: boolean
+  isLoading: boolean
+}
 
 /**
  * Result from remote endpoint, normalized for display
@@ -29,6 +37,18 @@ export interface RemoteOmnibarResult {
   score: number
   /** Matched ranges in label for highlighting */
   labelMatches: Array<[number, number]>
+}
+
+/**
+ * Pagination info for an endpoint's results group
+ */
+export interface EndpointPaginationInfo {
+  endpointId: string
+  loaded: number
+  total?: number
+  hasMore: boolean
+  isLoading: boolean
+  mode: EndpointPaginationMode
 }
 
 export interface UseOmnibarOptions {
@@ -75,8 +95,12 @@ export interface UseOmnibarResult {
   results: ActionSearchResult[]
   /** Remote endpoint results */
   remoteResults: RemoteOmnibarResult[]
-  /** Whether remote endpoints are being queried */
+  /** Whether any remote endpoint is loading (initial or more) */
   isLoadingRemote: boolean
+  /** Pagination info per endpoint */
+  endpointPagination: Map<string, EndpointPaginationInfo>
+  /** Load more results for a specific endpoint */
+  loadMore: (endpointId: string) => void
   /** Currently selected result index (across local + remote) */
   selectedIndex: number
   /** Total number of results (local + remote) */
@@ -173,8 +197,8 @@ export function useOmnibar(options: UseOmnibarOptions): UseOmnibarResult {
   const [isOpen, setIsOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
-  const [remoteResults, setRemoteResults] = useState<RemoteOmnibarResult[]>([])
-  const [isLoadingRemote, setIsLoadingRemote] = useState(false)
+  // Per-endpoint pagination state
+  const [endpointStates, setEndpointStates] = useState<Map<string, EndpointState>>(new Map())
 
   // Refs for stable callbacks
   const handlersRef = useRef(handlers)
@@ -186,9 +210,11 @@ export function useOmnibar(options: UseOmnibarOptions): UseOmnibarResult {
   const onExecuteRemoteRef = useRef(onExecuteRemote)
   onExecuteRemoteRef.current = onExecuteRemote
 
-  // Refs for abort controller and debounce timer
+  // Refs for abort controller, debounce timer, and current query
   const abortControllerRef = useRef<AbortController | null>(null)
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const currentQueryRef = useRef(query)
+  currentQueryRef.current = query
 
   // Register omnibar hotkey
   const omnibarKeymap = useMemo(() => {
@@ -220,7 +246,7 @@ export function useOmnibar(options: UseOmnibarOptions): UseOmnibarResult {
     return allResults.slice(0, maxResults)
   }, [query, actions, keymap, maxResults])
 
-  // Query remote endpoints (debounced)
+  // Query remote endpoints (debounced) - initial page only
   useEffect(() => {
     // Clear any pending debounce timer
     if (debounceTimerRef.current) {
@@ -236,13 +262,20 @@ export function useOmnibar(options: UseOmnibarOptions): UseOmnibarResult {
 
     // Skip if no endpoints registry or empty query
     if (!endpointsRegistry || !query.trim()) {
-      setRemoteResults([])
-      setIsLoadingRemote(false)
+      setEndpointStates(new Map())
       return
     }
 
+    // Set all known endpoints to loading state
+    setEndpointStates(prev => {
+      const next = new Map(prev)
+      for (const [id] of endpointsRegistry.endpoints) {
+        next.set(id, { entries: [], offset: 0, isLoading: true })
+      }
+      return next
+    })
+
     // Debounce the query
-    setIsLoadingRemote(true)
     debounceTimerRef.current = setTimeout(async () => {
       const controller = new AbortController()
       abortControllerRef.current = controller
@@ -253,64 +286,33 @@ export function useOmnibar(options: UseOmnibarOptions): UseOmnibarResult {
         // Don't update if aborted
         if (controller.signal.aborted) return
 
-        // Process results: score with fuzzy match and sort by priority then score
-        const processed: RemoteOmnibarResult[] = []
-
-        for (const epResult of endpointResults) {
-          if (epResult.error) continue
-
-          const endpoint = endpointsRegistry.endpoints.get(epResult.endpointId)
-          const priority = endpoint?.config.priority ?? 0
-
-          for (const entry of epResult.entries) {
-            // Score the entry against the query
-            const labelMatch = fuzzyMatch(query, entry.label)
-            const descMatch = entry.description ? fuzzyMatch(query, entry.description) : null
-            const keywordsMatch = entry.keywords?.map(k => fuzzyMatch(query, k)) ?? []
-
-            // Calculate weighted score
-            let score = 0
-            let labelMatches: Array<[number, number]> = []
-            if (labelMatch.matched) {
-              score = Math.max(score, labelMatch.score * 3)
-              labelMatches = labelMatch.ranges
-            }
-            if (descMatch?.matched) {
-              score = Math.max(score, descMatch.score * 1.5)
-            }
-            for (const km of keywordsMatch) {
-              if (km.matched) {
-                score = Math.max(score, km.score * 2)
-              }
-            }
-
-            // Include if any match (or if query is short, be more lenient)
-            if (score > 0 || query.length <= 2) {
-              processed.push({
-                id: `${epResult.endpointId}:${entry.id}`,
-                entry,
-                endpointId: epResult.endpointId,
-                priority,
-                score: score || 1, // Minimum score for short queries
-                labelMatches,
-              })
-            }
+        // Update state with results
+        setEndpointStates(() => {
+          const next = new Map<string, EndpointState>()
+          for (const epResult of endpointResults) {
+            const ep = endpointsRegistry.endpoints.get(epResult.endpointId)
+            const pageSize = ep?.config.pageSize ?? 10
+            next.set(epResult.endpointId, {
+              entries: epResult.entries,
+              offset: pageSize,
+              total: epResult.total,
+              hasMore: epResult.hasMore ?? (epResult.total !== undefined ? epResult.entries.length < epResult.total : undefined),
+              isLoading: false,
+            })
           }
-        }
-
-        // Sort by priority (desc) then score (desc)
-        processed.sort((a, b) => {
-          if (a.priority !== b.priority) return b.priority - a.priority
-          return b.score - a.score
+          return next
         })
-
-        setRemoteResults(processed.slice(0, maxResults))
-        setIsLoadingRemote(false)
       } catch (error) {
         // Ignore abort errors
         if (error instanceof Error && error.name === 'AbortError') return
         console.error('Omnibar endpoint query failed:', error)
-        setIsLoadingRemote(false)
+        setEndpointStates(prev => {
+          const next = new Map(prev)
+          for (const [id, state] of next) {
+            next.set(id, { ...state, isLoading: false })
+          }
+          return next
+        })
       }
     }, debounceMs)
 
@@ -322,7 +324,149 @@ export function useOmnibar(options: UseOmnibarOptions): UseOmnibarResult {
         abortControllerRef.current.abort()
       }
     }
-  }, [query, endpointsRegistry, debounceMs, maxResults])
+  }, [query, endpointsRegistry, debounceMs])
+
+  // Load more results for a specific endpoint
+  const loadMore = useCallback(async (endpointId: string) => {
+    if (!endpointsRegistry) return
+
+    const currentState = endpointStates.get(endpointId)
+    if (!currentState || currentState.isLoading) return
+    if (currentState.hasMore === false) return
+
+    const ep = endpointsRegistry.endpoints.get(endpointId)
+    if (!ep) return
+
+    const pageSize = ep.config.pageSize ?? 10
+
+    // Set loading state
+    setEndpointStates(prev => {
+      const next = new Map(prev)
+      const state = next.get(endpointId)
+      if (state) {
+        next.set(endpointId, { ...state, isLoading: true })
+      }
+      return next
+    })
+
+    try {
+      const controller = new AbortController()
+      const result = await endpointsRegistry.queryEndpoint(
+        endpointId,
+        currentQueryRef.current,
+        { offset: currentState.offset, limit: pageSize },
+        controller.signal,
+      )
+
+      if (!result) return
+
+      setEndpointStates(prev => {
+        const next = new Map(prev)
+        const state = next.get(endpointId)
+        if (state) {
+          next.set(endpointId, {
+            entries: [...state.entries, ...result.entries],
+            offset: state.offset + pageSize,
+            total: result.total ?? state.total,
+            hasMore: result.hasMore ?? (result.total !== undefined ? state.entries.length + result.entries.length < result.total : undefined),
+            isLoading: false,
+          })
+        }
+        return next
+      })
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') return
+      console.error(`Omnibar loadMore failed for ${endpointId}:`, error)
+      setEndpointStates(prev => {
+        const next = new Map(prev)
+        const state = next.get(endpointId)
+        if (state) {
+          next.set(endpointId, { ...state, isLoading: false })
+        }
+        return next
+      })
+    }
+  }, [endpointsRegistry, endpointStates])
+
+  // Compute flattened remote results from endpoint states
+  const remoteResults = useMemo(() => {
+    if (!endpointsRegistry) return []
+
+    const processed: RemoteOmnibarResult[] = []
+
+    for (const [endpointId, state] of endpointStates) {
+      const endpoint = endpointsRegistry.endpoints.get(endpointId)
+      const priority = endpoint?.config.priority ?? 0
+
+      for (const entry of state.entries) {
+        // Score the entry against the query
+        const labelMatch = fuzzyMatch(query, entry.label)
+        const descMatch = entry.description ? fuzzyMatch(query, entry.description) : null
+        const keywordsMatch = entry.keywords?.map(k => fuzzyMatch(query, k)) ?? []
+
+        // Calculate weighted score
+        let score = 0
+        let labelMatches: Array<[number, number]> = []
+        if (labelMatch.matched) {
+          score = Math.max(score, labelMatch.score * 3)
+          labelMatches = labelMatch.ranges
+        }
+        if (descMatch?.matched) {
+          score = Math.max(score, descMatch.score * 1.5)
+        }
+        for (const km of keywordsMatch) {
+          if (km.matched) {
+            score = Math.max(score, km.score * 2)
+          }
+        }
+
+        processed.push({
+          id: `${endpointId}:${entry.id}`,
+          entry,
+          endpointId,
+          priority,
+          score: score || 1,
+          labelMatches,
+        })
+      }
+    }
+
+    // Sort by priority (desc) then score (desc)
+    processed.sort((a, b) => {
+      if (a.priority !== b.priority) return b.priority - a.priority
+      return b.score - a.score
+    })
+
+    return processed
+  }, [endpointStates, endpointsRegistry, query])
+
+  // Compute isLoadingRemote
+  const isLoadingRemote = useMemo(() => {
+    for (const [, state] of endpointStates) {
+      if (state.isLoading) return true
+    }
+    return false
+  }, [endpointStates])
+
+  // Compute pagination info per endpoint
+  const endpointPagination = useMemo(() => {
+    const info = new Map<string, EndpointPaginationInfo>()
+    if (!endpointsRegistry) return info
+
+    for (const [endpointId, state] of endpointStates) {
+      const ep = endpointsRegistry.endpoints.get(endpointId)
+      info.set(endpointId, {
+        endpointId,
+        loaded: state.entries.length,
+        total: state.total,
+        hasMore: state.hasMore ?? false,
+        isLoading: state.isLoading,
+        mode: ep?.config.pagination ?? 'none',
+      })
+    }
+
+    return info
+  }, [endpointStates, endpointsRegistry])
 
   // Total results count
   const totalResults = results.length + remoteResults.length
@@ -482,6 +626,8 @@ export function useOmnibar(options: UseOmnibarOptions): UseOmnibarResult {
     results,
     remoteResults,
     isLoadingRemote,
+    endpointPagination,
+    loadMore,
     selectedIndex,
     totalResults,
     selectNext,

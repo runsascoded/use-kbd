@@ -249,11 +249,41 @@ export interface OmnibarActionEntry extends OmnibarEntryBase {
 export type OmnibarEntry = OmnibarLinkEntry | OmnibarActionEntry
 
 /**
+ * Pagination parameters passed to endpoint fetch function
+ */
+export interface EndpointPagination {
+  /** Starting offset (0-indexed) */
+  offset: number
+  /** Maximum number of entries to return */
+  limit: number
+}
+
+/**
+ * Response from an endpoint fetch, including pagination metadata
+ */
+export interface EndpointResponse {
+  /** Entries for this page */
+  entries: OmnibarEntry[]
+  /** Total count if known (enables "X of Y" display) */
+  total?: number
+  /** Whether more results exist (fallback when total is expensive to compute) */
+  hasMore?: boolean
+}
+
+/**
+ * Pagination mode for an endpoint
+ * - 'scroll': Fetch more when scrolling near bottom (IntersectionObserver)
+ * - 'buttons': Show pagination controls at bottom of endpoint's group
+ * - 'none': Single page, no pagination (default)
+ */
+export type EndpointPaginationMode = 'scroll' | 'buttons' | 'none'
+
+/**
  * Configuration for a remote omnibar endpoint
  */
 export interface OmnibarEndpointConfig {
   /** Fetch function that returns entries for a query */
-  fetch: (query: string, signal: AbortSignal) => Promise<OmnibarEntry[]>
+  fetch: (query: string, signal: AbortSignal, pagination: EndpointPagination) => Promise<EndpointResponse>
   /** Default group for entries from this endpoint */
   group?: string
   /** Priority for result ordering (higher = shown first, default: 0, local actions: 100) */
@@ -262,4 +292,8 @@ export interface OmnibarEndpointConfig {
   minQueryLength?: number
   /** Whether this endpoint is enabled (default: true) */
   enabled?: boolean
+  /** Number of results per page (default: 10) */
+  pageSize?: number
+  /** Pagination mode (default: 'none') */
+  pagination?: EndpointPaginationMode
 }
