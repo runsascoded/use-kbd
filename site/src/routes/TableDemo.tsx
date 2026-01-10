@@ -4,7 +4,6 @@ import {
   createTwoColumnRenderer,
   KbdModal,
   KbdOmnibar,
-  Omnibar,
   ShortcutsModal,
   useAction,
   useOmnibarEndpoint,
@@ -848,7 +847,6 @@ function DataTable() {
         }}
         TooltipComponent={MuiTooltip}
       />
-      <Omnibar placeholder="Search rows or actions..." />
     </div>
   )
 }
