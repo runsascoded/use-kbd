@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useHotkeysContext } from './HotkeysProvider'
-import { getKeyIcon } from './KeyIcons'
-import { ModifierIcon } from './ModifierIcons'
+import { renderKeySeq, renderModifierIcons, renderKeyContent } from './KeyElements'
 import type { KeyCombination, KeySeq, SequenceCompletion } from './types'
-import { formatKeyForDisplay } from './utils'
 
 /**
  * Modal that appears during multi-key sequence input (e.g., `g t` for "go to table").
@@ -136,41 +134,12 @@ export function SequenceModal() {
   // Render a single key combination with modifiers and icon if available
   const renderKey = useCallback((combo: KeyCombination, index: number) => {
     const { key, modifiers } = combo
-    const Icon = getKeyIcon(key)
-    const displayKey = formatKeyForDisplay(key)
     return (
       <kbd key={index} className="kbd-kbd">
-        {modifiers.meta && <ModifierIcon modifier="meta" className="kbd-modifier-icon" />}
-        {modifiers.ctrl && <ModifierIcon modifier="ctrl" className="kbd-modifier-icon" />}
-        {modifiers.alt && <ModifierIcon modifier="alt" className="kbd-modifier-icon" />}
-        {modifiers.shift && <ModifierIcon modifier="shift" className="kbd-modifier-icon" />}
-        {Icon ? <Icon className="kbd-key-icon" /> : displayKey}
+        {renderModifierIcons(modifiers)}
+        {renderKeyContent(key)}
       </kbd>
     )
-  }, [])
-
-  // Render a KeySeq (used for completions' next keys)
-  const renderKeySeq = useCallback((keySeq: KeySeq) => {
-    return keySeq.map((elem, i) => {
-      if (elem.type === 'digit') {
-        return <kbd key={i} className="kbd-kbd">⟨#⟩</kbd>
-      }
-      if (elem.type === 'digits') {
-        return <kbd key={i} className="kbd-kbd">⟨##⟩</kbd>
-      }
-      // It's a key with modifiers
-      const Icon = getKeyIcon(elem.key)
-      const displayKey = formatKeyForDisplay(elem.key)
-      return (
-        <kbd key={i} className="kbd-kbd">
-          {elem.modifiers.meta && <ModifierIcon modifier="meta" className="kbd-modifier-icon" />}
-          {elem.modifiers.ctrl && <ModifierIcon modifier="ctrl" className="kbd-modifier-icon" />}
-          {elem.modifiers.alt && <ModifierIcon modifier="alt" className="kbd-modifier-icon" />}
-          {elem.modifiers.shift && <ModifierIcon modifier="shift" className="kbd-modifier-icon" />}
-          {Icon ? <Icon className="kbd-key-icon" /> : displayKey}
-        </kbd>
-      )
-    })
   }, [])
 
   // Get human-readable label for an action from registry, with captured digits interpolated
