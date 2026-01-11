@@ -436,6 +436,39 @@ test.describe('Data Table Demo', () => {
     // Should now be on page 10 (showing rows 181-200)
     await expect(pageInfo).toContainText('181–200 of 1000')
   })
+
+  test('SequenceModal shows modifier icons for key combos', async ({ page }) => {
+    // Start a sequence with 'g' (which has partial matches like 'g t', 'g \d+')
+    await page.keyboard.press('g')
+    await page.waitForTimeout(50)
+
+    // SequenceModal should be visible
+    const seqModal = page.locator('.kbd-sequence')
+    await expect(seqModal).toBeVisible()
+
+    // Now press Ctrl+X - an invalid key combo that doesn't match any pattern
+    // This will show "No matching shortcuts" but should display the modifier icon
+    await page.keyboard.press('Control+x')
+    await page.waitForTimeout(50)
+
+    // The modal should still be visible (showing "No matching shortcuts")
+    await expect(seqModal).toBeVisible()
+
+    // The sequence keys section should contain a modifier icon SVG (for ctrl)
+    const modifierIcon = seqModal.locator('.kbd-sequence-keys .kbd-modifier-icon')
+    await expect(modifierIcon).toBeVisible()
+
+    // Verify it's actually an SVG element (not just text with the class)
+    const tagName = await modifierIcon.evaluate(el => el.tagName.toLowerCase())
+    expect(tagName).toBe('svg')
+
+    // Should show "No matching shortcuts" message
+    await expect(seqModal.locator('.kbd-sequence-empty')).toBeVisible()
+
+    // Press Escape to cancel
+    await page.keyboard.press('Escape')
+    await expect(seqModal).not.toBeVisible()
+  })
 })
 
 test.describe('Canvas Demo', () => {

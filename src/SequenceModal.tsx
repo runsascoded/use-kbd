@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useHotkeysContext } from './HotkeysProvider'
 import { getKeyIcon } from './KeyIcons'
-import type { SequenceCompletion } from './types'
+import { ModifierIcon } from './ModifierIcons'
+import type { KeyCombination, SequenceCompletion } from './types'
 import { formatKeyForDisplay } from './utils'
 
 /**
@@ -132,14 +133,18 @@ export function SequenceModal() {
     return () => document.removeEventListener('keydown', handleKeyDown, true)
   }, [isAwaitingSequence, pendingKeys.length, itemCount, executeSelected])
 
-  // Render a single key with icon if available
-  const renderKey = useCallback((key: string, index: number) => {
+  // Render a single key combination with modifiers and icon if available
+  const renderKey = useCallback((combo: KeyCombination, index: number) => {
+    const { key, modifiers } = combo
     const Icon = getKeyIcon(key)
     const displayKey = formatKeyForDisplay(key)
     return (
       <kbd key={index} className="kbd-kbd">
-        {Icon ? <Icon className="kbd-key-icon" /> : null}
-        {Icon ? null : displayKey}
+        {modifiers.meta && <ModifierIcon modifier="meta" className="kbd-modifier-icon" />}
+        {modifiers.ctrl && <ModifierIcon modifier="ctrl" className="kbd-modifier-icon" />}
+        {modifiers.alt && <ModifierIcon modifier="alt" className="kbd-modifier-icon" />}
+        {modifiers.shift && <ModifierIcon modifier="shift" className="kbd-modifier-icon" />}
+        {Icon ? <Icon className="kbd-key-icon" /> : displayKey}
       </kbd>
     )
   }, [])
@@ -172,7 +177,7 @@ export function SequenceModal() {
         {/* Current sequence at top */}
         <div className="kbd-sequence-current">
           <div className="kbd-sequence-keys">
-            {pendingKeys.map((combo, i) => renderKey(combo.key, i))}
+            {pendingKeys.map((combo, i) => renderKey(combo, i))}
           </div>
           <span className="kbd-sequence-ellipsis">…</span>
         </div>
