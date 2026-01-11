@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useHotkeysContext } from './HotkeysProvider'
 import { getKeyIcon } from './KeyIcons'
 import { ModifierIcon } from './ModifierIcons'
-import type { KeyCombination, SequenceCompletion } from './types'
+import type { KeyCombination, KeySeq, SequenceCompletion } from './types'
 import { formatKeyForDisplay } from './utils'
 
 /**
@@ -149,6 +149,30 @@ export function SequenceModal() {
     )
   }, [])
 
+  // Render a KeySeq (used for completions' next keys)
+  const renderKeySeq = useCallback((keySeq: KeySeq) => {
+    return keySeq.map((elem, i) => {
+      if (elem.type === 'digit') {
+        return <kbd key={i} className="kbd-kbd">⟨#⟩</kbd>
+      }
+      if (elem.type === 'digits') {
+        return <kbd key={i} className="kbd-kbd">⟨##⟩</kbd>
+      }
+      // It's a key with modifiers
+      const Icon = getKeyIcon(elem.key)
+      const displayKey = formatKeyForDisplay(elem.key)
+      return (
+        <kbd key={i} className="kbd-kbd">
+          {elem.modifiers.meta && <ModifierIcon modifier="meta" className="kbd-modifier-icon" />}
+          {elem.modifiers.ctrl && <ModifierIcon modifier="ctrl" className="kbd-modifier-icon" />}
+          {elem.modifiers.alt && <ModifierIcon modifier="alt" className="kbd-modifier-icon" />}
+          {elem.modifiers.shift && <ModifierIcon modifier="shift" className="kbd-modifier-icon" />}
+          {Icon ? <Icon className="kbd-key-icon" /> : displayKey}
+        </kbd>
+      )
+    })
+  }, [])
+
   // Get human-readable label for an action from registry, with captured digits interpolated
   const getActionLabel = (actionId: string, captures?: number[]) => {
     const action = registry.actions.get(actionId)
@@ -199,7 +223,13 @@ export function SequenceModal() {
                 key={`${item.completion.fullSequence}-${item.action}`}
                 className={`kbd-sequence-completion ${index === selectedIndex ? 'selected' : ''} ${item.isComplete ? 'complete' : ''}`}
               >
-                <kbd className="kbd-kbd">{item.displayKey}</kbd>
+                {item.isComplete ? (
+                  <kbd className="kbd-kbd">↵</kbd>
+                ) : item.completion.nextKeySeq ? (
+                  renderKeySeq(item.completion.nextKeySeq)
+                ) : (
+                  <kbd className="kbd-kbd">{item.displayKey}</kbd>
+                )}
                 <span className="kbd-sequence-arrow">→</span>
                 <span className="kbd-sequence-actions">
                   {getActionLabel(item.action, item.completion.captures)}

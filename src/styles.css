@@ -697,6 +697,11 @@
   outline-offset: -2px;
 }
 
+.kbd-lookup-binding {
+  display: flex;
+  gap: 4px;
+}
+
 .kbd-lookup-labels {
   flex: 1;
   font-size: 0.875rem;

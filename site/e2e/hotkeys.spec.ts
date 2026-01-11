@@ -465,6 +465,23 @@ test.describe('Data Table Demo', () => {
     // Should show "No matching shortcuts" message
     await expect(seqModal.locator('.kbd-sequence-empty')).toBeVisible()
 
+    // Press Escape and test modifier icons in completions list
+    await page.keyboard.press('Escape')
+    await expect(seqModal).not.toBeVisible()
+
+    // Press a digit to show completions with modifier keys (like Shift+K, Shift+J)
+    await page.keyboard.press('3')
+    await page.waitForTimeout(50)
+    await expect(seqModal).toBeVisible()
+
+    // Completions should include Shift+K and Shift+J which should have modifier icons
+    const completionModifierIcon = seqModal.locator('.kbd-sequence-completions .kbd-modifier-icon')
+    await expect(completionModifierIcon.first()).toBeVisible()
+
+    // Verify it's an SVG
+    const completionTagName = await completionModifierIcon.first().evaluate(el => el.tagName.toLowerCase())
+    expect(completionTagName).toBe('svg')
+
     // Press Escape to cancel
     await page.keyboard.press('Escape')
     await expect(seqModal).not.toBeVisible()

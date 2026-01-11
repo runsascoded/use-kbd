@@ -813,6 +813,7 @@ export function getSequenceCompletions(
 
       completions.push({
         nextKeys,
+        nextKeySeq: remainingKeySeq,
         fullSequence: hotkeyStr,
         display: formatKeySeq(keySeq),
         actions,

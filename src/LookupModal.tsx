@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ACTION_LOOKUP } from './constants'
 import { useHotkeysContext } from './HotkeysProvider'
+import { getKeyIcon } from './KeyIcons'
+import { ModifierIcon } from './ModifierIcons'
 import { useAction } from './useAction'
-import type { HotkeySequence, KeyCombination } from './types'
-import { formatCombination, formatKeySeq, parseHotkeyString, parseKeySeq, normalizeKey, isModifierKey } from './utils'
-import type { KeySeq } from './types'
+import type { HotkeySequence, KeyCombination, KeySeq } from './types'
+import { formatCombination, formatKeyForDisplay, formatKeySeq, parseHotkeyString, parseKeySeq, normalizeKey, isModifierKey } from './utils'
 
 interface LookupResult {
   binding: string
@@ -161,6 +162,30 @@ export function LookupModal({ defaultBinding = 'meta+shift+k' }: LookupModalProp
     return formatCombination(pendingKeys).display
   }, [pendingKeys])
 
+  // Render a KeySeq with proper icons
+  const renderKeySeq = useCallback((keySeq: KeySeq) => {
+    return keySeq.map((elem, i) => {
+      if (elem.type === 'digit') {
+        return <kbd key={i} className="kbd-kbd">⟨#⟩</kbd>
+      }
+      if (elem.type === 'digits') {
+        return <kbd key={i} className="kbd-kbd">⟨##⟩</kbd>
+      }
+      // It's a key with modifiers
+      const Icon = getKeyIcon(elem.key)
+      const displayKey = formatKeyForDisplay(elem.key)
+      return (
+        <kbd key={i} className="kbd-kbd">
+          {elem.modifiers.meta && <ModifierIcon modifier="meta" className="kbd-modifier-icon" />}
+          {elem.modifiers.ctrl && <ModifierIcon modifier="ctrl" className="kbd-modifier-icon" />}
+          {elem.modifiers.alt && <ModifierIcon modifier="alt" className="kbd-modifier-icon" />}
+          {elem.modifiers.shift && <ModifierIcon modifier="shift" className="kbd-modifier-icon" />}
+          {Icon ? <Icon className="kbd-key-icon" /> : displayKey}
+        </kbd>
+      )
+    })
+  }, [])
+
   // Reset state when modal opens/closes
   useEffect(() => {
     if (isLookupOpen) {
@@ -282,7 +307,7 @@ export function LookupModal({ defaultBinding = 'meta+shift+k' }: LookupModalProp
                 }}
                 onMouseEnter={() => setSelectedIndex(index)}
               >
-                <kbd className="kbd-kbd">{result.display}</kbd>
+                <span className="kbd-lookup-binding">{renderKeySeq(result.keySeq)}</span>
                 <span className="kbd-lookup-labels">
                   {result.labels.join(', ')}
                 </span>

@@ -196,6 +196,8 @@ export interface ActionSearchResult {
 export interface SequenceCompletion {
   /** The next key(s) needed to complete this sequence (empty string if complete) */
   nextKeys: string
+  /** Structured next keys for rendering with icons (undefined if complete) */
+  nextKeySeq?: KeySeq
   /** The full hotkey string */
   fullSequence: string
   /** Display format for the full sequence */
