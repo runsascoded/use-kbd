@@ -138,10 +138,10 @@ function useActionsRegistry(options = {}) {
     actionsRef.current.delete(id);
     setActionsVersion((v) => v + 1);
   }, []);
-  const execute = react.useCallback((id) => {
+  const execute = react.useCallback((id, captures) => {
     const action = actionsRef.current.get(id);
     if (action && (action.config.enabled ?? true)) {
-      action.config.handler();
+      action.config.handler(void 0, captures);
     }
   }, []);
   const keymap = react.useMemo(() => {
@@ -419,7 +419,7 @@ function formatKeyForDisplay(key) {
     "space": "Space",
     "escape": "Esc",
     "enter": "\u21B5",
-    "tab": "Tab",
+    "tab": "\u21E5",
     "backspace": "\u232B",
     "delete": "Del",
     "arrowup": "\u2191",
@@ -811,35 +811,47 @@ function getSequenceCompletions(pendingKeys, keymap) {
   if (pendingKeys.length === 0) return [];
   const completions = [];
   for (const [hotkeyStr, actionOrActions] of Object.entries(keymap)) {
-    const sequence = parseHotkeyString(hotkeyStr);
     const keySeq = parseKeySeq(hotkeyStr);
-    if (sequence.length < pendingKeys.length) continue;
+    const hasDigitsPlaceholder = keySeq.some((e) => e.type === "digits");
+    if (!hasDigitsPlaceholder && keySeq.length < pendingKeys.length) continue;
     let keySeqIdx = 0;
+    let pendingIdx = 0;
     let isMatch = true;
-    for (let i = 0; i < pendingKeys.length && keySeqIdx < keySeq.length; i++) {
+    const captures = [];
+    let currentDigits = "";
+    for (; pendingIdx < pendingKeys.length && keySeqIdx < keySeq.length; pendingIdx++) {
       const elem = keySeq[keySeqIdx];
       if (elem.type === "digits") {
-        if (!/^[0-9]$/.test(pendingKeys[i].key)) {
+        if (!/^[0-9]$/.test(pendingKeys[pendingIdx].key)) {
           isMatch = false;
           break;
         }
-        if (i + 1 < pendingKeys.length && /^[0-9]$/.test(pendingKeys[i + 1].key)) {
+        currentDigits += pendingKeys[pendingIdx].key;
+        if (pendingIdx + 1 < pendingKeys.length && /^[0-9]$/.test(pendingKeys[pendingIdx + 1].key)) {
           continue;
         }
+        captures.push(parseInt(currentDigits, 10));
+        currentDigits = "";
         keySeqIdx++;
       } else if (elem.type === "digit") {
-        if (!/^[0-9]$/.test(pendingKeys[i].key)) {
+        if (!/^[0-9]$/.test(pendingKeys[pendingIdx].key)) {
           isMatch = false;
           break;
         }
+        captures.push(parseInt(pendingKeys[pendingIdx].key, 10));
         keySeqIdx++;
       } else {
-        if (!keyMatchesPattern(pendingKeys[i], sequence[keySeqIdx])) {
+        const keyElem = elem;
+        const targetCombo = { key: keyElem.key, modifiers: keyElem.modifiers };
+        if (!keyMatchesPattern(pendingKeys[pendingIdx], targetCombo)) {
           isMatch = false;
           break;
         }
         keySeqIdx++;
       }
+    }
+    if (pendingIdx < pendingKeys.length) {
+      isMatch = false;
     }
     if (!isMatch) continue;
     const actions = Array.isArray(actionOrActions) ? actionOrActions : [actionOrActions];
@@ -849,7 +861,8 @@ function getSequenceCompletions(pendingKeys, keymap) {
         fullSequence: hotkeyStr,
         display: formatKeySeq(keySeq),
         actions,
-        isComplete: true
+        isComplete: true,
+        captures: captures.length > 0 ? captures : void 0
       });
     } else {
       const remainingKeySeq = keySeq.slice(keySeqIdx);
@@ -859,7 +872,8 @@ function getSequenceCompletions(pendingKeys, keymap) {
         fullSequence: hotkeyStr,
         display: formatKeySeq(keySeq),
         actions,
-        isComplete: false
+        isComplete: false,
+        captures: captures.length > 0 ? captures : void 0
       });
     }
   }
@@ -1036,10 +1050,7 @@ function advanceMatchState(state, pattern, combo) {
         newState[i] = { type: "digits", value: digitValue };
         pos = i + 1;
         if (pos >= pattern.length) {
-          const captures = newState.filter(
-            (e) => (e.type === "digit" || e.type === "digits") && e.value !== void 0
-          ).map((e) => e.value);
-          return { status: "matched", state: newState, captures };
+          return { status: "failed" };
         }
         break;
       }
@@ -1219,7 +1230,24 @@ function useHotkeys(keymap, handlers, options = {}) {
       }
       if (e.key === "Enter" && pendingKeysRef.current.length > 0) {
         e.preventDefault();
-        const executed = tryExecute(pendingKeysRef.current, e);
+        let executed = false;
+        for (const [key, state] of matchStatesRef.current.entries()) {
+          const finalizedState = isCollectingDigits(state) ? finalizeDigits(state) : state;
+          const isComplete = finalizedState.every((elem) => {
+            if (elem.type === "key") return elem.matched === true;
+            if (elem.type === "digit") return elem.value !== void 0;
+            if (elem.type === "digits") return elem.value !== void 0;
+            return false;
+          });
+          if (isComplete) {
+            const captures = extractMatchCaptures(finalizedState);
+            executed = tryExecuteKeySeq(key, finalizedState, captures, e);
+            if (executed) break;
+          }
+        }
+        if (!executed) {
+          executed = tryExecute(pendingKeysRef.current, e);
+        }
         clearPending();
         if (!executed) {
           onSequenceCancel?.();
@@ -1232,6 +1260,49 @@ function useHotkeys(keymap, handlers, options = {}) {
         return;
       }
       const currentCombo = eventToCombination(e);
+      if (e.key === "Backspace" && pendingKeysRef.current.length > 0) {
+        let backspaceMatches = false;
+        for (const entry of parsedKeymapRef.current) {
+          let state = matchStatesRef.current.get(entry.key);
+          if (!state) {
+            state = initMatchState(entry.keySeq);
+          }
+          if (isCollectingDigits(state)) {
+            continue;
+          }
+          const result = advanceMatchState(state, entry.keySeq, currentCombo);
+          if (result.status === "matched" || result.status === "partial") {
+            backspaceMatches = true;
+            break;
+          }
+        }
+        if (!backspaceMatches) {
+          e.preventDefault();
+          const newPending = pendingKeysRef.current.slice(0, -1);
+          if (newPending.length === 0) {
+            clearPending();
+            onSequenceCancel?.();
+          } else {
+            setPendingKeys(newPending);
+            matchStatesRef.current.clear();
+            for (const combo of newPending) {
+              for (const entry of parsedKeymapRef.current) {
+                let state = matchStatesRef.current.get(entry.key);
+                if (!state) {
+                  state = initMatchState(entry.keySeq);
+                }
+                const result = advanceMatchState(state, entry.keySeq, combo);
+                if (result.status === "partial") {
+                  matchStatesRef.current.set(entry.key, result.state);
+                } else {
+                  matchStatesRef.current.delete(entry.key);
+                }
+              }
+            }
+          }
+          return;
+        }
+      }
       const newSequence = [...pendingKeysRef.current, currentCombo];
       const completeMatches = [];
       let hasPartials = false;
@@ -1260,34 +1331,6 @@ function useHotkeys(keymap, handlers, options = {}) {
         } else {
           matchStates.delete(entry.key);
         }
-      }
-      if (e.key === "Backspace" && pendingKeysRef.current.length > 0 && completeMatches.length === 0 && !hasPartials) {
-        e.preventDefault();
-        const newPending = pendingKeysRef.current.slice(0, -1);
-        if (newPending.length === 0) {
-          clearPending();
-          onSequenceCancel?.();
-        } else {
-          setPendingKeys(newPending);
-          matchStatesRef.current.clear();
-          for (const combo of newPending) {
-            for (const entry of parsedKeymapRef.current) {
-              let state = matchStatesRef.current.get(entry.key);
-              if (!state) {
-                state = initMatchState(entry.keySeq);
-              }
-              const result = advanceMatchState(state, entry.keySeq, combo);
-              if (result.status === "partial") {
-                matchStatesRef.current.set(entry.key, result.state);
-              } else if (result.status === "matched") {
-                matchStatesRef.current.delete(entry.key);
-              } else {
-                matchStatesRef.current.delete(entry.key);
-              }
-            }
-          }
-        }
-        return;
       }
       if (completeMatches.length === 1 && !hasPartials) {
         const match = completeMatches[0];
@@ -1379,8 +1422,11 @@ function useHotkeys(keymap, handlers, options = {}) {
         }
       }
       if (pendingKeysRef.current.length > 0) {
-        clearPending();
-        onSequenceCancel?.();
+        setPendingKeys(newSequence);
+        if (preventDefault) {
+          e.preventDefault();
+        }
+        return;
       }
       const singleMatch = tryExecute([currentCombo], e);
       if (!singleMatch) {
@@ -2559,6 +2605,26 @@ function Backspace({ className, style }) {
     }
   );
 }
+function Tab({ className, style }) {
+  return /* @__PURE__ */ jsxRuntime.jsxs(
+    "svg",
+    {
+      className,
+      style: { ...baseStyle, ...style },
+      viewBox: "0 0 24 24",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: "2",
+      strokeLinecap: "round",
+      strokeLinejoin: "round",
+      children: [
+        /* @__PURE__ */ jsxRuntime.jsx("line", { x1: "4", y1: "12", x2: "16", y2: "12" }),
+        /* @__PURE__ */ jsxRuntime.jsx("polyline", { points: "12 8 16 12 12 16" }),
+        /* @__PURE__ */ jsxRuntime.jsx("line", { x1: "20", y1: "6", x2: "20", y2: "18" })
+      ]
+    }
+  );
+}
 function getKeyIcon(key) {
   switch (key.toLowerCase()) {
     case "arrowup":
@@ -2573,6 +2639,8 @@ function getKeyIcon(key) {
       return Enter;
     case "backspace":
       return Backspace;
+    case "tab":
+      return Tab;
     default:
       return null;
   }
@@ -3516,7 +3584,7 @@ function SequenceModal() {
   const executeSelected = react.useCallback(() => {
     if (selectedIndex >= 0 && selectedIndex < flatCompletions.length) {
       const item = flatCompletions[selectedIndex];
-      executeAction(item.action);
+      executeAction(item.action, item.completion.captures);
       cancelSequence();
     }
   }, [selectedIndex, flatCompletions, executeAction, cancelSequence]);
@@ -3546,20 +3614,34 @@ function SequenceModal() {
     document.addEventListener("keydown", handleKeyDown, true);
     return () => document.removeEventListener("keydown", handleKeyDown, true);
   }, [isAwaitingSequence, pendingKeys.length, itemCount, executeSelected]);
-  const formattedPendingKeys = react.useMemo(() => {
-    if (pendingKeys.length === 0) return "";
-    return formatCombination(pendingKeys).display;
-  }, [pendingKeys]);
-  const getActionLabel = (actionId) => {
+  const renderKey = react.useCallback((key, index) => {
+    const Icon = getKeyIcon(key);
+    const displayKey = formatKeyForDisplay(key);
+    return /* @__PURE__ */ jsxRuntime.jsxs("kbd", { className: "kbd-kbd", children: [
+      Icon ? /* @__PURE__ */ jsxRuntime.jsx(Icon, { className: "kbd-key-icon" }) : null,
+      Icon ? null : displayKey
+    ] }, index);
+  }, []);
+  const getActionLabel = (actionId, captures) => {
     const action = registry.actions.get(actionId);
-    return action?.config.label || actionId;
+    let label = action?.config.label || actionId;
+    if (captures && captures.length > 0) {
+      let captureIdx = 0;
+      label = label.replace(/\bN\b/g, () => {
+        if (captureIdx < captures.length) {
+          return String(captures[captureIdx++]);
+        }
+        return "N";
+      });
+    }
+    return label;
   };
   if (!isAwaitingSequence || pendingKeys.length === 0) {
     return null;
   }
   return /* @__PURE__ */ jsxRuntime.jsx("div", { className: "kbd-sequence-backdrop", onClick: cancelSequence, children: /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "kbd-sequence", onClick: (e) => e.stopPropagation(), children: [
     /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "kbd-sequence-current", children: [
-      /* @__PURE__ */ jsxRuntime.jsx("kbd", { className: "kbd-sequence-keys", children: formattedPendingKeys }),
+      /* @__PURE__ */ jsxRuntime.jsx("div", { className: "kbd-sequence-keys", children: pendingKeys.map((combo, i) => renderKey(combo.key, i)) }),
       /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-sequence-ellipsis", children: "\u2026" })
     ] }),
     shouldShowTimeout && /* @__PURE__ */ jsxRuntime.jsx(
@@ -3577,7 +3659,7 @@ function SequenceModal() {
         children: [
           /* @__PURE__ */ jsxRuntime.jsx("kbd", { className: "kbd-kbd", children: item.displayKey }),
           /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-sequence-arrow", children: "\u2192" }),
-          /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-sequence-actions", children: getActionLabel(item.action) })
+          /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-sequence-actions", children: getActionLabel(item.action, item.completion.captures) })
         ]
       },
       `${item.completion.fullSequence}-${item.action}`

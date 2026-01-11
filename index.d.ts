@@ -196,6 +196,8 @@ interface SequenceCompletion {
     actions: string[];
     /** Whether the sequence is already complete (can be executed now with Enter) */
     isComplete: boolean;
+    /** Captured digit values from \d and \d+ placeholders */
+    captures?: number[];
 }
 /**
  * Base fields for all omnibar entries
@@ -1240,8 +1242,8 @@ interface ActionsRegistryValue {
     register: (id: string, config: ActionConfig) => void;
     /** Unregister an action. Called by useAction on unmount. */
     unregister: (id: string) => void;
-    /** Execute an action by ID */
-    execute: (id: string) => void;
+    /** Execute an action by ID, optionally with captured digit values */
+    execute: (id: string, captures?: number[]) => void;
     /** Currently registered actions */
     actions: Map<string, RegisteredAction>;
     /** Computed keymap from registered actions + user overrides */
@@ -1326,7 +1328,7 @@ interface HotkeysContextValue {
     /** Toggle the lookup modal */
     toggleLookup: () => void;
     /** Execute an action by ID */
-    executeAction: (id: string) => void;
+    executeAction: (id: string, captures?: number[]) => void;
     /** Sequence state: pending key combinations */
     pendingKeys: HotkeySequence;
     /** Sequence state: whether waiting for more keys */
@@ -1620,7 +1622,7 @@ declare function Right({ className, style }: KeyIconProps): react_jsx_runtime.JS
 declare function Enter({ className, style }: KeyIconProps): react_jsx_runtime.JSX.Element;
 /** Backspace icon (⌫) */
 declare function Backspace({ className, style }: KeyIconProps): react_jsx_runtime.JSX.Element;
-type KeyIconType = 'arrowup' | 'arrowdown' | 'arrowleft' | 'arrowright' | 'enter' | 'backspace';
+type KeyIconType = 'arrowup' | 'arrowdown' | 'arrowleft' | 'arrowright' | 'enter' | 'backspace' | 'tab';
 /** Get the icon component for a key, or null if no icon exists */
 declare function getKeyIcon(key: string): React.ComponentType<KeyIconProps> | null;
 
