@@ -734,12 +734,11 @@ export function getSequenceCompletions(
   const completions: SequenceCompletion[] = []
 
   for (const [hotkeyStr, actionOrActions] of Object.entries(keymap)) {
-    const sequence = parseHotkeyString(hotkeyStr)
     const keySeq = parseKeySeq(hotkeyStr)
 
-    // Check if pending could match this sequence
-    // For \d+ patterns, pending can be same length if digits are being accumulated
-    if (sequence.length < pendingKeys.length) continue
+    // Skip if pattern is clearly too short (but \d+ can consume multiple keys)
+    const hasDigitsPlaceholder = keySeq.some(e => e.type === 'digits')
+    if (!hasDigitsPlaceholder && keySeq.length < pendingKeys.length) continue
 
     // Track how many keySeq elements we've matched
     let keySeqIdx = 0
@@ -771,7 +770,9 @@ export function getSequenceCompletions(
         keySeqIdx++
       } else {
         // Regular key - must match exactly (with modifiers)
-        if (!keyMatchesPattern(pendingKeys[i], sequence[keySeqIdx])) {
+        const keyElem = elem as { type: 'key'; key: string; modifiers: Modifiers }
+        const targetCombo: KeyCombination = { key: keyElem.key, modifiers: keyElem.modifiers }
+        if (!keyMatchesPattern(pendingKeys[i], targetCombo)) {
           isMatch = false
           break
         }
