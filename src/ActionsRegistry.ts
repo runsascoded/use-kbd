@@ -13,8 +13,8 @@ export interface ActionsRegistryValue {
   register: (id: string, config: ActionConfig) => void
   /** Unregister an action. Called by useAction on unmount. */
   unregister: (id: string) => void
-  /** Execute an action by ID */
-  execute: (id: string) => void
+  /** Execute an action by ID, optionally with captured digit values */
+  execute: (id: string, captures?: number[]) => void
   /** Currently registered actions */
   actions: Map<string, RegisteredAction>
   /** Computed keymap from registered actions + user overrides */
@@ -168,10 +168,10 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
     setActionsVersion(v => v + 1)
   }, [])
 
-  const execute = useCallback((id: string) => {
+  const execute = useCallback((id: string, captures?: number[]) => {
     const action = actionsRef.current.get(id)
     if (action && (action.config.enabled ?? true)) {
-      action.config.handler()
+      action.config.handler(undefined, captures)
     }
   }, [])
 

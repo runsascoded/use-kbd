@@ -201,14 +201,10 @@ function advanceMatchState(
         // Continue to next element with this key
         pos = i + 1
 
-        // If this was the last element, the sequence is complete
+        // If this was the last element, the key doesn't match anything.
+        // Return failed - Enter will handle execution separately.
         if (pos >= pattern.length) {
-          const captures = newState
-            .filter((e): e is { type: 'digit'; value: number } | { type: 'digits'; value: number } =>
-              (e.type === 'digit' || e.type === 'digits') && e.value !== undefined
-            )
-            .map(e => e.value)
-          return { status: 'matched', state: newState, captures }
+          return { status: 'failed' }
         }
         break
       }
@@ -488,10 +484,37 @@ export function useHotkeys(
         timeoutRef.current = null
       }
 
-      // Enter key submits current sequence
+      // Enter key submits current sequence (handled by SequenceModal when visible)
+      // Note: SequenceModal captures Enter in capture phase and executes via executeAction
       if (e.key === 'Enter' && pendingKeysRef.current.length > 0) {
         e.preventDefault()
-        const executed = tryExecute(pendingKeysRef.current, e)
+
+        // Try to execute any complete or finalizable digit patterns from current match states
+        let executed = false
+        for (const [key, state] of matchStatesRef.current.entries()) {
+          // Finalize any in-progress digits
+          const finalizedState = isCollectingDigits(state) ? finalizeDigits(state) : state
+
+          // Check if state is complete
+          const isComplete = finalizedState.every((elem) => {
+            if (elem.type === 'key') return elem.matched === true
+            if (elem.type === 'digit') return elem.value !== undefined
+            if (elem.type === 'digits') return elem.value !== undefined
+            return false
+          })
+
+          if (isComplete) {
+            const captures = extractMatchCaptures(finalizedState)
+            executed = tryExecuteKeySeq(key, finalizedState, captures, e)
+            if (executed) break
+          }
+        }
+
+        // Fall back to legacy matching
+        if (!executed) {
+          executed = tryExecute(pendingKeysRef.current, e)
+        }
+
         clearPending()
         if (!executed) {
           onSequenceCancel?.()
@@ -508,6 +531,58 @@ export function useHotkeys(
 
       // Add current key to sequence
       const currentCombo = eventToCombination(e)
+
+      // Backspace during sequence: check if any binding matches backspace continuation
+      // If not, treat as "delete last key" for editing the sequence
+      if (e.key === 'Backspace' && pendingKeysRef.current.length > 0) {
+        // Quick check: would backspace match any pattern continuation?
+        let backspaceMatches = false
+        for (const entry of parsedKeymapRef.current) {
+          let state = matchStatesRef.current.get(entry.key)
+          if (!state) {
+            state = initMatchState(entry.keySeq)
+          }
+          // If currently collecting digits, backspace should edit (not finalize and execute)
+          // This prevents `h \d+` from executing when typing `h 1 2 <backspace>`
+          if (isCollectingDigits(state)) {
+            continue
+          }
+          const result = advanceMatchState(state, entry.keySeq, currentCombo)
+          if (result.status === 'matched' || result.status === 'partial') {
+            backspaceMatches = true
+            break
+          }
+        }
+
+        if (!backspaceMatches) {
+          e.preventDefault()
+          const newPending = pendingKeysRef.current.slice(0, -1)
+          if (newPending.length === 0) {
+            clearPending()
+            onSequenceCancel?.()
+          } else {
+            setPendingKeys(newPending)
+            // Replay remaining pending keys to reconstruct match states
+            matchStatesRef.current.clear()
+            for (const combo of newPending) {
+              for (const entry of parsedKeymapRef.current) {
+                let state = matchStatesRef.current.get(entry.key)
+                if (!state) {
+                  state = initMatchState(entry.keySeq)
+                }
+                const result = advanceMatchState(state, entry.keySeq, combo)
+                if (result.status === 'partial') {
+                  matchStatesRef.current.set(entry.key, result.state)
+                } else {
+                  matchStatesRef.current.delete(entry.key)
+                }
+              }
+            }
+          }
+          return
+        }
+      }
+
       const newSequence = [...pendingKeysRef.current, currentCombo]
 
       // Try KeySeq matching first (handles digit placeholders)
@@ -557,40 +632,6 @@ export function useHotkeys(
           // Failed - reset this pattern's state
           matchStates.delete(entry.key)
         }
-      }
-
-      // Backspace: if no bindings matched, treat as "delete last key" from pending sequence
-      if (e.key === 'Backspace' && pendingKeysRef.current.length > 0 && completeMatches.length === 0 && !hasPartials) {
-        e.preventDefault()
-        const newPending = pendingKeysRef.current.slice(0, -1)
-        if (newPending.length === 0) {
-          // Back to empty - exit sequence mode
-          clearPending()
-          onSequenceCancel?.()
-        } else {
-          // Remove last key, stay in sequence mode
-          setPendingKeys(newPending)
-          // Replay remaining pending keys to reconstruct match states (preserves digit accumulation)
-          matchStatesRef.current.clear()
-          for (const combo of newPending) {
-            for (const entry of parsedKeymapRef.current) {
-              let state = matchStatesRef.current.get(entry.key)
-              if (!state) {
-                state = initMatchState(entry.keySeq)
-              }
-              const result = advanceMatchState(state, entry.keySeq, combo)
-              if (result.status === 'partial') {
-                matchStatesRef.current.set(entry.key, result.state)
-              } else if (result.status === 'matched') {
-                // Fully matched with fewer keys - keep state for potential continuation
-                matchStatesRef.current.delete(entry.key)
-              } else {
-                matchStatesRef.current.delete(entry.key)
-              }
-            }
-          }
-        }
-        return
       }
 
       // Permissive conflict resolution:
@@ -714,10 +755,15 @@ export function useHotkeys(
         }
       }
 
-      // No match and no potential - reset and try single key
+      // No match and no potential
       if (pendingKeysRef.current.length > 0) {
-        clearPending()
-        onSequenceCancel?.()
+        // Already in sequence mode - keep modal open with invalid key showing
+        // "No matching shortcuts". User can backspace to fix or Escape to cancel.
+        setPendingKeys(newSequence)
+        if (preventDefault) {
+          e.preventDefault()
+        }
+        return
       }
 
       // Try as single key (sequence of 1)

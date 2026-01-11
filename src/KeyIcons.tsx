@@ -122,7 +122,27 @@ export function Backspace({ className, style }: KeyIconProps) {
   )
 }
 
-export type KeyIconType = 'arrowup' | 'arrowdown' | 'arrowleft' | 'arrowright' | 'enter' | 'backspace'
+/** Tab icon (⇥) - rightward arrow to bar */
+export function Tab({ className, style }: KeyIconProps) {
+  return (
+    <svg
+      className={className}
+      style={{ ...baseStyle, ...style }}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <line x1="4" y1="12" x2="16" y2="12"/>
+      <polyline points="12 8 16 12 12 16"/>
+      <line x1="20" y1="6" x2="20" y2="18"/>
+    </svg>
+  )
+}
+
+export type KeyIconType = 'arrowup' | 'arrowdown' | 'arrowleft' | 'arrowright' | 'enter' | 'backspace' | 'tab'
 
 /** Get the icon component for a key, or null if no icon exists */
 export function getKeyIcon(key: string): React.ComponentType<KeyIconProps> | null {
@@ -139,6 +159,8 @@ export function getKeyIcon(key: string): React.ComponentType<KeyIconProps> | nul
       return Enter
     case 'backspace':
       return Backspace
+    case 'tab':
+      return Tab
     default:
       return null
   }

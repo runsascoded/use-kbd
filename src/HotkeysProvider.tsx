@@ -67,7 +67,7 @@ export interface HotkeysContextValue {
   /** Toggle the lookup modal */
   toggleLookup: () => void
   /** Execute an action by ID */
-  executeAction: (id: string) => void
+  executeAction: (id: string, captures?: number[]) => void
   /** Sequence state: pending key combinations */
   pendingKeys: HotkeySequence
   /** Sequence state: whether waiting for more keys */

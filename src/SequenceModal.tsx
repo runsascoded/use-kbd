@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useHotkeysContext } from './HotkeysProvider'
+import { getKeyIcon } from './KeyIcons'
 import type { SequenceCompletion } from './types'
-import { formatCombination } from './utils'
+import { formatKeyForDisplay } from './utils'
 
 /**
  * Modal that appears during multi-key sequence input (e.g., `g t` for "go to table").
@@ -92,8 +93,8 @@ export function SequenceModal() {
   const executeSelected = useCallback(() => {
     if (selectedIndex >= 0 && selectedIndex < flatCompletions.length) {
       const item = flatCompletions[selectedIndex]
-      // Execute the action - handler should handle undefined captures
-      executeAction(item.action)
+      // Execute the action with any captured digit values
+      executeAction(item.action, item.completion.captures)
       cancelSequence()
     }
   }, [selectedIndex, flatCompletions, executeAction, cancelSequence])
@@ -131,16 +132,33 @@ export function SequenceModal() {
     return () => document.removeEventListener('keydown', handleKeyDown, true)
   }, [isAwaitingSequence, pendingKeys.length, itemCount, executeSelected])
 
-  // Format pending keys for display
-  const formattedPendingKeys = useMemo(() => {
-    if (pendingKeys.length === 0) return ''
-    return formatCombination(pendingKeys).display
-  }, [pendingKeys])
+  // Render a single key with icon if available
+  const renderKey = useCallback((key: string, index: number) => {
+    const Icon = getKeyIcon(key)
+    const displayKey = formatKeyForDisplay(key)
+    return (
+      <kbd key={index} className="kbd-kbd">
+        {Icon ? <Icon className="kbd-key-icon" /> : null}
+        {Icon ? null : displayKey}
+      </kbd>
+    )
+  }, [])
 
-  // Get human-readable label for an action from registry
-  const getActionLabel = (actionId: string) => {
+  // Get human-readable label for an action from registry, with captured digits interpolated
+  const getActionLabel = (actionId: string, captures?: number[]) => {
     const action = registry.actions.get(actionId)
-    return action?.config.label || actionId
+    let label = action?.config.label || actionId
+    // Replace N placeholders with captured digit values
+    if (captures && captures.length > 0) {
+      let captureIdx = 0
+      label = label.replace(/\bN\b/g, () => {
+        if (captureIdx < captures.length) {
+          return String(captures[captureIdx++])
+        }
+        return 'N'
+      })
+    }
+    return label
   }
 
   // Don't render if not awaiting sequence or no pending keys
@@ -153,7 +171,9 @@ export function SequenceModal() {
       <div className="kbd-sequence" onClick={e => e.stopPropagation()}>
         {/* Current sequence at top */}
         <div className="kbd-sequence-current">
-          <kbd className="kbd-sequence-keys">{formattedPendingKeys}</kbd>
+          <div className="kbd-sequence-keys">
+            {pendingKeys.map((combo, i) => renderKey(combo.key, i))}
+          </div>
           <span className="kbd-sequence-ellipsis">…</span>
         </div>
 
@@ -177,7 +197,7 @@ export function SequenceModal() {
                 <kbd className="kbd-kbd">{item.displayKey}</kbd>
                 <span className="kbd-sequence-arrow">→</span>
                 <span className="kbd-sequence-actions">
-                  {getActionLabel(item.action)}
+                  {getActionLabel(item.action, item.completion.captures)}
                 </span>
               </div>
             ))}

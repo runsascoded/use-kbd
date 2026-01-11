@@ -204,6 +204,8 @@ export interface SequenceCompletion {
   actions: string[]
   /** Whether the sequence is already complete (can be executed now with Enter) */
   isComplete: boolean
+  /** Captured digit values from \d and \d+ placeholders */
+  captures?: number[]
 }
 
 // ============================================================================

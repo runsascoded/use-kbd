@@ -534,6 +534,19 @@ function DataTable() {
     }, [totalPages]),
   })
 
+  // Go to specific page (key prefix + digits pattern for testing)
+  useAction('page:goto', {
+    label: 'Go to page N',
+    group: 'Table: Page Navigation',
+    defaultBindings: ['g \\d+'],
+    handler: useCallback((_, captures) => {
+      if (captures && captures.length > 0) {
+        const targetPage = Math.min(Math.max(1, captures[0]), totalPages)
+        setCurrentPage(targetPage)
+      }
+    }, [totalPages]),
+  })
+
   // Page size actions (P prefix or digit then p)
   useAction('pagesize:1-10', {
     label: '10 rows',

@@ -365,6 +365,77 @@ test.describe('Data Table Demo', () => {
 
     await expect(page).toHaveURL('/canvas')
   })
+
+  test('backspace during digit sequence edits instead of executing', async ({ page }) => {
+    // Click first row to select and establish cursor position
+    const rows = page.locator('.data-table tbody tr')
+    await rows.first().click()
+    await expect(rows.first()).toHaveClass(/selected/)
+
+    // Get initial cursor position
+    const initialId = await rows.first().getAttribute('data-row-id')
+
+    // Type '1 2' to start a digit sequence (for \d+ j pattern)
+    await page.keyboard.press('1')
+    await page.waitForTimeout(50)
+    await page.keyboard.press('2')
+    await page.waitForTimeout(50)
+
+    // SequenceModal should be showing with "1 2"
+    const seqModal = page.locator('.kbd-sequence')
+    await expect(seqModal).toBeVisible()
+    const seqKeys = page.locator('.kbd-sequence-keys')
+    await expect(seqKeys).toContainText('1')
+    await expect(seqKeys).toContainText('2')
+
+    // Press backspace - should edit sequence to just "1", NOT execute
+    await page.keyboard.press('Backspace')
+    await page.waitForTimeout(100)
+
+    // Modal should still be open with just "1"
+    await expect(seqModal).toBeVisible()
+    // The sequence should now be just "1" (the "2" was removed)
+    const keysText = await seqKeys.textContent()
+    expect(keysText).not.toContain('2')
+
+    // Cursor should still be on the same row (action was NOT executed)
+    // If backspace incorrectly executed, we'd have moved down 12 rows
+    const currentlySelected = page.locator('tr.selected')
+    const currentId = await currentlySelected.first().getAttribute('data-row-id')
+    expect(currentId).toBe(initialId)
+
+    // Now press Escape to cancel
+    await page.keyboard.press('Escape')
+    await expect(seqModal).not.toBeVisible()
+  })
+
+  test('g N Enter goes to page N', async ({ page }) => {
+    // Verify we start on page 1
+    const pageInfo = page.locator('.pagination-controls')
+    await expect(pageInfo).toContainText('1–20 of 1000')
+
+    // Type "g 1 0" then Enter to go to page 10
+    await page.keyboard.press('g')
+    await page.waitForTimeout(50)
+    await page.keyboard.press('1')
+    await page.waitForTimeout(50)
+    await page.keyboard.press('0')
+    await page.waitForTimeout(50)
+
+    // SequenceModal should show "Go to page 10"
+    const seqModal = page.locator('.kbd-sequence')
+    await expect(seqModal).toBeVisible()
+
+    // Press Enter to execute
+    await page.keyboard.press('Enter')
+    await page.waitForTimeout(100)
+
+    // Modal should close
+    await expect(seqModal).not.toBeVisible()
+
+    // Should now be on page 10 (showing rows 181-200)
+    await expect(pageInfo).toContainText('181–200 of 1000')
+  })
 })
 
 test.describe('Canvas Demo', () => {

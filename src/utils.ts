@@ -75,7 +75,7 @@ export function formatKeyForDisplay(key: string): string {
     'space': 'Space',
     'escape': 'Esc',
     'enter': '↵',
-    'tab': 'Tab',
+    'tab': '⇥',
     'backspace': '⌫',
     'delete': 'Del',
     'arrowup': '↑',
@@ -740,44 +740,56 @@ export function getSequenceCompletions(
     const hasDigitsPlaceholder = keySeq.some(e => e.type === 'digits')
     if (!hasDigitsPlaceholder && keySeq.length < pendingKeys.length) continue
 
-    // Track how many keySeq elements we've matched
+    // Track how many keySeq elements we've matched and how many pending keys consumed
     let keySeqIdx = 0
+    let pendingIdx = 0
     let isMatch = true
+    const captures: number[] = []
+    let currentDigits = '' // For accumulating \d+ digits
 
-    for (let i = 0; i < pendingKeys.length && keySeqIdx < keySeq.length; i++) {
+    for (; pendingIdx < pendingKeys.length && keySeqIdx < keySeq.length; pendingIdx++) {
       const elem = keySeq[keySeqIdx]
 
       if (elem.type === 'digits') {
         // \d+ can consume multiple pending digit keys
-        if (!/^[0-9]$/.test(pendingKeys[i].key)) {
+        if (!/^[0-9]$/.test(pendingKeys[pendingIdx].key)) {
           isMatch = false
           break
         }
+        currentDigits += pendingKeys[pendingIdx].key
         // Check if next pending key is also a digit (still accumulating)
         // or if we should move to next keySeq element
-        if (i + 1 < pendingKeys.length && /^[0-9]$/.test(pendingKeys[i + 1].key)) {
+        if (pendingIdx + 1 < pendingKeys.length && /^[0-9]$/.test(pendingKeys[pendingIdx + 1].key)) {
           // Next is also digit, stay on this keySeq element
           continue
         }
         // Either no more pending keys, or next pending is not a digit
+        captures.push(parseInt(currentDigits, 10))
+        currentDigits = ''
         keySeqIdx++
       } else if (elem.type === 'digit') {
         // \d matches exactly one digit
-        if (!/^[0-9]$/.test(pendingKeys[i].key)) {
+        if (!/^[0-9]$/.test(pendingKeys[pendingIdx].key)) {
           isMatch = false
           break
         }
+        captures.push(parseInt(pendingKeys[pendingIdx].key, 10))
         keySeqIdx++
       } else {
         // Regular key - must match exactly (with modifiers)
         const keyElem = elem as { type: 'key'; key: string; modifiers: Modifiers }
         const targetCombo: KeyCombination = { key: keyElem.key, modifiers: keyElem.modifiers }
-        if (!keyMatchesPattern(pendingKeys[i], targetCombo)) {
+        if (!keyMatchesPattern(pendingKeys[pendingIdx], targetCombo)) {
           isMatch = false
           break
         }
         keySeqIdx++
       }
+    }
+
+    // If there are unconsumed pending keys, it's not a match
+    if (pendingIdx < pendingKeys.length) {
+      isMatch = false
     }
 
     if (!isMatch) continue
@@ -792,6 +804,7 @@ export function getSequenceCompletions(
         display: formatKeySeq(keySeq),
         actions,
         isComplete: true,
+        captures: captures.length > 0 ? captures : undefined,
       })
     } else {
       // Continuation - more keys needed
@@ -804,6 +817,7 @@ export function getSequenceCompletions(
         display: formatKeySeq(keySeq),
         actions,
         isComplete: false,
+        captures: captures.length > 0 ? captures : undefined,
       })
     }
   }
