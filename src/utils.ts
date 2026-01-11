@@ -277,19 +277,6 @@ export function parseHotkeyString(hotkeyStr: string): HotkeySequence {
   return parts.map(parseSingleCombination)
 }
 
-/**
- * Parse a combination ID back to a KeyCombination (single key only)
- * @deprecated Use parseHotkeyString for sequence support
- */
-export function parseCombinationId(id: string): KeyCombination {
-  // For backwards compatibility, if it's a sequence, return first key
-  const sequence = parseHotkeyString(id)
-  if (sequence.length === 0) {
-    return { key: '', modifiers: { ctrl: false, alt: false, shift: false, meta: false } }
-  }
-  return sequence[0]
-}
-
 // ============================================================================
 // New KeySeq Parsing (with digit placeholder support)
 // ============================================================================

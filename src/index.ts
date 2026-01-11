@@ -113,7 +113,6 @@ export {
   DIGITS_PLACEHOLDER,
   keySeqToHotkeySequence,
   normalizeKey,
-  parseCombinationId,
   parseHotkeyString,
   parseKeySeq,
   searchActions,

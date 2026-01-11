@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useHotkeysContext } from './HotkeysProvider'
 import { renderKeySeq, renderModifierIcons, renderKeyContent } from './KeyElements'
-import type { KeyCombination, KeySeq, SequenceCompletion } from './types'
+import type { KeyCombination, SequenceCompletion } from './types'
 
 /**
  * Modal that appears during multi-key sequence input (e.g., `g t` for "go to table").

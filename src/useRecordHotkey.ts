@@ -383,9 +383,6 @@ export function useRecordHotkey(options: RecordHotkeyOptions = {}): RecordHotkey
 
   const display = sequence ? formatCombination(sequence) : null
 
-  // Backwards compatibility: return first key as combination
-  const combination = sequence && sequence.length > 0 ? sequence[0] : null
-
   return {
     isRecording,
     startRecording,
@@ -396,6 +393,5 @@ export function useRecordHotkey(options: RecordHotkeyOptions = {}): RecordHotkey
     pendingKeys,
     activeKeys,
     sequenceTimeout,
-    combination, // deprecated
   }
 }

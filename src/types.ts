@@ -22,7 +22,6 @@ export interface KeyCombination {
  * Represents a hotkey - either a single key or a sequence of keys.
  * Single key: [{ key: 'k', modifiers: {...} }]
  * Sequence: [{ key: '2', ... }, { key: 'w', ... }]
- * @deprecated Use KeySeq for new code
  */
 export type HotkeySequence = KeyCombination[]
 
@@ -121,10 +120,6 @@ export interface RecordHotkeyResult {
   activeKeys: KeyCombination | null
   /** The timeout duration for sequences (ms) */
   sequenceTimeout: number
-  /**
-   * @deprecated Use `sequence` instead
-   */
-  combination: KeyCombination | null
 }
 
 /**

@@ -1,6 +1,6 @@
 import { ReactNode, useCallback, useMemo, useState } from 'react'
 import { useRecordHotkey } from './useRecordHotkey'
-import { findConflicts, formatCombination, parseCombinationId } from './utils'
+import { findConflicts, formatCombination, parseHotkeyString } from './utils'
 import type { HotkeySequence, KeyCombination, KeyCombinationDisplay } from './types'
 import type { HotkeyMap } from './useHotkeys'
 
@@ -146,7 +146,7 @@ export function KeybindingEditor({
     return Array.from(allActions).map((action) => {
       const key = actionMap.get(action) ?? defaultActionMap.get(action) ?? ''
       const defaultKey = defaultActionMap.get(action) ?? ''
-      const combo = parseCombinationId(key)
+      const combo = parseHotkeyString(key)
       const display = formatCombination(combo)
       const conflictActions = conflicts.get(key)
 
