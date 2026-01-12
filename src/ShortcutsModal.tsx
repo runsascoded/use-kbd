@@ -1,12 +1,11 @@
 import { ComponentType, createContext, Fragment, MouseEvent, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { ACTION_MODAL, DEFAULT_SEQUENCE_TIMEOUT } from './constants'
 import { useMaybeHotkeysContext } from './HotkeysProvider'
-import { getKeyIcon } from './KeyIcons'
-import { ModifierIcon } from './ModifierIcons'
+import { renderModifierIcons, renderKeyContent } from './KeyElements'
 import { useAction } from './useAction'
 import { useHotkeys } from './useHotkeys'
 import { useRecordHotkey } from './useRecordHotkey'
-import { findConflicts, formatCombination, formatKeyForDisplay, getActionBindings, parseHotkeyString, parseKeySeq, formatKeySeq } from './utils'
+import { findConflicts, formatCombination, getActionBindings, parseHotkeyString, parseKeySeq, formatKeySeq } from './utils'
 import type { ActionRegistry, HotkeySequence, KeyCombination, KeyCombinationDisplay, SeqElem } from './types'
 import type { HotkeyMap } from './useHotkeys'
 
@@ -291,31 +290,12 @@ function KeyDisplay({
   combo: KeyCombination
   className?: string
 }) {
-  const { key, modifiers } = combo
-  const parts: ReactNode[] = []
-
-  if (modifiers.meta) {
-    parts.push(<ModifierIcon key="meta" modifier="meta" className="kbd-modifier-icon" />)
-  }
-  if (modifiers.ctrl) {
-    parts.push(<ModifierIcon key="ctrl" modifier="ctrl" className="kbd-modifier-icon" />)
-  }
-  if (modifiers.alt) {
-    parts.push(<ModifierIcon key="alt" modifier="alt" className="kbd-modifier-icon" />)
-  }
-  if (modifiers.shift) {
-    parts.push(<ModifierIcon key="shift" modifier="shift" className="kbd-modifier-icon" />)
-  }
-
-  // Display key using SVG icon if available, otherwise formatted text
-  const KeyIcon = getKeyIcon(key)
-  if (KeyIcon) {
-    parts.push(<KeyIcon key="key" className="kbd-key-icon" />)
-  } else {
-    parts.push(<span key="key">{formatKeyForDisplay(key)}</span>)
-  }
-
-  return <span className={className}>{parts}</span>
+  return (
+    <span className={className}>
+      {renderModifierIcons(combo.modifiers)}
+      {renderKeyContent(combo.key)}
+    </span>
+  )
 }
 
 /**

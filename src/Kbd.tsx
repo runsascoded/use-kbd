@@ -1,9 +1,8 @@
-import { Fragment, ReactNode, useEffect, useRef } from 'react'
+import { Fragment, useEffect, useRef } from 'react'
 import { ACTION_LOOKUP, ACTION_MODAL, ACTION_OMNIBAR } from './constants'
 import { useMaybeHotkeysContext } from './HotkeysProvider'
-import { getKeyIcon } from './KeyIcons'
-import { ModifierIcon } from './ModifierIcons'
-import { formatKeyForDisplay, parseKeySeq } from './utils'
+import { renderModifierIcons, renderKeyContent } from './KeyElements'
+import { parseKeySeq } from './utils'
 import type { KeyCombination, SeqElem } from './types'
 
 export interface KbdProps {
@@ -25,31 +24,12 @@ export interface KbdProps {
  * Render a single key combination with SVG icons for modifiers and special keys
  */
 function KeyCombo({ combo }: { combo: KeyCombination }) {
-  const { key, modifiers } = combo
-  const parts: ReactNode[] = []
-
-  if (modifiers.meta) {
-    parts.push(<ModifierIcon key="meta" modifier="meta" className="kbd-modifier-icon" />)
-  }
-  if (modifiers.ctrl) {
-    parts.push(<ModifierIcon key="ctrl" modifier="ctrl" className="kbd-modifier-icon" />)
-  }
-  if (modifiers.alt) {
-    parts.push(<ModifierIcon key="alt" modifier="alt" className="kbd-modifier-icon" />)
-  }
-  if (modifiers.shift) {
-    parts.push(<ModifierIcon key="shift" modifier="shift" className="kbd-modifier-icon" />)
-  }
-
-  // Use SVG icon if available, otherwise formatted text
-  const KeyIcon = getKeyIcon(key)
-  if (KeyIcon) {
-    parts.push(<KeyIcon key="key" className="kbd-key-icon" />)
-  } else {
-    parts.push(<span key="key">{formatKeyForDisplay(key)}</span>)
-  }
-
-  return <>{parts}</>
+  return (
+    <>
+      {renderModifierIcons(combo.modifiers)}
+      {renderKeyContent(combo.key)}
+    </>
+  )
 }
 
 /**
