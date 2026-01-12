@@ -304,6 +304,8 @@ export interface OmnibarEndpointAsyncConfig extends OmnibarEndpointConfigBase {
   /** Async fetch function for remote data sources */
   fetch: (query: string, signal: AbortSignal, pagination: EndpointPagination) => Promise<EndpointResponse>
   filter?: never
+  /** Internal: true if this was originally a sync endpoint (skip debouncing) */
+  isSync?: boolean
 }
 
 /**

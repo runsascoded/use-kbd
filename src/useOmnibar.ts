@@ -5,7 +5,7 @@ const { max, min } = Math
 import { searchActions, getSequenceCompletions, fuzzyMatch } from './utils'
 import type { ActionRegistry, ActionSearchResult, EndpointPaginationMode, HotkeySequence, OmnibarEntry } from './types'
 import type { SequenceCompletion } from './types'
-import type { OmnibarEndpointsRegistryValue } from './OmnibarEndpointsRegistry'
+import type { EndpointQueryResult, OmnibarEndpointsRegistryValue } from './OmnibarEndpointsRegistry'
 
 /** Default debounce time for remote queries */
 const DEFAULT_DEBOUNCE_MS = 150
@@ -246,7 +246,7 @@ export function useOmnibar(options: UseOmnibarOptions): UseOmnibarResult {
     return allResults.slice(0, maxResults)
   }, [query, actions, keymap, maxResults])
 
-  // Query remote endpoints (debounced) - initial page only
+  // Query endpoints - sync immediately, async debounced
   useEffect(() => {
     // Clear any pending debounce timer
     if (debounceTimerRef.current) {
@@ -266,55 +266,110 @@ export function useOmnibar(options: UseOmnibarOptions): UseOmnibarResult {
       return
     }
 
-    // Set all known endpoints to loading state
-    setEndpointStates(prev => {
-      const next = new Map(prev)
-      for (const [id] of endpointsRegistry.endpoints) {
-        next.set(id, { entries: [], offset: 0, isLoading: true })
+    // Separate sync and async endpoints
+    const syncEndpoints: string[] = []
+    const asyncEndpoints: string[] = []
+    for (const [id, ep] of endpointsRegistry.endpoints) {
+      if (ep.config.isSync) {
+        syncEndpoints.push(id)
+      } else {
+        asyncEndpoints.push(id)
       }
-      return next
-    })
+    }
 
-    // Debounce the query
-    debounceTimerRef.current = setTimeout(async () => {
-      const controller = new AbortController()
-      abortControllerRef.current = controller
+    // Helper to update state with results
+    const updateEndpointState = (epResult: EndpointQueryResult) => {
+      const ep = endpointsRegistry.endpoints.get(epResult.endpointId)
+      const pageSize = ep?.config.pageSize ?? 10
+      return {
+        entries: epResult.entries,
+        offset: pageSize,
+        total: epResult.total,
+        hasMore: epResult.hasMore ?? (epResult.total !== undefined ? epResult.entries.length < epResult.total : undefined),
+        isLoading: false,
+      }
+    }
 
-      try {
-        const endpointResults = await endpointsRegistry.queryAll(query, controller.signal)
-
-        // Don't update if aborted
-        if (controller.signal.aborted) return
-
-        // Update state with results
-        setEndpointStates(() => {
-          const next = new Map<string, EndpointState>()
-          for (const epResult of endpointResults) {
-            const ep = endpointsRegistry.endpoints.get(epResult.endpointId)
-            const pageSize = ep?.config.pageSize ?? 10
-            next.set(epResult.endpointId, {
-              entries: epResult.entries,
-              offset: pageSize,
-              total: epResult.total,
-              hasMore: epResult.hasMore ?? (epResult.total !== undefined ? epResult.entries.length < epResult.total : undefined),
-              isLoading: false,
-            })
-          }
-          return next
-        })
-      } catch (error) {
-        // Ignore abort errors
-        if (error instanceof Error && error.name === 'AbortError') return
-        console.error('Omnibar endpoint query failed:', error)
+    // Query sync endpoints immediately (no debounce)
+    if (syncEndpoints.length > 0) {
+      const syncController = new AbortController()
+      Promise.all(
+        syncEndpoints.map(id =>
+          endpointsRegistry.queryEndpoint(id, query, { offset: 0, limit: endpointsRegistry.endpoints.get(id)?.config.pageSize ?? 10 }, syncController.signal)
+        )
+      ).then(results => {
+        if (syncController.signal.aborted) return
         setEndpointStates(prev => {
           const next = new Map(prev)
-          for (const [id, state] of next) {
-            next.set(id, { ...state, isLoading: false })
+          for (const result of results) {
+            if (result) {
+              next.set(result.endpointId, updateEndpointState(result))
+            }
           }
           return next
         })
-      }
-    }, debounceMs)
+      })
+    }
+
+    // Set async endpoints to loading state, preserving existing entries (stale-while-revalidate)
+    if (asyncEndpoints.length > 0) {
+      setEndpointStates(prev => {
+        const next = new Map(prev)
+        for (const id of asyncEndpoints) {
+          const existing = prev.get(id)
+          next.set(id, {
+            entries: existing?.entries ?? [],
+            offset: existing?.offset ?? 0,
+            total: existing?.total,
+            hasMore: existing?.hasMore,
+            isLoading: true,
+          })
+        }
+        return next
+      })
+
+      // Debounce async endpoint queries
+      debounceTimerRef.current = setTimeout(async () => {
+        const controller = new AbortController()
+        abortControllerRef.current = controller
+
+        try {
+          const results = await Promise.all(
+            asyncEndpoints.map(id =>
+              endpointsRegistry.queryEndpoint(id, query, { offset: 0, limit: endpointsRegistry.endpoints.get(id)?.config.pageSize ?? 10 }, controller.signal)
+            )
+          )
+
+          // Don't update if aborted
+          if (controller.signal.aborted) return
+
+          // Update state with results
+          setEndpointStates(prev => {
+            const next = new Map(prev)
+            for (const result of results) {
+              if (result) {
+                next.set(result.endpointId, updateEndpointState(result))
+              }
+            }
+            return next
+          })
+        } catch (error) {
+          // Ignore abort errors
+          if (error instanceof Error && error.name === 'AbortError') return
+          console.error('Omnibar endpoint query failed:', error)
+          setEndpointStates(prev => {
+            const next = new Map(prev)
+            for (const id of asyncEndpoints) {
+              const state = next.get(id)
+              if (state) {
+                next.set(id, { ...state, isLoading: false })
+              }
+            }
+            return next
+          })
+        }
+      }, debounceMs)
+    }
 
     return () => {
       if (debounceTimerRef.current) {
