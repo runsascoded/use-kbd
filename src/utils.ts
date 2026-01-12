@@ -21,11 +21,16 @@ export function isShiftedSymbol(key: string): boolean {
 }
 
 /**
- * Detect if running on macOS
+ * Detect if running on macOS/iOS
  */
 export function isMac(): boolean {
   if (typeof navigator === 'undefined') return false
-  return /Mac|iPod|iPhone|iPad/.test(navigator.platform)
+  // Use userAgentData if available (modern browsers), fallback to userAgent
+  const platform = (navigator as { userAgentData?: { platform?: string } }).userAgentData?.platform
+  if (platform) {
+    return platform === 'macOS' || platform === 'iOS'
+  }
+  return /Mac|iPhone|iPad|iPod/.test(navigator.userAgent)
 }
 
 /**

@@ -1,4 +1,4 @@
-import { type CSSProperties } from 'react'
+import {ComponentType, type CSSProperties} from 'react'
 
 export interface KeyIconProps {
   className?: string
@@ -145,7 +145,7 @@ export function Tab({ className, style }: KeyIconProps) {
 export type KeyIconType = 'arrowup' | 'arrowdown' | 'arrowleft' | 'arrowright' | 'enter' | 'backspace' | 'tab'
 
 /** Get the icon component for a key, or null if no icon exists */
-export function getKeyIcon(key: string): React.ComponentType<KeyIconProps> | null {
+export function getKeyIcon(key: string): ComponentType<KeyIconProps> | null {
   switch (key.toLowerCase()) {
     case 'arrowup':
       return Up

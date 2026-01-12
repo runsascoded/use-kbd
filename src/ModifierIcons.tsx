@@ -1,4 +1,5 @@
 import { forwardRef, type CSSProperties, type SVGProps } from 'react'
+import { isMac } from './utils'
 
 export interface ModifierIconProps extends SVGProps<SVGSVGElement> {
   className?: string
@@ -120,9 +121,6 @@ Alt.displayName = 'Alt'
 
 export type ModifierType = 'meta' | 'ctrl' | 'shift' | 'alt' | 'opt'
 
-/** Detect if running on macOS */
-export const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform)
-
 /** Get the appropriate icon component for a modifier key */
 export function getModifierIcon(modifier: ModifierType): typeof Command {
   switch (modifier) {
@@ -136,7 +134,7 @@ export function getModifierIcon(modifier: ModifierType): typeof Command {
       return Option
     case 'alt':
       // On Mac, Alt is Option (⌥). On Windows, Alt is ⎇ (though text "Alt" is more common)
-      return isMac ? Option : Alt
+      return isMac() ? Option : Alt
   }
 }
 

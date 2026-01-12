@@ -88,7 +88,6 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
     for (const [key, actionOrActions] of Object.entries(overrides)) {
       if (actionOrActions === '') {
         // Legacy empty marker - skip (now handled by removedDefaults)
-        continue
       } else if (Array.isArray(actionOrActions)) {
         // For arrays, keep if any action is not default
         const nonDefaultActions = actionOrActions.filter(a => !isDefaultBinding(key, a))
@@ -209,7 +208,6 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
     for (const [key, actionOrActions] of Object.entries(overrides)) {
       if (actionOrActions === '') {
         // Legacy empty marker - skip
-        continue
       } else {
         // Add the override binding (may merge with existing default)
         const actions = Array.isArray(actionOrActions) ? actionOrActions : [actionOrActions]
