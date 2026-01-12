@@ -176,7 +176,8 @@ function useActionsRegistry(options = {}) {
       registry[id] = {
         label: config.label,
         group: config.group,
-        keywords: config.keywords
+        keywords: config.keywords,
+        hideFromModal: config.hideFromModal
       };
     }
     return registry;
