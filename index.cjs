@@ -298,7 +298,6 @@ function useOmnibarEndpointsRegistry() {
   const queryEndpoint = react.useCallback(async (endpointId, query, pagination, signal) => {
     const ep = endpointsRef.current.get(endpointId);
     if (!ep) return null;
-    if (ep.config.enabled === false) return null;
     if (query.length < (ep.config.minQueryLength ?? 2)) return null;
     try {
       const response = await ep.config.fetch(query, signal, pagination);
@@ -325,7 +324,11 @@ function useOmnibarEndpointsRegistry() {
   }, []);
   const queryAll = react.useCallback(async (query, signal) => {
     const endpoints2 = Array.from(endpointsRef.current.values());
-    const promises = endpoints2.filter((ep) => ep.config.enabled !== false).filter((ep) => query.length >= (ep.config.minQueryLength ?? 2)).map(async (ep) => {
+    const filteredByMinQuery = endpoints2.filter((ep) => {
+      const minLen = ep.config.minQueryLength ?? 2;
+      return query.length >= minLen;
+    });
+    const promises = filteredByMinQuery.map(async (ep) => {
       const pageSize = ep.config.pageSize ?? 10;
       const result = await queryEndpoint(ep.id, query, { offset: 0, limit: pageSize }, signal);
       return result ?? { endpointId: ep.id, entries: [] };
@@ -2179,7 +2182,7 @@ function useOmnibar(options) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
-    if (!endpointsRegistry || !query.trim()) {
+    if (!endpointsRegistry) {
       setEndpointStates(/* @__PURE__ */ new Map());
       return;
     }
