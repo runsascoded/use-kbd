@@ -486,6 +486,21 @@ test.describe('Data Table Demo', () => {
     await page.keyboard.press('Escape')
     await expect(seqModal).not.toBeVisible()
   })
+
+  test('omnibar shows endpoint results with empty query (minQueryLength: 0)', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    // Open omnibar without typing anything
+    await page.keyboard.press('Meta+k')
+    await page.waitForSelector('.kbd-omnibar', { timeout: 5000 })
+
+    // Wait for endpoint results to load (minQueryLength: 0 means they appear immediately)
+    await page.waitForTimeout(500)
+
+    // Table rows should appear with their group label
+    await expect(page.locator('.kbd-omnibar-result-category', { hasText: 'Table Rows' }).first()).toBeVisible()
+    await expect(page.locator('.kbd-omnibar-result-label', { hasText: 'Alpha-1' })).toBeVisible()
+  })
 })
 
 test.describe('Canvas Demo', () => {

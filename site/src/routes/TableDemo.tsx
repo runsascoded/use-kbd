@@ -218,7 +218,7 @@ function DataTable() {
     },
     group: 'Table Rows',
     priority: 50, // Lower than local actions
-    minQueryLength: 1,
+    minQueryLength: 0, // Show rows immediately in omnibar
     pageSize: 10,
     pagination: 'scroll',
   }), [data, navigateToRow]))
