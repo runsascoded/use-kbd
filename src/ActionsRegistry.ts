@@ -229,6 +229,7 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
         label: config.label,
         group: config.group,
         keywords: config.keywords,
+        hideFromModal: config.hideFromModal,
       }
     }
     return registry

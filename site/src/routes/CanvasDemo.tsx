@@ -301,6 +301,17 @@ function Canvas() {
     }, [strokes]),
   })
 
+  // Hidden action for testing hideFromModal functionality
+  useAction('debug:log-state', {
+    label: 'Log state (hidden)',
+    group: 'Debug',
+    defaultBindings: ['ctrl+shift+d'],
+    hideFromModal: true,
+    handler: useCallback(() => {
+      console.log('Canvas state:', { tool, color, size, strokeCount: strokes.length })
+    }, [tool, color, size, strokes.length]),
+  })
+
 
   return (
     <div className="canvas-app">

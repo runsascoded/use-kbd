@@ -568,6 +568,22 @@ test.describe('Canvas Demo', () => {
     await expect(activeColor).toHaveCSS('background-color', 'rgb(239, 68, 68)')
   })
 
+  test('hideFromModal actions are not shown in shortcuts modal', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    await page.keyboard.press('?')
+    await page.waitForSelector('.kbd-modal', { timeout: 5000 })
+
+    // The hidden "Log state" action should NOT appear in the modal
+    await expect(page.locator('.kbd-modal', { hasText: 'Log state' })).not.toBeVisible()
+    await expect(page.locator('.kbd-modal', { hasText: 'Debug' })).not.toBeVisible()
+
+    // But regular actions should still appear
+    await expect(page.locator('.kbd-modal', { hasText: 'Pen tool' })).toBeVisible()
+
+    await page.keyboard.press('Escape')
+  })
+
   test('shortcuts modal shows tool and color shortcuts', async ({ page }) => {
     await page.locator('body').click({ position: { x: 10, y: 10 } })
 
