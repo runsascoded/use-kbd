@@ -260,8 +260,8 @@ export function useOmnibar(options: UseOmnibarOptions): UseOmnibarResult {
       abortControllerRef.current = null
     }
 
-    // Skip if no endpoints registry or empty query
-    if (!endpointsRegistry || !query.trim()) {
+    // Skip if no endpoints registry
+    if (!endpointsRegistry) {
       setEndpointStates(new Map())
       return
     }

@@ -67,7 +67,7 @@ export function useOmnibarEndpointsRegistry(): OmnibarEndpointsRegistryValue {
   ): Promise<EndpointQueryResult | null> => {
     const ep = endpointsRef.current.get(endpointId)
     if (!ep) return null
-    if (ep.config.enabled === false) return null
+    // Note: enabled check is handled by the wrapped fetch function in useOmnibarEndpoint
     if (query.length < (ep.config.minQueryLength ?? 2)) return null
 
     try {
@@ -102,10 +102,13 @@ export function useOmnibarEndpointsRegistry(): OmnibarEndpointsRegistryValue {
   ): Promise<EndpointQueryResult[]> => {
     const endpoints = Array.from(endpointsRef.current.values())
 
-    // Query all enabled endpoints in parallel with initial pagination
-    const promises = endpoints
-      .filter(ep => ep.config.enabled !== false)
-      .filter(ep => query.length >= (ep.config.minQueryLength ?? 2))
+    // Filter by minQueryLength only (enabled is handled by the wrapped fetch function)
+    const filteredByMinQuery = endpoints.filter(ep => {
+      const minLen = ep.config.minQueryLength ?? 2
+      return query.length >= minLen
+    })
+
+    const promises = filteredByMinQuery
       .map(async (ep): Promise<EndpointQueryResult> => {
         const pageSize = ep.config.pageSize ?? 10
         const result = await queryEndpoint(ep.id, query, { offset: 0, limit: pageSize }, signal)
