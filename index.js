@@ -1734,18 +1734,36 @@ function useOmnibarEndpoint(id, config) {
   }
   const registryRef = useRef(registry);
   registryRef.current = registry;
-  const fetchRef = useRef(config.fetch);
-  fetchRef.current = config.fetch;
+  const isSync = "filter" in config && config.filter !== void 0;
+  const fetchFn = isSync ? void 0 : config.fetch;
+  const filterFn = isSync ? config.filter : void 0;
+  const fetchRef = useRef(fetchFn);
+  fetchRef.current = fetchFn;
+  const filterRef = useRef(filterFn);
+  filterRef.current = filterFn;
+  const isSyncRef = useRef(isSync);
+  isSyncRef.current = isSync;
   const enabledRef = useRef(config.enabled ?? true);
   enabledRef.current = config.enabled ?? true;
   useEffect(() => {
-    registryRef.current.register(id, {
-      ...config,
+    const asyncConfig = {
+      group: config.group,
+      priority: config.priority,
+      minQueryLength: config.minQueryLength,
+      enabled: config.enabled,
+      pageSize: config.pageSize,
+      pagination: config.pagination,
+      isSync: isSyncRef.current,
+      // Track sync endpoints to skip debouncing
       fetch: async (query, signal, pagination) => {
         if (!enabledRef.current) return { entries: [] };
+        if (isSyncRef.current && filterRef.current) {
+          return filterRef.current(query, pagination);
+        }
         return fetchRef.current(query, signal, pagination);
       }
-    });
+    };
+    registryRef.current.register(id, asyncConfig);
     return () => {
       registryRef.current.unregister(id);
     };
@@ -1756,7 +1774,7 @@ function useOmnibarEndpoint(id, config) {
     config.minQueryLength,
     config.pageSize,
     config.pagination
-    // Note: we use refs for fetch and enabled, so they don't cause re-registration
+    // Note: we use refs for fetch/filter and enabled, so they don't cause re-registration
   ]);
 }
 function useEventCallback(fn) {
@@ -2184,46 +2202,95 @@ function useOmnibar(options) {
       setEndpointStates(/* @__PURE__ */ new Map());
       return;
     }
-    setEndpointStates((prev) => {
-      const next = new Map(prev);
-      for (const [id] of endpointsRegistry.endpoints) {
-        next.set(id, { entries: [], offset: 0, isLoading: true });
+    const syncEndpoints = [];
+    const asyncEndpoints = [];
+    for (const [id, ep] of endpointsRegistry.endpoints) {
+      if (ep.config.isSync) {
+        syncEndpoints.push(id);
+      } else {
+        asyncEndpoints.push(id);
       }
-      return next;
-    });
-    debounceTimerRef.current = setTimeout(async () => {
-      const controller = new AbortController();
-      abortControllerRef.current = controller;
-      try {
-        const endpointResults = await endpointsRegistry.queryAll(query, controller.signal);
-        if (controller.signal.aborted) return;
-        setEndpointStates(() => {
-          const next = /* @__PURE__ */ new Map();
-          for (const epResult of endpointResults) {
-            const ep = endpointsRegistry.endpoints.get(epResult.endpointId);
-            const pageSize = ep?.config.pageSize ?? 10;
-            next.set(epResult.endpointId, {
-              entries: epResult.entries,
-              offset: pageSize,
-              total: epResult.total,
-              hasMore: epResult.hasMore ?? (epResult.total !== void 0 ? epResult.entries.length < epResult.total : void 0),
-              isLoading: false
-            });
-          }
-          return next;
-        });
-      } catch (error) {
-        if (error instanceof Error && error.name === "AbortError") return;
-        console.error("Omnibar endpoint query failed:", error);
+    }
+    const updateEndpointState = (epResult) => {
+      const ep = endpointsRegistry.endpoints.get(epResult.endpointId);
+      const pageSize = ep?.config.pageSize ?? 10;
+      return {
+        entries: epResult.entries,
+        offset: pageSize,
+        total: epResult.total,
+        hasMore: epResult.hasMore ?? (epResult.total !== void 0 ? epResult.entries.length < epResult.total : void 0),
+        isLoading: false
+      };
+    };
+    if (syncEndpoints.length > 0) {
+      const syncController = new AbortController();
+      Promise.all(
+        syncEndpoints.map(
+          (id) => endpointsRegistry.queryEndpoint(id, query, { offset: 0, limit: endpointsRegistry.endpoints.get(id)?.config.pageSize ?? 10 }, syncController.signal)
+        )
+      ).then((results2) => {
+        if (syncController.signal.aborted) return;
         setEndpointStates((prev) => {
           const next = new Map(prev);
-          for (const [id, state] of next) {
-            next.set(id, { ...state, isLoading: false });
+          for (const result of results2) {
+            if (result) {
+              next.set(result.endpointId, updateEndpointState(result));
+            }
           }
           return next;
         });
-      }
-    }, debounceMs);
+      });
+    }
+    if (asyncEndpoints.length > 0) {
+      setEndpointStates((prev) => {
+        const next = new Map(prev);
+        for (const id of asyncEndpoints) {
+          const existing = prev.get(id);
+          next.set(id, {
+            entries: existing?.entries ?? [],
+            offset: existing?.offset ?? 0,
+            total: existing?.total,
+            hasMore: existing?.hasMore,
+            isLoading: true
+          });
+        }
+        return next;
+      });
+      debounceTimerRef.current = setTimeout(async () => {
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
+        try {
+          const results2 = await Promise.all(
+            asyncEndpoints.map(
+              (id) => endpointsRegistry.queryEndpoint(id, query, { offset: 0, limit: endpointsRegistry.endpoints.get(id)?.config.pageSize ?? 10 }, controller.signal)
+            )
+          );
+          if (controller.signal.aborted) return;
+          setEndpointStates((prev) => {
+            const next = new Map(prev);
+            for (const result of results2) {
+              if (result) {
+                next.set(result.endpointId, updateEndpointState(result));
+              }
+            }
+            return next;
+          });
+        } catch (error) {
+          if (error instanceof Error && error.name === "AbortError") return;
+          console.error("Omnibar endpoint query failed:", error);
+          setEndpointStates((prev) => {
+            const next = new Map(prev);
+            for (const id of asyncEndpoints) {
+              const state = next.get(id);
+              if (state) {
+                next.set(id, { ...state, isLoading: false });
+              }
+            }
+            return next;
+          });
+        }
+      }, debounceMs);
+    }
     return () => {
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);

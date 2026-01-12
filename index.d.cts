@@ -260,11 +260,9 @@ interface EndpointResponse {
  */
 type EndpointPaginationMode = 'scroll' | 'buttons' | 'none';
 /**
- * Configuration for a remote omnibar endpoint
+ * Base configuration shared by async and sync endpoints
  */
-interface OmnibarEndpointConfig {
-    /** Fetch function that returns entries for a query */
-    fetch: (query: string, signal: AbortSignal, pagination: EndpointPagination) => Promise<EndpointResponse>;
+interface OmnibarEndpointConfigBase {
     /** Default group for entries from this endpoint */
     group?: string;
     /** Priority for result ordering (higher = shown first, default: 0, local actions: 100) */
@@ -278,6 +276,30 @@ interface OmnibarEndpointConfig {
     /** Pagination mode (default: 'none') */
     pagination?: EndpointPaginationMode;
 }
+/**
+ * Configuration for an async omnibar endpoint (remote API calls)
+ */
+interface OmnibarEndpointAsyncConfig extends OmnibarEndpointConfigBase {
+    /** Async fetch function for remote data sources */
+    fetch: (query: string, signal: AbortSignal, pagination: EndpointPagination) => Promise<EndpointResponse>;
+    filter?: never;
+    /** Internal: true if this was originally a sync endpoint (skip debouncing) */
+    isSync?: boolean;
+}
+/**
+ * Configuration for a sync omnibar endpoint (in-memory filtering)
+ *
+ * Sync endpoints skip debouncing for instant results.
+ */
+interface OmnibarEndpointSyncConfig extends OmnibarEndpointConfigBase {
+    /** Sync filter function for in-memory data sources */
+    filter: (query: string, pagination: EndpointPagination) => EndpointResponse;
+    fetch?: never;
+}
+/**
+ * Configuration for an omnibar endpoint (async or sync)
+ */
+type OmnibarEndpointConfig = OmnibarEndpointAsyncConfig | OmnibarEndpointSyncConfig;
 
 /**
  * Hotkey definition - maps key combinations/sequences to action names
@@ -393,7 +415,8 @@ declare function useEditableHotkeys(defaults: HotkeyMap, handlers: HandlerMap, o
 
 interface RegisteredEndpoint {
     id: string;
-    config: OmnibarEndpointConfig;
+    /** Internal config is always async (useOmnibarEndpoint normalizes sync endpoints) */
+    config: OmnibarEndpointAsyncConfig;
     registeredAt: number;
 }
 /**
@@ -410,7 +433,7 @@ interface EndpointQueryResult {
 }
 interface OmnibarEndpointsRegistryValue {
     /** Register an endpoint. Called by useOmnibarEndpoint on mount. */
-    register: (id: string, config: OmnibarEndpointConfig) => void;
+    register: (id: string, config: OmnibarEndpointAsyncConfig) => void;
     /** Unregister an endpoint. Called by useOmnibarEndpoint on unmount. */
     unregister: (id: string) => void;
     /** Currently registered endpoints */
@@ -1388,39 +1411,50 @@ declare function useHotkeysContext(): HotkeysContextValue;
 declare function useMaybeHotkeysContext(): HotkeysContextValue | null;
 
 /**
- * Register a remote omnibar endpoint.
+ * Register an omnibar endpoint for dynamic search results.
+ *
+ * Supports both async (remote API) and sync (in-memory) endpoints:
+ * - Use `fetch` for async operations that need AbortSignal support
+ * - Use `filter` for sync in-memory filtering (skips debouncing for instant results)
  *
  * Endpoints are automatically unregistered when the component unmounts,
  * making this ideal for colocating search providers with their data context.
  *
- * @example
+ * @example Async endpoint (remote API)
  * ```tsx
- * function UsersPage() {
- *   const navigate = useNavigate()
+ * useOmnibarEndpoint('users', {
+ *   fetch: async (query, signal, pagination) => {
+ *     const res = await fetch(`/api/users?q=${query}`, { signal })
+ *     const { users, total } = await res.json()
+ *     return {
+ *       entries: users.map(u => ({
+ *         id: `user:${u.id}`,
+ *         label: u.name,
+ *         handler: () => navigate(`/users/${u.id}`),
+ *       })),
+ *       total,
+ *       hasMore: pagination.offset + users.length < total,
+ *     }
+ *   },
+ *   group: 'Users',
+ * })
+ * ```
  *
- *   useOmnibarEndpoint('users', {
- *     fetch: async (query, signal, pagination) => {
- *       const res = await fetch(`/api/users?q=${query}&offset=${pagination.offset}&limit=${pagination.limit}`, { signal })
- *       const { users, total } = await res.json()
- *       return {
- *         entries: users.map(u => ({
- *           id: `user:${u.id}`,
- *           label: u.name,
- *           description: u.email,
- *           handler: () => navigate(`/users/${u.id}`),
- *         })),
- *         total,
- *         hasMore: pagination.offset + users.length < total,
- *       }
- *     },
- *     group: 'Users',
- *     priority: 10,
- *     pageSize: 10,
- *     pagination: 'scroll',
- *   })
- *
- *   return <UsersList />
- * }
+ * @example Sync endpoint (in-memory filtering)
+ * ```tsx
+ * useOmnibarEndpoint('stations', {
+ *   filter: (query, pagination) => {
+ *     const matches = stations.filter(s => s.name.includes(query))
+ *     return {
+ *       entries: matches.slice(pagination.offset, pagination.offset + pagination.limit)
+ *         .map(s => ({ id: s.id, label: s.name, handler: () => select(s) })),
+ *       total: matches.length,
+ *       hasMore: pagination.offset + pagination.limit < matches.length,
+ *     }
+ *   },
+ *   group: 'Stations',
+ *   minQueryLength: 0,
+ * })
  * ```
  */
 declare function useOmnibarEndpoint(id: string, config: OmnibarEndpointConfig): void;
@@ -1631,4 +1665,4 @@ declare const ACTION_MODAL = "__hotkeys:modal";
 declare const ACTION_OMNIBAR = "__hotkeys:omnibar";
 declare const ACTION_LOOKUP = "__hotkeys:lookup";
 
-export { ACTION_LOOKUP, ACTION_MODAL, ACTION_OMNIBAR, type ActionConfig, type ActionDefinition, type ActionHandler, type ActionRegistry, type ActionSearchResult, ActionsRegistryContext, type ActionsRegistryValue, Alt, Backspace, type BindingInfo, Command, Ctrl, DEFAULT_SEQUENCE_TIMEOUT, DIGITS_PLACEHOLDER, DIGIT_PLACEHOLDER, Down, type EndpointPagination, type EndpointPaginationInfo, type EndpointPaginationMode, type EndpointQueryResult, type EndpointResponse, Enter, type FuzzyMatchResult, type GroupRenderer, type GroupRendererProps, type HandlerMap, type HotkeyHandler, type HotkeyMap, type HotkeySequence, type HotkeysConfig, type HotkeysContextValue, HotkeysProvider, type HotkeysProviderProps, Kbd, KbdLookup, KbdModal, KbdOmnibar, type KbdProps, Kbds, Key, type KeyCombination, type KeyCombinationDisplay, type KeyConflict, type KeyIconProps, type KeyIconType, type KeySeq, KeybindingEditor, type KeybindingEditorProps, type KeybindingEditorRenderProps, Left, LookupModal, ModifierIcon, type ModifierIconProps, type ModifierType, type Modifiers, Omnibar, type OmnibarActionEntry, type OmnibarEndpointConfig, OmnibarEndpointsRegistryContext, type OmnibarEndpointsRegistryValue, type OmnibarEntry, type OmnibarEntryBase, type OmnibarLinkEntry, type OmnibarProps, type OmnibarRenderProps, Option, type RecordHotkeyOptions, type RecordHotkeyResult, type RegisteredAction, type RegisteredEndpoint, type RemoteOmnibarResult, Right, type SeqElem, type SeqElemState, type SeqMatchState, type SequenceCompletion, SequenceModal, Shift, type ShortcutGroup, ShortcutsModal, type ShortcutsModalProps, type ShortcutsModalRenderProps, type TooltipComponent, type TooltipProps, type TwoColumnConfig, type TwoColumnRow, Up, type UseEditableHotkeysOptions, type UseEditableHotkeysResult, type UseHotkeysOptions, type UseHotkeysResult, type UseOmnibarOptions, type UseOmnibarResult, countPlaceholders, createTwoColumnRenderer, extractCaptures, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, formatKeySeq, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasConflicts, hasDigitPlaceholders, hotkeySequenceToKeySeq, isDigitPlaceholder, isMac, isModifierKey, isPlaceholderSentinel, isSequence, isShiftedSymbol, keySeqToHotkeySequence, normalizeKey, parseHotkeyString, parseKeySeq, searchActions, useAction, useActions, useActionsRegistry, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useOmnibar, useOmnibarEndpoint, useOmnibarEndpointsRegistry, useRecordHotkey };
+export { ACTION_LOOKUP, ACTION_MODAL, ACTION_OMNIBAR, type ActionConfig, type ActionDefinition, type ActionHandler, type ActionRegistry, type ActionSearchResult, ActionsRegistryContext, type ActionsRegistryValue, Alt, Backspace, type BindingInfo, Command, Ctrl, DEFAULT_SEQUENCE_TIMEOUT, DIGITS_PLACEHOLDER, DIGIT_PLACEHOLDER, Down, type EndpointPagination, type EndpointPaginationInfo, type EndpointPaginationMode, type EndpointQueryResult, type EndpointResponse, Enter, type FuzzyMatchResult, type GroupRenderer, type GroupRendererProps, type HandlerMap, type HotkeyHandler, type HotkeyMap, type HotkeySequence, type HotkeysConfig, type HotkeysContextValue, HotkeysProvider, type HotkeysProviderProps, Kbd, KbdLookup, KbdModal, KbdOmnibar, type KbdProps, Kbds, Key, type KeyCombination, type KeyCombinationDisplay, type KeyConflict, type KeyIconProps, type KeyIconType, type KeySeq, KeybindingEditor, type KeybindingEditorProps, type KeybindingEditorRenderProps, Left, LookupModal, ModifierIcon, type ModifierIconProps, type ModifierType, type Modifiers, Omnibar, type OmnibarActionEntry, type OmnibarEndpointAsyncConfig, type OmnibarEndpointConfig, type OmnibarEndpointConfigBase, type OmnibarEndpointSyncConfig, OmnibarEndpointsRegistryContext, type OmnibarEndpointsRegistryValue, type OmnibarEntry, type OmnibarEntryBase, type OmnibarLinkEntry, type OmnibarProps, type OmnibarRenderProps, Option, type RecordHotkeyOptions, type RecordHotkeyResult, type RegisteredAction, type RegisteredEndpoint, type RemoteOmnibarResult, Right, type SeqElem, type SeqElemState, type SeqMatchState, type SequenceCompletion, SequenceModal, Shift, type ShortcutGroup, ShortcutsModal, type ShortcutsModalProps, type ShortcutsModalRenderProps, type TooltipComponent, type TooltipProps, type TwoColumnConfig, type TwoColumnRow, Up, type UseEditableHotkeysOptions, type UseEditableHotkeysResult, type UseHotkeysOptions, type UseHotkeysResult, type UseOmnibarOptions, type UseOmnibarResult, countPlaceholders, createTwoColumnRenderer, extractCaptures, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, formatKeySeq, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasConflicts, hasDigitPlaceholders, hotkeySequenceToKeySeq, isDigitPlaceholder, isMac, isModifierKey, isPlaceholderSentinel, isSequence, isShiftedSymbol, keySeqToHotkeySequence, normalizeKey, parseHotkeyString, parseKeySeq, searchActions, useAction, useActions, useActionsRegistry, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useOmnibar, useOmnibarEndpoint, useOmnibarEndpointsRegistry, useRecordHotkey };
