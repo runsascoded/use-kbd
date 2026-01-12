@@ -407,7 +407,6 @@ export function useHotkeys(
   // Try to execute using KeySeq matching (with digit placeholders)
   const tryExecuteKeySeq = useCallback((
     matchKey: string,
-    matchState: SeqMatchState,
     captures: number[],
     e: KeyboardEvent,
   ): boolean => {
@@ -505,7 +504,7 @@ export function useHotkeys(
 
           if (isComplete) {
             const captures = extractMatchCaptures(finalizedState)
-            executed = tryExecuteKeySeq(key, finalizedState, captures, e)
+            executed = tryExecuteKeySeq(key, captures, e)
             if (executed) break
           }
         }
@@ -639,7 +638,7 @@ export function useHotkeys(
       // - Otherwise → enter sequence mode for disambiguation via SeqM
       if (completeMatches.length === 1 && !hasPartials) {
         const match = completeMatches[0]
-        if (tryExecuteKeySeq(match.key, match.state, match.captures, e)) {
+        if (tryExecuteKeySeq(match.key, match.captures, e)) {
           clearPending()
           return
         }

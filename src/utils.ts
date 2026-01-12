@@ -502,11 +502,7 @@ function keyMatchesPattern(pending: KeyCombination, pattern: KeyCombination): bo
   if (pending.key === pattern.key) return true
 
   // Check if pending is a digit and pattern expects a digit placeholder
-  if (/^[0-9]$/.test(pending.key) && (pattern.key === DIGIT_PLACEHOLDER || pattern.key === DIGITS_PLACEHOLDER)) {
-    return true
-  }
-
-  return false
+  return /^[0-9]$/.test(pending.key) && (pattern.key === DIGIT_PLACEHOLDER || pattern.key === DIGITS_PLACEHOLDER);
 }
 
 // ============================================================================
@@ -995,7 +991,7 @@ export function searchActions(
     const score =
       (labelMatch.matched ? labelMatch.score * 3 : 0) +
       (descMatch.matched ? descMatch.score * 1.5 : 0) +
-      (groupMatch.matched ? groupMatch.score * 1 : 0) +
+      (groupMatch.matched ? groupMatch.score : 0) +
       (idMatch.matched ? idMatch.score * 0.5 : 0) +
       keywordScore * 2
 

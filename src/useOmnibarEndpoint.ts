@@ -1,6 +1,6 @@
 import { useContext, useEffect, useRef } from 'react'
 import { OmnibarEndpointsRegistryContext } from './OmnibarEndpointsRegistry'
-import type { EndpointPagination, OmnibarEndpointConfig } from './types'
+import type { OmnibarEndpointConfig } from './types'
 
 /**
  * Register a remote omnibar endpoint.
