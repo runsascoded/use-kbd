@@ -280,11 +280,9 @@ export interface EndpointResponse {
 export type EndpointPaginationMode = 'scroll' | 'buttons' | 'none'
 
 /**
- * Configuration for a remote omnibar endpoint
+ * Base configuration shared by async and sync endpoints
  */
-export interface OmnibarEndpointConfig {
-  /** Fetch function that returns entries for a query */
-  fetch: (query: string, signal: AbortSignal, pagination: EndpointPagination) => Promise<EndpointResponse>
+export interface OmnibarEndpointConfigBase {
   /** Default group for entries from this endpoint */
   group?: string
   /** Priority for result ordering (higher = shown first, default: 0, local actions: 100) */
@@ -298,3 +296,28 @@ export interface OmnibarEndpointConfig {
   /** Pagination mode (default: 'none') */
   pagination?: EndpointPaginationMode
 }
+
+/**
+ * Configuration for an async omnibar endpoint (remote API calls)
+ */
+export interface OmnibarEndpointAsyncConfig extends OmnibarEndpointConfigBase {
+  /** Async fetch function for remote data sources */
+  fetch: (query: string, signal: AbortSignal, pagination: EndpointPagination) => Promise<EndpointResponse>
+  filter?: never
+}
+
+/**
+ * Configuration for a sync omnibar endpoint (in-memory filtering)
+ *
+ * Sync endpoints skip debouncing for instant results.
+ */
+export interface OmnibarEndpointSyncConfig extends OmnibarEndpointConfigBase {
+  /** Sync filter function for in-memory data sources */
+  filter: (query: string, pagination: EndpointPagination) => EndpointResponse
+  fetch?: never
+}
+
+/**
+ * Configuration for an omnibar endpoint (async or sync)
+ */
+export type OmnibarEndpointConfig = OmnibarEndpointAsyncConfig | OmnibarEndpointSyncConfig

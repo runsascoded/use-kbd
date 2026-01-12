@@ -501,6 +501,33 @@ test.describe('Data Table Demo', () => {
     await expect(page.locator('.kbd-omnibar-result-category', { hasText: 'Table Rows' }).first()).toBeVisible()
     await expect(page.locator('.kbd-omnibar-result-label', { hasText: 'Alpha-1' })).toBeVisible()
   })
+
+  test('sync filter endpoint shows instant results', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    // Open omnibar
+    await page.keyboard.press('Meta+k')
+    await page.waitForSelector('.kbd-omnibar', { timeout: 5000 })
+
+    // Type "active" to filter - sync endpoint should respond instantly
+    await page.keyboard.type('active')
+    await page.waitForTimeout(100) // Minimal wait - sync should be near-instant
+
+    // Quick Filters group should appear (from sync filter endpoint)
+    await expect(page.locator('.kbd-omnibar-result-category', { hasText: 'Quick Filters' }).first()).toBeVisible()
+    await expect(page.locator('.kbd-omnibar-result-label', { hasText: 'Filter: active' })).toBeVisible()
+
+    // Click the filter to apply it
+    await page.locator('.kbd-omnibar-result-label', { hasText: 'Filter: active' }).click()
+    await page.waitForTimeout(200)
+
+    // Omnibar should close and table should be filtered
+    await expect(page.locator('.kbd-omnibar')).not.toBeVisible()
+
+    // Verify table only shows active rows (status is in 2nd column)
+    const statusCell = page.locator('.data-table tbody tr:first-child td:nth-child(2)')
+    await expect(statusCell).toContainText('active')
+  })
 })
 
 test.describe('Canvas Demo', () => {

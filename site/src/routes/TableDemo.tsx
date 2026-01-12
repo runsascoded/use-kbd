@@ -223,6 +223,37 @@ function DataTable() {
     pagination: 'scroll',
   }), [data, navigateToRow]))
 
+  // Sync endpoint for status filtering (demonstrates filter API for in-memory data)
+  useOmnibarEndpoint('table-status', useMemo(() => ({
+    filter: (query, pagination) => {
+      const lowerQuery = query.toLowerCase()
+      const statusMatches = STATUSES
+        .filter(status => status.includes(lowerQuery))
+        .map(status => {
+          const count = data.filter(row => row.status === status).length
+          return {
+            id: `status-${status}`,
+            label: `Filter: ${status}`,
+            description: `${count} rows`,
+            group: 'Quick Filters',
+            handler: () => {
+              // Filter to show only rows with this status
+              setData(INITIAL_DATA.filter(row => row.status === status))
+            },
+          }
+        })
+      return {
+        entries: statusMatches.slice(pagination.offset, pagination.offset + pagination.limit),
+        total: statusMatches.length,
+        hasMore: false,
+      }
+    },
+    group: 'Quick Filters',
+    priority: 60, // Between local actions and table rows
+    minQueryLength: 0,
+    pageSize: 5,
+  }), [data]))
+
   // Sort handlers
   const sortNameAsc = useCallback(() => {
     setSortColumn('name')

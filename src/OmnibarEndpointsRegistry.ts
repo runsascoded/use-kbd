@@ -1,9 +1,10 @@
 import { createContext, useCallback, useMemo, useRef, useState } from 'react'
-import type { EndpointPagination, OmnibarEndpointConfig, OmnibarEntry } from './types'
+import type { EndpointPagination, OmnibarEndpointAsyncConfig, OmnibarEntry } from './types'
 
 export interface RegisteredEndpoint {
   id: string
-  config: OmnibarEndpointConfig
+  /** Internal config is always async (useOmnibarEndpoint normalizes sync endpoints) */
+  config: OmnibarEndpointAsyncConfig
   registeredAt: number
 }
 
@@ -22,7 +23,7 @@ export interface EndpointQueryResult {
 
 export interface OmnibarEndpointsRegistryValue {
   /** Register an endpoint. Called by useOmnibarEndpoint on mount. */
-  register: (id: string, config: OmnibarEndpointConfig) => void
+  register: (id: string, config: OmnibarEndpointAsyncConfig) => void
   /** Unregister an endpoint. Called by useOmnibarEndpoint on unmount. */
   unregister: (id: string) => void
   /** Currently registered endpoints */
@@ -44,7 +45,7 @@ export function useOmnibarEndpointsRegistry(): OmnibarEndpointsRegistryValue {
   const endpointsRef = useRef<Map<string, RegisteredEndpoint>>(new Map())
   const [endpointsVersion, setEndpointsVersion] = useState(0)
 
-  const register = useCallback((id: string, config: OmnibarEndpointConfig) => {
+  const register = useCallback((id: string, config: OmnibarEndpointAsyncConfig) => {
     endpointsRef.current.set(id, {
       id,
       config,
