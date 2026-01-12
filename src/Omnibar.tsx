@@ -333,7 +333,7 @@ export function Omnibar({
     )
 
     // Observe all sentinel elements
-    for (const [endpointId, sentinel] of sentinelRefs.current) {
+    for (const [_endpointId, sentinel] of sentinelRefs.current) {
       if (sentinel) {
         observer.observe(sentinel)
       }

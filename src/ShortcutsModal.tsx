@@ -5,7 +5,7 @@ import { renderModifierIcons, renderKeyContent } from './KeyElements'
 import { useAction } from './useAction'
 import { useHotkeys } from './useHotkeys'
 import { useRecordHotkey } from './useRecordHotkey'
-import { findConflicts, formatCombination, getActionBindings, parseHotkeyString, parseKeySeq, formatKeySeq } from './utils'
+import { findConflicts, formatCombination, getActionBindings, parseHotkeyString, parseKeySeq } from './utils'
 import type { ActionRegistry, HotkeySequence, KeyCombination, KeyCombinationDisplay, SeqElem } from './types'
 import type { HotkeyMap } from './useHotkeys'
 
@@ -354,7 +354,6 @@ function BindingDisplay({
 }) {
   const sequence = parseHotkeyString(binding)
   const keySeq = parseKeySeq(binding)
-  const _display = formatKeySeq(keySeq)
 
   let kbdClassName = 'kbd-kbd'
   if (editable && !isEditing) kbdClassName += ' editable'
@@ -601,20 +600,18 @@ export function ShortcutsModal({
     }
   }, [onCloseProp, ctx])
 
-  const _open = useCallback(() => {
-    if (ctx?.openModal) {
-      ctx.openModal()
-    } else {
-      setInternalIsOpen(true)
-    }
-  }, [ctx])
-
   // Register the shortcuts modal trigger action
   useAction(ACTION_MODAL, {
     label: 'Show shortcuts',
     group: 'Global',
     defaultBindings: defaultBinding ? [defaultBinding] : [],
-    handler: useCallback(() => ctx?.toggleModal() ?? setInternalIsOpen(prev => !prev), [ctx?.toggleModal]),
+    handler: useCallback(() => {
+      if (ctx) {
+        ctx.toggleModal()
+      } else {
+        setInternalIsOpen(prev => !prev)
+      }
+    }, [ctx]),
   })
 
   // Check if a new binding would conflict
