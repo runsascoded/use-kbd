@@ -24,8 +24,11 @@
   --border-tertiary: #555;
   --link-color: #646cff;
   --link-hover: #535bf2;
-  --kbd-bg: #333;
   --shadow: rgba(0, 0, 0, 0.3);
+
+  // Override use-kbd modal background to match this app's palette.
+  // The library ships sensible defaults, but you can tweak them like this.
+  --kbd-bg: #333;
 
   color-scheme: dark;
   color: var(--text-primary);
@@ -47,8 +50,9 @@
   --border-tertiary: #bbb;
   --link-color: #4f46e5;
   --link-hover: #4338ca;
-  --kbd-bg: #eee;
   --shadow: rgba(0, 0, 0, 0.15);
+
+  --kbd-bg: #eee;
 
   color-scheme: light;
   color: var(--text-primary);
