@@ -342,7 +342,7 @@
 
 @keyframes kbd-timeout {
   from { width: 100%; }
-  to { width: 0%; }
+  to { width: 0; }
 }
 
 /* === Omnibar === */
@@ -695,6 +695,11 @@
 .kbd-lookup-result.selected {
   outline: 2px solid var(--kbd-accent);
   outline-offset: -2px;
+}
+
+.kbd-lookup-binding {
+  display: flex;
+  gap: 4px;
 }
 
 .kbd-lookup-labels {

@@ -70,9 +70,7 @@ function useActionsRegistry(options = {}) {
   const filterRedundantOverrides = useCallback((overrides2) => {
     const filtered = {};
     for (const [key, actionOrActions] of Object.entries(overrides2)) {
-      if (actionOrActions === "") {
-        continue;
-      } else if (Array.isArray(actionOrActions)) {
+      if (actionOrActions === "") ; else if (Array.isArray(actionOrActions)) {
         const nonDefaultActions = actionOrActions.filter((a) => !isDefaultBinding(key, a));
         if (nonDefaultActions.length > 0) {
           filtered[key] = nonDefaultActions.length === 1 ? nonDefaultActions[0] : nonDefaultActions;
@@ -163,9 +161,7 @@ function useActionsRegistry(options = {}) {
       }
     }
     for (const [key, actionOrActions] of Object.entries(overrides)) {
-      if (actionOrActions === "") {
-        continue;
-      } else {
+      if (actionOrActions === "") ; else {
         const actions2 = Array.isArray(actionOrActions) ? actionOrActions : [actionOrActions];
         for (const actionId of actions2) {
           addToKey(key, actionId);
@@ -382,7 +378,11 @@ function isShiftedSymbol(key) {
 }
 function isMac() {
   if (typeof navigator === "undefined") return false;
-  return /Mac|iPod|iPhone|iPad/.test(navigator.platform);
+  const platform = navigator.userAgentData?.platform;
+  if (platform) {
+    return platform === "macOS" || platform === "iOS";
+  }
+  return /Mac|iPhone|iPad|iPod/.test(navigator.userAgent);
 }
 function normalizeKey(key) {
   const keyMap = {
@@ -557,13 +557,6 @@ function parseHotkeyString(hotkeyStr) {
   const parts = hotkeyStr.trim().split(/\s+/);
   return parts.map(parseSingleCombination);
 }
-function parseCombinationId(id) {
-  const sequence = parseHotkeyString(id);
-  if (sequence.length === 0) {
-    return { key: "", modifiers: { ctrl: false, alt: false, shift: false, meta: false } };
-  }
-  return sequence[0];
-}
 var NO_MODIFIERS = { ctrl: false, alt: false, shift: false, meta: false };
 function parseSeqElem(str) {
   if (str === "\\d") {
@@ -684,10 +677,7 @@ function keyMatchesPattern(pending, pattern) {
     return false;
   }
   if (pending.key === pattern.key) return true;
-  if (/^[0-9]$/.test(pending.key) && (pattern.key === DIGIT_PLACEHOLDER || pattern.key === DIGITS_PLACEHOLDER)) {
-    return true;
-  }
-  return false;
+  return /^[0-9]$/.test(pending.key) && (pattern.key === DIGIT_PLACEHOLDER || pattern.key === DIGITS_PLACEHOLDER);
 }
 function isDigitKey(key) {
   return /^[0-9]$/.test(key);
@@ -867,6 +857,7 @@ function getSequenceCompletions(pendingKeys, keymap) {
       const nextKeys = formatKeySeq(remainingKeySeq).display;
       completions.push({
         nextKeys,
+        nextKeySeq: remainingKeySeq,
         fullSequence: hotkeyStr,
         display: formatKeySeq(keySeq),
         actions,
@@ -969,7 +960,7 @@ function searchActions(query, actions, keymap) {
     }
     const matched = labelMatch.matched || descMatch.matched || groupMatch.matched || idMatch.matched || keywordScore > 0;
     if (!matched && query) continue;
-    const score = (labelMatch.matched ? labelMatch.score * 3 : 0) + (descMatch.matched ? descMatch.score * 1.5 : 0) + (groupMatch.matched ? groupMatch.score * 1 : 0) + (idMatch.matched ? idMatch.score * 0.5 : 0) + keywordScore * 2;
+    const score = (labelMatch.matched ? labelMatch.score * 3 : 0) + (descMatch.matched ? descMatch.score * 1.5 : 0) + (groupMatch.matched ? groupMatch.score : 0) + (idMatch.matched ? idMatch.score * 0.5 : 0) + keywordScore * 2;
     results.push({
       id,
       action,
@@ -1172,7 +1163,7 @@ function useHotkeys(keymap, handlers, options = {}) {
     }
     return false;
   }, [preventDefault, stopPropagation]);
-  const tryExecuteKeySeq = useCallback((matchKey, matchState, captures, e) => {
+  const tryExecuteKeySeq = useCallback((matchKey, captures, e) => {
     for (const entry of parsedKeymapRef.current) {
       if (entry.key === matchKey) {
         for (const action of entry.actions) {
@@ -1239,7 +1230,7 @@ function useHotkeys(keymap, handlers, options = {}) {
           });
           if (isComplete) {
             const captures = extractMatchCaptures(finalizedState);
-            executed = tryExecuteKeySeq(key, finalizedState, captures, e);
+            executed = tryExecuteKeySeq(key, captures, e);
             if (executed) break;
           }
         }
@@ -1332,7 +1323,7 @@ function useHotkeys(keymap, handlers, options = {}) {
       }
       if (completeMatches.length === 1 && !hasPartials) {
         const match = completeMatches[0];
-        if (tryExecuteKeySeq(match.key, match.state, match.captures, e)) {
+        if (tryExecuteKeySeq(match.key, match.captures, e)) {
           clearPending();
           return;
         }
@@ -2013,7 +2004,6 @@ function useRecordHotkey(options = {}) {
     };
   }, [isRecording, preventDefault, sequenceTimeout, clearTimeout_, submit, cancel, onCapture, onTab, onShiftTab]);
   const display = sequence ? formatCombination(sequence) : null;
-  const combination = sequence && sequence.length > 0 ? sequence[0] : null;
   return {
     isRecording,
     startRecording,
@@ -2023,9 +2013,7 @@ function useRecordHotkey(options = {}) {
     display,
     pendingKeys,
     activeKeys,
-    sequenceTimeout,
-    combination
-    // deprecated
+    sequenceTimeout
   };
 }
 function useEditableHotkeys(defaults, handlers, options = {}) {
@@ -2743,7 +2731,6 @@ var Alt = forwardRef(
   )
 );
 Alt.displayName = "Alt";
-var isMac2 = typeof navigator !== "undefined" && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
 function getModifierIcon(modifier) {
   switch (modifier) {
     case "meta":
@@ -2755,7 +2742,7 @@ function getModifierIcon(modifier) {
     case "opt":
       return Option;
     case "alt":
-      return isMac2 ? Option : Alt;
+      return isMac() ? Option : Alt;
   }
 }
 var ModifierIcon = forwardRef(
@@ -2765,28 +2752,47 @@ var ModifierIcon = forwardRef(
   }
 );
 ModifierIcon.displayName = "ModifierIcon";
-function KeyCombo({ combo }) {
-  const { key, modifiers } = combo;
-  const parts = [];
+function renderModifierIcons(modifiers, className = "kbd-modifier-icon") {
+  const icons = [];
   if (modifiers.meta) {
-    parts.push(/* @__PURE__ */ jsx(ModifierIcon, { modifier: "meta", className: "kbd-modifier-icon" }, "meta"));
+    icons.push(/* @__PURE__ */ jsx(ModifierIcon, { modifier: "meta", className }, "meta"));
   }
   if (modifiers.ctrl) {
-    parts.push(/* @__PURE__ */ jsx(ModifierIcon, { modifier: "ctrl", className: "kbd-modifier-icon" }, "ctrl"));
+    icons.push(/* @__PURE__ */ jsx(ModifierIcon, { modifier: "ctrl", className }, "ctrl"));
   }
   if (modifiers.alt) {
-    parts.push(/* @__PURE__ */ jsx(ModifierIcon, { modifier: "alt", className: "kbd-modifier-icon" }, "alt"));
+    icons.push(/* @__PURE__ */ jsx(ModifierIcon, { modifier: "alt", className }, "alt"));
   }
   if (modifiers.shift) {
-    parts.push(/* @__PURE__ */ jsx(ModifierIcon, { modifier: "shift", className: "kbd-modifier-icon" }, "shift"));
+    icons.push(/* @__PURE__ */ jsx(ModifierIcon, { modifier: "shift", className }, "shift"));
   }
-  const KeyIcon = getKeyIcon(key);
-  if (KeyIcon) {
-    parts.push(/* @__PURE__ */ jsx(KeyIcon, { className: "kbd-key-icon" }, "key"));
-  } else {
-    parts.push(/* @__PURE__ */ jsx("span", { children: formatKeyForDisplay(key) }, "key"));
+  return icons;
+}
+function renderKeyContent(key, iconClassName = "kbd-key-icon") {
+  const Icon = getKeyIcon(key);
+  const displayKey = formatKeyForDisplay(key);
+  return Icon ? /* @__PURE__ */ jsx(Icon, { className: iconClassName }) : /* @__PURE__ */ jsx(Fragment, { children: displayKey });
+}
+function renderSeqElem(elem, index, kbdClassName = "kbd-kbd") {
+  if (elem.type === "digit") {
+    return /* @__PURE__ */ jsx("kbd", { className: kbdClassName, children: "\u27E8#\u27E9" }, index);
   }
-  return /* @__PURE__ */ jsx(Fragment, { children: parts });
+  if (elem.type === "digits") {
+    return /* @__PURE__ */ jsx("kbd", { className: kbdClassName, children: "\u27E8##\u27E9" }, index);
+  }
+  return /* @__PURE__ */ jsxs("kbd", { className: kbdClassName, children: [
+    renderModifierIcons(elem.modifiers),
+    renderKeyContent(elem.key)
+  ] }, index);
+}
+function renderKeySeq(keySeq, kbdClassName = "kbd-kbd") {
+  return keySeq.map((elem, i) => renderSeqElem(elem, i, kbdClassName));
+}
+function KeyCombo({ combo }) {
+  return /* @__PURE__ */ jsxs(Fragment, { children: [
+    renderModifierIcons(combo.modifiers),
+    renderKeyContent(combo.key)
+  ] });
 }
 function SeqElemDisplay({ elem }) {
   if (elem.type === "digit") {
@@ -2938,7 +2944,7 @@ function KeybindingEditor({
     return Array.from(allActions).map((action) => {
       const key = actionMap.get(action) ?? defaultActionMap.get(action) ?? "";
       const defaultKey = defaultActionMap.get(action) ?? "";
-      const combo = parseCombinationId(key);
+      const combo = parseHotkeyString(key);
       const display = formatCombination(combo);
       const conflictActions = conflicts.get(key);
       return {
@@ -3230,7 +3236,7 @@ function LookupModal({ defaultBinding = "meta+shift+k" } = {}) {
         },
         onMouseEnter: () => setSelectedIndex(index),
         children: [
-          /* @__PURE__ */ jsx("kbd", { className: "kbd-kbd", children: result.display }),
+          /* @__PURE__ */ jsx("span", { className: "kbd-lookup-binding", children: renderKeySeq(result.keySeq) }),
           /* @__PURE__ */ jsx("span", { className: "kbd-lookup-labels", children: result.labels.join(", ") })
         ]
       },
@@ -3395,7 +3401,7 @@ function Omnibar({
         threshold: 0
       }
     );
-    for (const [endpointId, sentinel] of sentinelRefs.current) {
+    for (const [_endpointId, sentinel] of sentinelRefs.current) {
       if (sentinel) {
         observer.observe(sentinel);
       }
@@ -3612,12 +3618,11 @@ function SequenceModal() {
     document.addEventListener("keydown", handleKeyDown, true);
     return () => document.removeEventListener("keydown", handleKeyDown, true);
   }, [isAwaitingSequence, pendingKeys.length, itemCount, executeSelected]);
-  const renderKey = useCallback((key, index) => {
-    const Icon = getKeyIcon(key);
-    const displayKey = formatKeyForDisplay(key);
+  const renderKey = useCallback((combo, index) => {
+    const { key, modifiers } = combo;
     return /* @__PURE__ */ jsxs("kbd", { className: "kbd-kbd", children: [
-      Icon ? /* @__PURE__ */ jsx(Icon, { className: "kbd-key-icon" }) : null,
-      Icon ? null : displayKey
+      renderModifierIcons(modifiers),
+      renderKeyContent(key)
     ] }, index);
   }, []);
   const getActionLabel = (actionId, captures) => {
@@ -3639,7 +3644,7 @@ function SequenceModal() {
   }
   return /* @__PURE__ */ jsx("div", { className: "kbd-sequence-backdrop", onClick: cancelSequence, children: /* @__PURE__ */ jsxs("div", { className: "kbd-sequence", onClick: (e) => e.stopPropagation(), children: [
     /* @__PURE__ */ jsxs("div", { className: "kbd-sequence-current", children: [
-      /* @__PURE__ */ jsx("div", { className: "kbd-sequence-keys", children: pendingKeys.map((combo, i) => renderKey(combo.key, i)) }),
+      /* @__PURE__ */ jsx("div", { className: "kbd-sequence-keys", children: pendingKeys.map((combo, i) => renderKey(combo, i)) }),
       /* @__PURE__ */ jsx("span", { className: "kbd-sequence-ellipsis", children: "\u2026" })
     ] }),
     shouldShowTimeout && /* @__PURE__ */ jsx(
@@ -3655,7 +3660,7 @@ function SequenceModal() {
       {
         className: `kbd-sequence-completion ${index === selectedIndex ? "selected" : ""} ${item.isComplete ? "complete" : ""}`,
         children: [
-          /* @__PURE__ */ jsx("kbd", { className: "kbd-kbd", children: item.displayKey }),
+          item.isComplete ? /* @__PURE__ */ jsx("kbd", { className: "kbd-kbd", children: "\u21B5" }) : item.completion.nextKeySeq ? renderKeySeq(item.completion.nextKeySeq) : /* @__PURE__ */ jsx("kbd", { className: "kbd-kbd", children: item.displayKey }),
           /* @__PURE__ */ jsx("span", { className: "kbd-sequence-arrow", children: "\u2192" }),
           /* @__PURE__ */ jsx("span", { className: "kbd-sequence-actions", children: getActionLabel(item.action, item.completion.captures) })
         ]
@@ -3743,27 +3748,10 @@ function KeyDisplay({
   combo,
   className
 }) {
-  const { key, modifiers } = combo;
-  const parts = [];
-  if (modifiers.meta) {
-    parts.push(/* @__PURE__ */ jsx(ModifierIcon, { modifier: "meta", className: "kbd-modifier-icon" }, "meta"));
-  }
-  if (modifiers.ctrl) {
-    parts.push(/* @__PURE__ */ jsx(ModifierIcon, { modifier: "ctrl", className: "kbd-modifier-icon" }, "ctrl"));
-  }
-  if (modifiers.alt) {
-    parts.push(/* @__PURE__ */ jsx(ModifierIcon, { modifier: "alt", className: "kbd-modifier-icon" }, "alt"));
-  }
-  if (modifiers.shift) {
-    parts.push(/* @__PURE__ */ jsx(ModifierIcon, { modifier: "shift", className: "kbd-modifier-icon" }, "shift"));
-  }
-  const KeyIcon = getKeyIcon(key);
-  if (KeyIcon) {
-    parts.push(/* @__PURE__ */ jsx(KeyIcon, { className: "kbd-key-icon" }, "key"));
-  } else {
-    parts.push(/* @__PURE__ */ jsx("span", { children: formatKeyForDisplay(key) }, "key"));
-  }
-  return /* @__PURE__ */ jsx("span", { className, children: parts });
+  return /* @__PURE__ */ jsxs("span", { className, children: [
+    renderModifierIcons(combo.modifiers),
+    renderKeyContent(combo.key)
+  ] });
 }
 function SeqElemDisplay2({ elem, className }) {
   const Tooltip = useContext(TooltipContext);
@@ -3791,7 +3779,6 @@ function BindingDisplay2({
 }) {
   const sequence = parseHotkeyString(binding);
   const keySeq = parseKeySeq(binding);
-  formatKeySeq(keySeq);
   let kbdClassName = "kbd-kbd";
   if (editable && !isEditing) kbdClassName += " editable";
   if (isEditing) kbdClassName += " editing";
@@ -3964,18 +3951,17 @@ function ShortcutsModal({
       ctx.closeModal();
     }
   }, [onCloseProp, ctx]);
-  useCallback(() => {
-    if (ctx?.openModal) {
-      ctx.openModal();
-    } else {
-      setInternalIsOpen(true);
-    }
-  }, [ctx]);
   useAction(ACTION_MODAL, {
     label: "Show shortcuts",
     group: "Global",
     defaultBindings: defaultBinding ? [defaultBinding] : [],
-    handler: useCallback(() => ctx?.toggleModal() ?? setInternalIsOpen((prev) => !prev), [ctx?.toggleModal])
+    handler: useCallback(() => {
+      if (ctx) {
+        ctx.toggleModal();
+      } else {
+        setInternalIsOpen((prev) => !prev);
+      }
+    }, [ctx])
   });
   const checkConflict = useCallback((newKey, forAction) => {
     const existingActions = keymap[newKey];
@@ -4419,6 +4405,6 @@ function ShortcutsModal({
   ] }) }) });
 }
 
-export { ACTION_LOOKUP, ACTION_MODAL, ACTION_OMNIBAR, ActionsRegistryContext, Alt, Backspace, Command, Ctrl, DEFAULT_SEQUENCE_TIMEOUT, DIGITS_PLACEHOLDER, DIGIT_PLACEHOLDER, Down, Enter, HotkeysProvider, Kbd, KbdLookup, KbdModal, KbdOmnibar, Kbds, Key, KeybindingEditor, Left, LookupModal, ModifierIcon, Omnibar, OmnibarEndpointsRegistryContext, Option, Right, SequenceModal, Shift, ShortcutsModal, Up, countPlaceholders, createTwoColumnRenderer, extractCaptures, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, formatKeySeq, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasConflicts, hasDigitPlaceholders, hotkeySequenceToKeySeq, isDigitPlaceholder, isMac, isModifierKey, isPlaceholderSentinel, isSequence, isShiftedSymbol, keySeqToHotkeySequence, normalizeKey, parseCombinationId, parseHotkeyString, parseKeySeq, searchActions, useAction, useActions, useActionsRegistry, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useOmnibar, useOmnibarEndpoint, useOmnibarEndpointsRegistry, useRecordHotkey };
+export { ACTION_LOOKUP, ACTION_MODAL, ACTION_OMNIBAR, ActionsRegistryContext, Alt, Backspace, Command, Ctrl, DEFAULT_SEQUENCE_TIMEOUT, DIGITS_PLACEHOLDER, DIGIT_PLACEHOLDER, Down, Enter, HotkeysProvider, Kbd, KbdLookup, KbdModal, KbdOmnibar, Kbds, Key, KeybindingEditor, Left, LookupModal, ModifierIcon, Omnibar, OmnibarEndpointsRegistryContext, Option, Right, SequenceModal, Shift, ShortcutsModal, Up, countPlaceholders, createTwoColumnRenderer, extractCaptures, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, formatKeySeq, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasConflicts, hasDigitPlaceholders, hotkeySequenceToKeySeq, isDigitPlaceholder, isMac, isModifierKey, isPlaceholderSentinel, isSequence, isShiftedSymbol, keySeqToHotkeySequence, normalizeKey, parseHotkeyString, parseKeySeq, searchActions, useAction, useActions, useActionsRegistry, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useOmnibar, useOmnibarEndpoint, useOmnibarEndpointsRegistry, useRecordHotkey };
 //# sourceMappingURL=index.js.map
 //# sourceMappingURL=index.js.map

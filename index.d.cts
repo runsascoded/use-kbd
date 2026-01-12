@@ -24,7 +24,6 @@ interface KeyCombination {
  * Represents a hotkey - either a single key or a sequence of keys.
  * Single key: [{ key: 'k', modifiers: {...} }]
  * Sequence: [{ key: '2', ... }, { key: 'w', ... }]
- * @deprecated Use KeySeq for new code
  */
 type HotkeySequence = KeyCombination[];
 /**
@@ -118,10 +117,6 @@ interface RecordHotkeyResult {
     activeKeys: KeyCombination | null;
     /** The timeout duration for sequences (ms) */
     sequenceTimeout: number;
-    /**
-     * @deprecated Use `sequence` instead
-     */
-    combination: KeyCombination | null;
 }
 /**
  * Options for useRecordHotkey
@@ -188,6 +183,8 @@ interface ActionSearchResult {
 interface SequenceCompletion {
     /** The next key(s) needed to complete this sequence (empty string if complete) */
     nextKeys: string;
+    /** Structured next keys for rendering with icons (undefined if complete) */
+    nextKeySeq?: KeySeq;
     /** The full hotkey string */
     fullSequence: string;
     /** Display format for the full sequence */
@@ -989,7 +986,7 @@ declare function Omnibar({ actions: actionsProp, handlers: handlersProp, keymap:
  */
 declare function isShiftedSymbol(key: string): boolean;
 /**
- * Detect if running on macOS
+ * Detect if running on macOS/iOS
  */
 declare function isMac(): boolean;
 /**
@@ -1039,11 +1036,6 @@ declare function isSequence(hotkeyStr: string): boolean;
  * Handles both single keys ("ctrl+k") and sequences ("2 w", "ctrl+k ctrl+c")
  */
 declare function parseHotkeyString(hotkeyStr: string): HotkeySequence;
-/**
- * Parse a combination ID back to a KeyCombination (single key only)
- * @deprecated Use parseHotkeyString for sequence support
- */
-declare function parseCombinationId(id: string): KeyCombination;
 /**
  * Parse a hotkey string to a KeySeq (new sequence type with digit placeholders).
  * Handles both single keys ("ctrl+k") and sequences ("2 w", "\\d+ d")
@@ -1624,7 +1616,7 @@ declare function Enter({ className, style }: KeyIconProps): react_jsx_runtime.JS
 declare function Backspace({ className, style }: KeyIconProps): react_jsx_runtime.JSX.Element;
 type KeyIconType = 'arrowup' | 'arrowdown' | 'arrowleft' | 'arrowright' | 'enter' | 'backspace' | 'tab';
 /** Get the icon component for a key, or null if no icon exists */
-declare function getKeyIcon(key: string): React.ComponentType<KeyIconProps> | null;
+declare function getKeyIcon(key: string): ComponentType<KeyIconProps> | null;
 
 /**
  * Default timeout for key sequences (no timeout).
@@ -1639,4 +1631,4 @@ declare const ACTION_MODAL = "__hotkeys:modal";
 declare const ACTION_OMNIBAR = "__hotkeys:omnibar";
 declare const ACTION_LOOKUP = "__hotkeys:lookup";
 
-export { ACTION_LOOKUP, ACTION_MODAL, ACTION_OMNIBAR, type ActionConfig, type ActionDefinition, type ActionHandler, type ActionRegistry, type ActionSearchResult, ActionsRegistryContext, type ActionsRegistryValue, Alt, Backspace, type BindingInfo, Command, Ctrl, DEFAULT_SEQUENCE_TIMEOUT, DIGITS_PLACEHOLDER, DIGIT_PLACEHOLDER, Down, type EndpointPagination, type EndpointPaginationInfo, type EndpointPaginationMode, type EndpointQueryResult, type EndpointResponse, Enter, type FuzzyMatchResult, type GroupRenderer, type GroupRendererProps, type HandlerMap, type HotkeyHandler, type HotkeyMap, type HotkeySequence, type HotkeysConfig, type HotkeysContextValue, HotkeysProvider, type HotkeysProviderProps, Kbd, KbdLookup, KbdModal, KbdOmnibar, type KbdProps, Kbds, Key, type KeyCombination, type KeyCombinationDisplay, type KeyConflict, type KeyIconProps, type KeyIconType, type KeySeq, KeybindingEditor, type KeybindingEditorProps, type KeybindingEditorRenderProps, Left, LookupModal, ModifierIcon, type ModifierIconProps, type ModifierType, type Modifiers, Omnibar, type OmnibarActionEntry, type OmnibarEndpointConfig, OmnibarEndpointsRegistryContext, type OmnibarEndpointsRegistryValue, type OmnibarEntry, type OmnibarEntryBase, type OmnibarLinkEntry, type OmnibarProps, type OmnibarRenderProps, Option, type RecordHotkeyOptions, type RecordHotkeyResult, type RegisteredAction, type RegisteredEndpoint, type RemoteOmnibarResult, Right, type SeqElem, type SeqElemState, type SeqMatchState, type SequenceCompletion, SequenceModal, Shift, type ShortcutGroup, ShortcutsModal, type ShortcutsModalProps, type ShortcutsModalRenderProps, type TooltipComponent, type TooltipProps, type TwoColumnConfig, type TwoColumnRow, Up, type UseEditableHotkeysOptions, type UseEditableHotkeysResult, type UseHotkeysOptions, type UseHotkeysResult, type UseOmnibarOptions, type UseOmnibarResult, countPlaceholders, createTwoColumnRenderer, extractCaptures, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, formatKeySeq, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasConflicts, hasDigitPlaceholders, hotkeySequenceToKeySeq, isDigitPlaceholder, isMac, isModifierKey, isPlaceholderSentinel, isSequence, isShiftedSymbol, keySeqToHotkeySequence, normalizeKey, parseCombinationId, parseHotkeyString, parseKeySeq, searchActions, useAction, useActions, useActionsRegistry, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useOmnibar, useOmnibarEndpoint, useOmnibarEndpointsRegistry, useRecordHotkey };
+export { ACTION_LOOKUP, ACTION_MODAL, ACTION_OMNIBAR, type ActionConfig, type ActionDefinition, type ActionHandler, type ActionRegistry, type ActionSearchResult, ActionsRegistryContext, type ActionsRegistryValue, Alt, Backspace, type BindingInfo, Command, Ctrl, DEFAULT_SEQUENCE_TIMEOUT, DIGITS_PLACEHOLDER, DIGIT_PLACEHOLDER, Down, type EndpointPagination, type EndpointPaginationInfo, type EndpointPaginationMode, type EndpointQueryResult, type EndpointResponse, Enter, type FuzzyMatchResult, type GroupRenderer, type GroupRendererProps, type HandlerMap, type HotkeyHandler, type HotkeyMap, type HotkeySequence, type HotkeysConfig, type HotkeysContextValue, HotkeysProvider, type HotkeysProviderProps, Kbd, KbdLookup, KbdModal, KbdOmnibar, type KbdProps, Kbds, Key, type KeyCombination, type KeyCombinationDisplay, type KeyConflict, type KeyIconProps, type KeyIconType, type KeySeq, KeybindingEditor, type KeybindingEditorProps, type KeybindingEditorRenderProps, Left, LookupModal, ModifierIcon, type ModifierIconProps, type ModifierType, type Modifiers, Omnibar, type OmnibarActionEntry, type OmnibarEndpointConfig, OmnibarEndpointsRegistryContext, type OmnibarEndpointsRegistryValue, type OmnibarEntry, type OmnibarEntryBase, type OmnibarLinkEntry, type OmnibarProps, type OmnibarRenderProps, Option, type RecordHotkeyOptions, type RecordHotkeyResult, type RegisteredAction, type RegisteredEndpoint, type RemoteOmnibarResult, Right, type SeqElem, type SeqElemState, type SeqMatchState, type SequenceCompletion, SequenceModal, Shift, type ShortcutGroup, ShortcutsModal, type ShortcutsModalProps, type ShortcutsModalRenderProps, type TooltipComponent, type TooltipProps, type TwoColumnConfig, type TwoColumnRow, Up, type UseEditableHotkeysOptions, type UseEditableHotkeysResult, type UseHotkeysOptions, type UseHotkeysResult, type UseOmnibarOptions, type UseOmnibarResult, countPlaceholders, createTwoColumnRenderer, extractCaptures, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, formatKeySeq, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasConflicts, hasDigitPlaceholders, hotkeySequenceToKeySeq, isDigitPlaceholder, isMac, isModifierKey, isPlaceholderSentinel, isSequence, isShiftedSymbol, keySeqToHotkeySequence, normalizeKey, parseHotkeyString, parseKeySeq, searchActions, useAction, useActions, useActionsRegistry, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useOmnibar, useOmnibarEndpoint, useOmnibarEndpointsRegistry, useRecordHotkey };
