@@ -39,6 +39,7 @@ export interface LookupModalProps {
 export function LookupModal({ defaultBinding = 'meta+shift+k' }: LookupModalProps = {}) {
   const {
     isLookupOpen,
+    lookupInitialKeys,
     closeLookup,
     toggleLookup,
     registry,
@@ -161,13 +162,13 @@ export function LookupModal({ defaultBinding = 'meta+shift+k' }: LookupModalProp
     return formatCombination(pendingKeys).display
   }, [pendingKeys])
 
-  // Reset state when modal opens/closes
+  // Reset state when modal opens/closes, using initial keys if provided
   useEffect(() => {
     if (isLookupOpen) {
-      setPendingKeys([])
+      setPendingKeys(lookupInitialKeys)
       setSelectedIndex(0)
     }
-  }, [isLookupOpen])
+  }, [isLookupOpen, lookupInitialKeys])
 
   // Reset selection when filtered results change
   useEffect(() => {

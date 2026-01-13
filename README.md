@@ -2,7 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/use-kbd.svg)](https://www.npmjs.com/package/use-kbd)
 
-Keyboard shortcuts, navigation, omnibar for React apps.
+Omnibars, editable hotkeys, search, and keyboard-navigation for React apps.
 
 **[📖 Documentation & Demos →][kbd.rbw.sh]**
 
