@@ -4,6 +4,8 @@ import {
   KbdModal as KbdModalBase,
   KbdOmnibar as KbdOmnibarBase,
   KbdLookup as KbdLookupBase,
+  useHotkeysContext,
+  parseHotkeyString,
 } from 'use-kbd'
 import type { KbdProps } from 'use-kbd'
 import { A } from './A'
@@ -88,6 +90,40 @@ export function KbdLookup(props: BuiltinKbdProps) {
       <span>
         <KbdLookupBase {...props} />
       </span>
+    </Tooltip>
+  )
+}
+
+interface KbdSequenceProps {
+  /** Key sequence to pre-fill (e.g., "g" opens with 'g' entered) */
+  keys: string
+  /** Display text (defaults to "Keys …") */
+  children?: ReactNode
+}
+
+/**
+ * Clickable kbd that opens LookupModal pre-filled with initial keys.
+ * Useful for demoing sequence shortcuts like "g t", "g m", etc.
+ */
+export function KbdSequence({ keys, children }: KbdSequenceProps) {
+  const { openLookup } = useHotkeysContext()
+
+  const handleClick = () => {
+    openLookup(parseHotkeyString(keys))
+  }
+
+  return (
+    <Tooltip
+      title={
+        <>
+          <A href={`${GH_BASE}/SequenceModal.tsx`}><code>&lt;SequenceModal&gt;</code></A>
+          {' '}autocompletes multi-key sequences
+        </>
+      }
+    >
+      <kbd className="kbd-kbd clickable" onClick={handleClick} style={{ cursor: 'pointer' }}>
+        {children ?? `${keys.toUpperCase()} …`}
+      </kbd>
     </Tooltip>
   )
 }

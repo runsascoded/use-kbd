@@ -11,7 +11,7 @@ import {
   ActionLink as ActionLinkLink,
   UseAction as UseActionLink,
 } from '../components/GithubLinks'
-import { Kbd, KbdModal, KbdOmnibar, KbdLookup } from '../components/Kbd'
+import { Kbd, KbdModal, KbdOmnibar, KbdLookup, KbdSequence } from '../components/Kbd'
 import { Command, Ctrl, Option, Shift } from '../components/ModifierIconsWithTooltips'
 import { QuickStartCode } from './quickStartCode'
 import { Tooltip } from '../components/Tooltip'
@@ -36,7 +36,7 @@ Try them on this page:
     <tr><td><KbdModal /></td><td><ShortcutsModalLink /></td><td>View/Edit key-bindings</td></tr>
     <tr><td><KbdOmnibar /></td><td><OmnibarLink /></td><td>Search and select actions</td></tr>
     <tr><td><KbdLookup /></td><td><LookupModalLink /></td><td>Look up actions by key-binding</td></tr>
-    <tr><td><Tooltip title={"Autocomplete multi-key sequences"}><code>G …</code></Tooltip></td><td><SequenceModalLink /></td><td>View completions for a key-sequence</td></tr>
+    <tr><td><KbdSequence keys="g" /></td><td><SequenceModalLink /></td><td>View completions for a key-sequence</td></tr>
   </tbody>
 </table>
 
