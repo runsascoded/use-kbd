@@ -1537,7 +1537,11 @@ function HotkeysProvider({
   const closeOmnibar = react.useCallback(() => setIsOmnibarOpen(false), []);
   const toggleOmnibar = react.useCallback(() => setIsOmnibarOpen((prev) => !prev), []);
   const [isLookupOpen, setIsLookupOpen] = react.useState(false);
-  const openLookup = react.useCallback(() => setIsLookupOpen(true), []);
+  const [lookupInitialKeys, setLookupInitialKeys] = react.useState([]);
+  const openLookup = react.useCallback((initialKeys) => {
+    setLookupInitialKeys(initialKeys ?? []);
+    setIsLookupOpen(true);
+  }, []);
   const closeLookup = react.useCallback(() => setIsLookupOpen(false), []);
   const toggleLookup = react.useCallback(() => setIsLookupOpen((prev) => !prev), []);
   const [isEditingBinding, setIsEditingBinding] = react.useState(false);
@@ -1600,6 +1604,7 @@ function HotkeysProvider({
     closeOmnibar,
     toggleOmnibar,
     isLookupOpen,
+    lookupInitialKeys,
     openLookup,
     closeLookup,
     toggleLookup,
@@ -1628,6 +1633,7 @@ function HotkeysProvider({
     closeOmnibar,
     toggleOmnibar,
     isLookupOpen,
+    lookupInitialKeys,
     openLookup,
     closeLookup,
     toggleLookup,
@@ -3140,6 +3146,7 @@ function KeybindingEditor({
 function LookupModal({ defaultBinding = "meta+shift+k" } = {}) {
   const {
     isLookupOpen,
+    lookupInitialKeys,
     closeLookup,
     toggleLookup,
     registry,
@@ -3225,10 +3232,10 @@ function LookupModal({ defaultBinding = "meta+shift+k" } = {}) {
   }, [pendingKeys]);
   react.useEffect(() => {
     if (isLookupOpen) {
-      setPendingKeys([]);
+      setPendingKeys(lookupInitialKeys);
       setSelectedIndex(0);
     }
-  }, [isLookupOpen]);
+  }, [isLookupOpen, lookupInitialKeys]);
   react.useEffect(() => {
     setSelectedIndex(0);
   }, [filteredBindings.length]);

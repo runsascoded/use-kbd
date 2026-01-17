@@ -20,6 +20,10 @@
   --kbd-accent: #3b82f6;
   --kbd-accent-hover: #2563eb;
 
+  /* Links */
+  --kbd-link: var(--kbd-accent);
+  --kbd-link-hover: var(--kbd-accent-hover);
+
   /* Conflict/warning colors */
   --kbd-conflict: #ef4444;
   --kbd-conflict-bg: #fef2f2;
@@ -74,6 +78,37 @@
   overflow: auto;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
   color: var(--kbd-text);
+}
+
+/* === Links within kbd components === */
+.kbd-modal a,
+.kbd-lookup a,
+.kbd-omnibar a,
+.kbd-sequence a,
+.kbd-kbd a {
+  color: var(--kbd-link);
+  text-decoration: none;
+  transition: color var(--kbd-transition), opacity var(--kbd-transition);
+}
+
+.kbd-modal a:hover,
+.kbd-lookup a:hover,
+.kbd-omnibar a:hover,
+.kbd-sequence a:hover,
+.kbd-kbd a:hover {
+  color: var(--kbd-link-hover);
+  text-decoration: underline;
+}
+
+.kbd-modal a code,
+.kbd-lookup a code,
+.kbd-omnibar a code,
+.kbd-sequence a code,
+.kbd-kbd a code {
+  color: inherit;
+  background: var(--kbd-bg-secondary);
+  padding: 0.1em 0.3em;
+  border-radius: var(--kbd-radius-sm);
 }
 
 .kbd-modal-header {

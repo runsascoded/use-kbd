@@ -1336,8 +1336,10 @@ interface HotkeysContextValue {
     setIsEditingBinding: (value: boolean) => void;
     /** Lookup modal open state */
     isLookupOpen: boolean;
-    /** Open the lookup modal */
-    openLookup: () => void;
+    /** Initial keys to pre-fill when lookup modal opens */
+    lookupInitialKeys: HotkeySequence;
+    /** Open the lookup modal, optionally with pre-filled keys */
+    openLookup: (initialKeys?: HotkeySequence) => void;
     /** Close the lookup modal */
     closeLookup: () => void;
     /** Toggle the lookup modal */
