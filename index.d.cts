@@ -1134,7 +1134,7 @@ declare function getConflictsArray(keymap: Record<string, string | string[]>): K
  * // ]
  * ```
  */
-declare function getSequenceCompletions(pendingKeys: HotkeySequence, keymap: Record<string, string | string[]>): SequenceCompletion[];
+declare function getSequenceCompletions(pendingKeys: HotkeySequence, keymap: Record<string, string | string[]>, actionRegistry?: ActionRegistry): SequenceCompletion[];
 /**
  * Build a map of action -> keys[] from a keymap
  */
@@ -1259,6 +1259,8 @@ interface ActionsRegistryValue {
     unregister: (id: string) => void;
     /** Execute an action by ID, optionally with captured digit values */
     execute: (id: string, captures?: number[]) => void;
+    /** Check if an action is enabled (defaults to true if not set or not found) */
+    isActionEnabled: (id: string) => boolean;
     /** Currently registered actions */
     actions: Map<string, RegisteredAction>;
     /** Computed keymap from registered actions + user overrides */

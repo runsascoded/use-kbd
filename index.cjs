@@ -142,6 +142,10 @@ function useActionsRegistry(options = {}) {
       action.config.handler(void 0, captures);
     }
   }, []);
+  const isActionEnabled = react.useCallback((id) => {
+    const action = actionsRef.current.get(id);
+    return action?.config.enabled !== false;
+  }, []);
   const keymap = react.useMemo(() => {
     const map = {};
     const addToKey = (key, actionId) => {
@@ -179,7 +183,8 @@ function useActionsRegistry(options = {}) {
         label: config.label,
         group: config.group,
         keywords: config.keywords,
-        hideFromModal: config.hideFromModal
+        hideFromModal: config.hideFromModal,
+        enabled: config.enabled
       };
     }
     return registry;
@@ -256,6 +261,7 @@ function useActionsRegistry(options = {}) {
     register,
     unregister,
     execute,
+    isActionEnabled,
     actions,
     keymap,
     actionRegistry,
@@ -269,6 +275,7 @@ function useActionsRegistry(options = {}) {
     register,
     unregister,
     execute,
+    isActionEnabled,
     actions,
     keymap,
     actionRegistry,
@@ -801,7 +808,7 @@ function getConflictsArray(keymap) {
     type: actions.some((a) => a.startsWith("prefix of:") || a.startsWith("has prefix:")) ? "prefix" : "duplicate"
   }));
 }
-function getSequenceCompletions(pendingKeys, keymap) {
+function getSequenceCompletions(pendingKeys, keymap, actionRegistry) {
   if (pendingKeys.length === 0) return [];
   const completions = [];
   for (const [hotkeyStr, actionOrActions] of Object.entries(keymap)) {
@@ -848,7 +855,9 @@ function getSequenceCompletions(pendingKeys, keymap) {
       isMatch = false;
     }
     if (!isMatch) continue;
-    const actions = Array.isArray(actionOrActions) ? actionOrActions : [actionOrActions];
+    const allActions = Array.isArray(actionOrActions) ? actionOrActions : [actionOrActions];
+    const actions = actionRegistry ? allActions.filter((id) => actionRegistry[id]?.enabled !== false) : allActions;
+    if (actions.length === 0) continue;
     if (keySeqIdx === keySeq.length) {
       completions.push({
         nextKeys: "",
@@ -1588,8 +1597,8 @@ function HotkeysProvider({
     [registry.actionRegistry, keymap]
   );
   const getCompletions = react.useCallback(
-    (pending) => getSequenceCompletions(pending, keymap),
-    [keymap]
+    (pending) => getSequenceCompletions(pending, keymap, registry.actionRegistry),
+    [keymap, registry.actionRegistry]
   );
   const value = react.useMemo(() => ({
     registry,
@@ -2425,8 +2434,8 @@ function useOmnibar(options) {
   }, [endpointStates, endpointsRegistry]);
   const totalResults = results.length + remoteResults.length;
   const completions = react.useMemo(() => {
-    return getSequenceCompletions(pendingKeys, keymap);
-  }, [pendingKeys, keymap]);
+    return getSequenceCompletions(pendingKeys, keymap, actions);
+  }, [pendingKeys, keymap, actions]);
   react.useEffect(() => {
     setSelectedIndex(0);
   }, [results, remoteResults]);
@@ -3165,7 +3174,9 @@ function LookupModal({ defaultBinding = "meta+shift+k" } = {}) {
     const keymap = registry.keymap;
     for (const [binding, actionOrActions] of Object.entries(keymap)) {
       if (binding.startsWith("__")) continue;
-      const actions = Array.isArray(actionOrActions) ? actionOrActions : [actionOrActions];
+      const allActions = Array.isArray(actionOrActions) ? actionOrActions : [actionOrActions];
+      const actions = allActions.filter(registry.isActionEnabled);
+      if (actions.length === 0) continue;
       const sequence = parseHotkeyString(binding);
       const keySeq = parseKeySeq(binding);
       const display = formatKeySeq(keySeq).display;
