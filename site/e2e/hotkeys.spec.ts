@@ -125,6 +125,30 @@ test.describe('Global Features', () => {
     await expect(page.locator('.data-table-app')).toBeVisible()
   })
 
+  test('SequenceModal hides current page navigation', async ({ page }) => {
+    // Navigate to table page
+    await page.goto('/table')
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    // Press 'g' to open SequenceModal
+    await page.keyboard.press('g')
+    await page.waitForSelector('.kbd-sequence', { timeout: 5000 })
+
+    // Should show other navigation options but NOT "Data Table"
+    const completions = page.locator('.kbd-sequence-completion')
+    await expect(completions).toHaveCount(4) // Home, Canvas, Calendar, + go to page N
+
+    // Verify "Data Table" is not in the list (since we're on /table)
+    await expect(page.locator('.kbd-sequence-completion', { hasText: 'Data Table' })).not.toBeVisible()
+
+    // But other nav options should be visible
+    await expect(page.locator('.kbd-sequence-completion', { hasText: 'Home' })).toBeVisible()
+    await expect(page.locator('.kbd-sequence-completion', { hasText: 'Canvas' })).toBeVisible()
+    await expect(page.locator('.kbd-sequence-completion', { hasText: 'Calendar' })).toBeVisible()
+
+    await page.keyboard.press('Escape')
+  })
+
   test('can navigate via omnibar search', async ({ page }) => {
     await page.locator('body').click({ position: { x: 10, y: 10 } })
 

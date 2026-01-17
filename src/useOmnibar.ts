@@ -528,8 +528,8 @@ export function useOmnibar(options: UseOmnibarOptions): UseOmnibarResult {
 
   // Sequence completions (based on pending keys from main hotkey handler, not omnibar)
   const completions = useMemo(() => {
-    return getSequenceCompletions(pendingKeys, keymap)
-  }, [pendingKeys, keymap])
+    return getSequenceCompletions(pendingKeys, keymap, actions)
+  }, [pendingKeys, keymap, actions])
 
   // Reset selection when results change
   useEffect(() => {

@@ -67,7 +67,14 @@ export function LookupModal({ defaultBinding = 'meta+shift+k' }: LookupModalProp
       // Skip internal triggers
       if (binding.startsWith('__')) continue
 
-      const actions = Array.isArray(actionOrActions) ? actionOrActions : [actionOrActions]
+      const allActions = Array.isArray(actionOrActions) ? actionOrActions : [actionOrActions]
+
+      // Filter out disabled actions
+      const actions = allActions.filter(registry.isActionEnabled)
+
+      // Skip if no enabled actions remain
+      if (actions.length === 0) continue
+
       const sequence = parseHotkeyString(binding)
       const keySeq = parseKeySeq(binding)
       // Use formatKeySeq to properly display digit placeholders and arrow keys

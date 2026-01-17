@@ -274,8 +274,8 @@ export function HotkeysProvider({
 
   // Completions helper
   const getCompletions = useCallback(
-    (pending: HotkeySequence) => getSequenceCompletions(pending, keymap),
-    [keymap]
+    (pending: HotkeySequence) => getSequenceCompletions(pending, keymap, registry.actionRegistry),
+    [keymap, registry.actionRegistry]
   )
 
   const value = useMemo<HotkeysContextValue>(() => ({

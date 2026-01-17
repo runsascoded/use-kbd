@@ -716,6 +716,7 @@ import type { SequenceCompletion, ActionRegistry, ActionSearchResult } from './t
 export function getSequenceCompletions(
   pendingKeys: HotkeySequence,
   keymap: Record<string, string | string[]>,
+  actionRegistry?: ActionRegistry,
 ): SequenceCompletion[] {
   if (pendingKeys.length === 0) return []
 
@@ -782,7 +783,15 @@ export function getSequenceCompletions(
 
     if (!isMatch) continue
 
-    const actions = Array.isArray(actionOrActions) ? actionOrActions : [actionOrActions]
+    const allActions = Array.isArray(actionOrActions) ? actionOrActions : [actionOrActions]
+
+    // Filter out disabled actions if registry is provided
+    const actions = actionRegistry
+      ? allActions.filter(id => actionRegistry[id]?.enabled !== false)
+      : allActions
+
+    // Skip if no enabled actions remain
+    if (actions.length === 0) continue
 
     if (keySeqIdx === keySeq.length) {
       // Exact match - pending keys fully match this pattern

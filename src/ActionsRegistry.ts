@@ -15,6 +15,8 @@ export interface ActionsRegistryValue {
   unregister: (id: string) => void
   /** Execute an action by ID, optionally with captured digit values */
   execute: (id: string, captures?: number[]) => void
+  /** Check if an action is enabled (defaults to true if not set or not found) */
+  isActionEnabled: (id: string) => boolean
   /** Currently registered actions */
   actions: Map<string, RegisteredAction>
   /** Computed keymap from registered actions + user overrides */
@@ -174,6 +176,11 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
     }
   }, [])
 
+  const isActionEnabled = useCallback((id: string) => {
+    const action = actionsRef.current.get(id)
+    return action?.config.enabled !== false
+  }, [])
+
   // Compute keymap from registered actions + overrides
   const keymap = useMemo(() => {
     const map: HotkeyMap = {}
@@ -230,6 +237,7 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
         group: config.group,
         keywords: config.keywords,
         hideFromModal: config.hideFromModal,
+        enabled: config.enabled,
       }
     }
     return registry
@@ -329,6 +337,7 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
     register,
     unregister,
     execute,
+    isActionEnabled,
     actions,
     keymap,
     actionRegistry,
@@ -342,6 +351,7 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
     register,
     unregister,
     execute,
+    isActionEnabled,
     actions,
     keymap,
     actionRegistry,
