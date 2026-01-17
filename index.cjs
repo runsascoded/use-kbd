@@ -397,6 +397,19 @@ function isMac() {
   }
   return /Mac|iPhone|iPad|iPod/.test(navigator.userAgent);
 }
+var KEY_ALIASES = {
+  "left": "arrowleft",
+  "right": "arrowright",
+  "up": "arrowup",
+  "down": "arrowdown",
+  "esc": "escape",
+  "del": "delete",
+  "return": "enter",
+  "ins": "insert",
+  "pgup": "pageup",
+  "pgdn": "pagedown",
+  "pgdown": "pagedown"
+};
 function normalizeKey(key) {
   const keyMap = {
     " ": "space",
@@ -405,6 +418,7 @@ function normalizeKey(key) {
     "Tab": "tab",
     "Backspace": "backspace",
     "Delete": "delete",
+    "Insert": "insert",
     "ArrowUp": "arrowup",
     "ArrowDown": "arrowdown",
     "ArrowLeft": "arrowleft",
@@ -417,13 +431,17 @@ function normalizeKey(key) {
   if (key in keyMap) {
     return keyMap[key];
   }
+  const lower = key.toLowerCase();
+  if (lower in KEY_ALIASES) {
+    return KEY_ALIASES[lower];
+  }
   if (key.length === 1) {
-    return key.toLowerCase();
+    return lower;
   }
-  if (/^F\d{1,2}$/.test(key)) {
-    return key.toLowerCase();
+  if (/^F\d{1,2}$/i.test(key)) {
+    return lower;
   }
-  return key.toLowerCase();
+  return lower;
 }
 function formatKeyForDisplay(key) {
   const displayMap = {
@@ -554,7 +572,8 @@ function parseSingleCombination(str) {
     };
   }
   const parts = str.toLowerCase().split("+");
-  const key = parts[parts.length - 1];
+  const rawKey = parts[parts.length - 1];
+  const key = normalizeKey(rawKey);
   return {
     key,
     modifiers: {
@@ -586,7 +605,8 @@ function parseSeqElem(str) {
     };
   }
   const parts = str.toLowerCase().split("+");
-  const key = parts[parts.length - 1];
+  const rawKey = parts[parts.length - 1];
+  const key = normalizeKey(rawKey);
   return {
     type: "key",
     key,

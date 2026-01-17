@@ -1013,7 +1013,8 @@ declare function isShiftedSymbol(key: string): boolean;
  */
 declare function isMac(): boolean;
 /**
- * Normalize a key name to a canonical form
+ * Normalize a key name to a canonical form.
+ * Handles browser event key names (ArrowUp) and user-friendly aliases (up, left).
  */
 declare function normalizeKey(key: string): string;
 /**
