@@ -686,6 +686,29 @@ test.describe('Calendar Demo', () => {
     await expect(newSelected).toBeVisible()
   })
 
+  test('arrow key aliases work for navigation', async ({ page }) => {
+    // This tests that 'left'/'right'/'up'/'down' aliases work
+    // (CalendarDemo uses these aliases in defaultBindings)
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    // Get the text content of selected date panel (shows full date)
+    const getSelectedText = () => page.locator('.selected-date-panel h3').textContent()
+
+    const initial = await getSelectedText()
+
+    // Press ArrowRight - should move to next day (binding defined as 'right')
+    await page.keyboard.press('ArrowRight')
+    await page.waitForTimeout(100)
+    const afterRight = await getSelectedText()
+    expect(afterRight).not.toBe(initial)
+
+    // Press ArrowLeft - should move back (binding defined as 'left')
+    await page.keyboard.press('ArrowLeft')
+    await page.waitForTimeout(100)
+    const afterLeft = await getSelectedText()
+    expect(afterLeft).toBe(initial)
+  })
+
   test('can switch view modes', async ({ page }) => {
     await page.locator('body').click({ position: { x: 10, y: 10 } })
 

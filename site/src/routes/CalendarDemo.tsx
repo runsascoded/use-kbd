@@ -206,28 +206,28 @@ function Calendar() {
   useAction('nav:prev', {
     label: 'Previous',
     group: 'Calendar: Navigation',
-    defaultBindings: ['h', 'arrowleft'],
+    defaultBindings: ['h', 'left'],  // 'left' alias for 'arrowleft'
     handler: moveDayLeft,
   })
 
   useAction('nav:next', {
     label: 'Next',
     group: 'Calendar: Navigation',
-    defaultBindings: ['l', 'arrowright'],
+    defaultBindings: ['l', 'right'],  // 'right' alias for 'arrowright'
     handler: moveDayRight,
   })
 
   useAction('nav:up', {
     label: 'Week up',
     group: 'Calendar: Navigation',
-    defaultBindings: ['k', 'arrowup'],
+    defaultBindings: ['k', 'up'],  // 'up' alias for 'arrowup'
     handler: moveDayUp,
   })
 
   useAction('nav:down', {
     label: 'Week down',
     group: 'Calendar: Navigation',
-    defaultBindings: ['j', 'arrowdown'],
+    defaultBindings: ['j', 'down'],  // 'down' alias for 'arrowdown'
     handler: moveDayDown,
   })
 
