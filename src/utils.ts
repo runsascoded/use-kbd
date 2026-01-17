@@ -34,10 +34,29 @@ export function isMac(): boolean {
 }
 
 /**
- * Normalize a key name to a canonical form
+ * Aliases for common key names (user-friendly → canonical).
+ * Applied after lowercasing, so use lowercase keys.
+ */
+const KEY_ALIASES: Record<string, string> = {
+  'left': 'arrowleft',
+  'right': 'arrowright',
+  'up': 'arrowup',
+  'down': 'arrowdown',
+  'esc': 'escape',
+  'del': 'delete',
+  'return': 'enter',
+  'ins': 'insert',
+  'pgup': 'pageup',
+  'pgdn': 'pagedown',
+  'pgdown': 'pagedown',
+}
+
+/**
+ * Normalize a key name to a canonical form.
+ * Handles browser event key names (ArrowUp) and user-friendly aliases (up, left).
  */
 export function normalizeKey(key: string): string {
-  // Handle special keys
+  // Handle special keys from browser events (mixed case)
   const keyMap: Record<string, string> = {
     ' ': 'space',
     'Escape': 'escape',
@@ -45,6 +64,7 @@ export function normalizeKey(key: string): string {
     'Tab': 'tab',
     'Backspace': 'backspace',
     'Delete': 'delete',
+    'Insert': 'insert',
     'ArrowUp': 'arrowup',
     'ArrowDown': 'arrowdown',
     'ArrowLeft': 'arrowleft',
@@ -59,17 +79,25 @@ export function normalizeKey(key: string): string {
     return keyMap[key]
   }
 
+  // Lowercase for further processing
+  const lower = key.toLowerCase()
+
+  // Apply user-friendly aliases
+  if (lower in KEY_ALIASES) {
+    return KEY_ALIASES[lower]
+  }
+
   // Single characters to lowercase
   if (key.length === 1) {
-    return key.toLowerCase()
+    return lower
   }
 
   // Function keys (F1-F12)
-  if (/^F\d{1,2}$/.test(key)) {
-    return key.toLowerCase()
+  if (/^F\d{1,2}$/i.test(key)) {
+    return lower
   }
 
-  return key.toLowerCase()
+  return lower
 }
 
 /**
@@ -257,7 +285,9 @@ function parseSingleCombination(str: string): KeyCombination {
   }
 
   const parts = str.toLowerCase().split('+')
-  const key = parts[parts.length - 1]
+  const rawKey = parts[parts.length - 1]
+  // Normalize key to handle aliases (e.g., "left" → "arrowleft")
+  const key = normalizeKey(rawKey)
 
   return {
     key,
@@ -314,7 +344,9 @@ function parseSeqElem(str: string): SeqElem {
   }
 
   const parts = str.toLowerCase().split('+')
-  const key = parts[parts.length - 1]
+  const rawKey = parts[parts.length - 1]
+  // Normalize key to handle aliases (e.g., "left" → "arrowleft")
+  const key = normalizeKey(rawKey)
 
   return {
     type: 'key',
