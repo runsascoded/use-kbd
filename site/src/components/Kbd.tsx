@@ -121,7 +121,7 @@ export function KbdSequence({ keys, children }: KbdSequenceProps) {
         </>
       }
     >
-      <kbd className="kbd-kbd kbd-clickable" onClick={handleClick}>
+      <kbd className="kbd-clickable" onClick={handleClick}>
         {children ?? `${keys.toUpperCase()} …`}
       </kbd>
     </Tooltip>

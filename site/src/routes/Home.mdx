@@ -1,5 +1,6 @@
 import { ShortcutsModal } from 'use-kbd'
 import { FaGithub } from 'react-icons/fa'
+import { A } from '../components/A'
 import { DemoThumbnail } from '../components/DemoThumbnail'
 import { DemoTitle } from '../components/DemoTitle'
 import {
@@ -27,7 +28,7 @@ Try them on this page:
   <thead>
     <tr>
       <th>Keys</th>
-      <th><Tooltip title="View source on GitHub"><FaGithub size={20} /></Tooltip></th>
+      <th><Tooltip title="View source on GitHub"><A href="https://github.com/runsascoded/use-kbd/tree/main/site/#readme" style={{ color: 'inherit' }}><FaGithub size={20} /></A></Tooltip></th>
       <th>Description</th>
     </tr>
   </thead>
