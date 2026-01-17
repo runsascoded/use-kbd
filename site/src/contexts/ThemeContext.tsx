@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
-import { useUrlParam } from '@rdub/use-url-params'
+import { useUrlParam } from 'use-prms'
 
 type Theme = 'light' | 'dark' | 'system'
 

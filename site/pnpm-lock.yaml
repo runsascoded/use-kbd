@@ -23,9 +23,6 @@ importers:
       '@mui/material':
         specifier: ^7.3.6
         version: 7.3.6(@emotion/react@11.14.0(@types/react@19.2.7)(react@19.2.3))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.7)(react@19.2.3))(@types/react@19.2.7)(react@19.2.3))(@types/react@19.2.7)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
-      '@rdub/use-url-params':
-        specifier: ^0.1.2
-        version: 0.1.2(react@19.2.3)
       '@shikijs/rehype':
         specifier: ^3.20.0
         version: 3.20.0
@@ -65,6 +62,9 @@ importers:
       use-kbd:
         specifier: link:..
         version: link:..
+      use-prms:
+        specifier: ^0.2.0
+        version: 0.2.0(react@19.2.3)
     devDependencies:
       '@eslint/js':
         specifier: ^9.39.1
@@ -691,14 +691,6 @@ packages:
     resolution: {integrity: sha512-aBSREisdsGH890S2rQqK82qmQYU3uFpSH8wcZWHgHzl3LfzsxAKbLNiAG9mO8v1Y0UICBeClICxPJvyr0rcuxg==}
     engines: {node: '>=18'}
     hasBin: true
-
-  '@rdub/use-url-params@0.1.2':
-    resolution: {integrity: sha512-iFH21uvN6VpX2NitgqnIeyqdVCQ96x+LaolXJBspb1ABYJBhnUa0XWZf0zmJ7C7cUvZtpDrNkHj+9PthXKF6lg==}
-    peerDependencies:
-      react: ^18.0.0
-    peerDependenciesMeta:
-      react:
-        optional: true
 
   '@rolldown/pluginutils@1.0.0-beta.53':
     resolution: {integrity: sha512-vENRlFU4YbrwVqNDZ7fLvy+JR1CRkyr01jhSiDpE1u6py3OMzQfztQU2jxykW3ALNxO4kSlqIDeYyD0Y9RcQeQ==}
@@ -2743,6 +2735,14 @@ packages:
   uri-js@4.4.1:
     resolution: {integrity: sha512-7rKUyy33Q1yc98pQ1DAmLtwX109F7TIfWlW1Ydo8Wl1ii1SeHieeh0HHfPeL2fMXK6z0s8ecKs9frCuLJvndBg==}
 
+  use-prms@0.2.0:
+    resolution: {integrity: sha512-aBEPUHA5DBMQz41u83ZcOWyOdrXySB1dYmTz8wymit1vemh8FQjmEw1FlkqxajcrIOsx8Z+yFAqyQ6tsNcXxPA==}
+    peerDependencies:
+      react: ^18.0.0 || ^19.0.0
+    peerDependenciesMeta:
+      react:
+        optional: true
+
   vary@1.1.2:
     resolution: {integrity: sha512-BNGbWLfd0eUPabhkXUVm0j8uuvREyTh5ovRa/dyow/BqAbZJyC+5fU+IzQOzmAKzYqYRAISoRhdQr3eIZ/PXqg==}
     engines: {node: '>= 0.8'}
@@ -3481,10 +3481,6 @@ snapshots:
       - bare-buffer
       - react-native-b4a
       - supports-color
-
-  '@rdub/use-url-params@0.1.2(react@19.2.3)':
-    optionalDependencies:
-      react: 19.2.3
 
   '@rolldown/pluginutils@1.0.0-beta.53': {}
 
@@ -5968,6 +5964,10 @@ snapshots:
   uri-js@4.4.1:
     dependencies:
       punycode: 2.3.1
+
+  use-prms@0.2.0(react@19.2.3):
+    optionalDependencies:
+      react: 19.2.3
 
   vary@1.1.2: {}
 
