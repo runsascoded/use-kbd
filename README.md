@@ -218,6 +218,73 @@ See [awair's use-kbd-demo branch] for a real-world integration example.
 
 [awair's use-kbd-demo branch]: https://github.com/runsascoded/awair/compare/use-kbd-demo~1...use-kbd-demo
 
+## Patterns
+
+### ActionLink
+
+Make navigation links discoverable in the omnibar by registering them as actions. Here's a reference implementation for react-router:
+
+```tsx
+import { useEffect, useRef } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useMaybeHotkeysContext } from 'use-kbd'
+
+interface ActionLinkProps {
+  to: string
+  label?: string
+  group?: string
+  keywords?: string[]
+  defaultBinding?: string
+  children: React.ReactNode
+}
+
+export function ActionLink({
+  to,
+  label,
+  group = 'Navigation',
+  keywords,
+  defaultBinding,
+  children,
+}: ActionLinkProps) {
+  const ctx = useMaybeHotkeysContext()
+  const navigate = useNavigate()
+  const location = useLocation()
+
+  const isActive = location.pathname === to
+  const effectiveLabel = label ?? (typeof children === 'string' ? children : to)
+  const actionId = `nav:${to}`
+
+  // Use ref to avoid re-registration on navigate change
+  const navigateRef = useRef(navigate)
+  navigateRef.current = navigate
+
+  useEffect(() => {
+    if (!ctx?.registry) return
+
+    ctx.registry.register(actionId, {
+      label: effectiveLabel,
+      group,
+      keywords,
+      defaultBindings: defaultBinding ? [defaultBinding] : [],
+      handler: () => navigateRef.current(to),
+      enabled: !isActive,  // Hide from omnibar when on current page
+    })
+
+    return () => ctx.registry.unregister(actionId)
+  }, [ctx?.registry, actionId, effectiveLabel, group, keywords, defaultBinding, isActive, to])
+
+  return <Link to={to}>{children}</Link>
+}
+```
+
+Usage:
+```tsx
+<ActionLink to="/docs" keywords={['help', 'guide']}>Documentation</ActionLink>
+<ActionLink to="/settings" defaultBinding="g s">Settings</ActionLink>
+```
+
+Adapt for Next.js, TanStack Router, or other routers by swapping the router hooks.
+
 ## Low-Level Hooks
 
 For advanced use cases, the underlying hooks are also exported:
