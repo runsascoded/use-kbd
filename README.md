@@ -56,7 +56,6 @@ function Dashboard() {
    - `Omnibar`: search and select actions
    - `LookupModal`: look up actions by key-binding
    - `SequenceModal`: autocomplete multi-key sequences
-   - `ActionLink`: register links as actions
 2. **Register functions as "actions"** with `useAction`
 3. **Easy theming** with CSS variables
 
@@ -78,6 +77,17 @@ useAction('view:toggle-sidebar', {
 
 Actions automatically unregister when the component unmounts—no cleanup needed.
 
+Conditionally disable actions with `enabled`:
+
+```tsx
+useAction('doc:save', {
+  label: 'Save',
+  defaultBindings: ['meta+s'],
+  enabled: hasUnsavedChanges,  // Action hidden when false
+  handler: save,
+})
+```
+
 ### Sequences
 
 Multi-key sequences like Vim's `g g` (go to top) are supported:
@@ -91,6 +101,26 @@ useAction('nav:top', {
 ```
 
 The `SequenceModal` shows available completions while typing a sequence.
+
+### Key Aliases
+
+For convenience, common key names have shorter aliases:
+
+| Alias | Key |
+|-------|-----|
+| `left`, `right`, `up`, `down` | Arrow keys |
+| `esc` | `escape` |
+| `del` | `delete` |
+| `return` | `enter` |
+| `pgup`, `pgdn` | `pageup`, `pagedown` |
+
+```tsx
+useAction('nav:prev', {
+  label: 'Previous item',
+  defaultBindings: ['left', 'h'],  // 'left' = 'arrowleft'
+  handler: () => selectPrev(),
+})
+```
 
 ### User Customization
 
@@ -133,6 +163,23 @@ Command palette for searching and executing actions:
   placeholder="Type a command..."
   maxResults={10}
 />
+```
+
+### `<LookupModal>`
+
+Browse and filter shortcuts by typing key sequences. Press `⌘⇧K` (default) to open.
+
+```tsx
+<LookupModal defaultBinding="meta+shift+k" />
+```
+
+Open programmatically with pre-filled keys via context:
+
+```tsx
+const { openLookup } = useHotkeysContext()
+
+// Open with "g" already typed (shows all "g ..." sequences)
+openLookup([{ key: 'g', modifiers: { ctrl: false, alt: false, shift: false, meta: false } }])
 ```
 
 ### `<SequenceModal>`
