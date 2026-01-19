@@ -63,8 +63,8 @@ importers:
         specifier: link:..
         version: link:..
       use-prms:
-        specifier: ^0.2.0
-        version: 0.2.0(react@19.2.3)
+        specifier: ^0.3.0
+        version: 0.3.0(react@19.2.3)
     devDependencies:
       '@eslint/js':
         specifier: ^9.39.1
@@ -2735,8 +2735,8 @@ packages:
   uri-js@4.4.1:
     resolution: {integrity: sha512-7rKUyy33Q1yc98pQ1DAmLtwX109F7TIfWlW1Ydo8Wl1ii1SeHieeh0HHfPeL2fMXK6z0s8ecKs9frCuLJvndBg==}
 
-  use-prms@0.2.0:
-    resolution: {integrity: sha512-aBEPUHA5DBMQz41u83ZcOWyOdrXySB1dYmTz8wymit1vemh8FQjmEw1FlkqxajcrIOsx8Z+yFAqyQ6tsNcXxPA==}
+  use-prms@0.3.0:
+    resolution: {integrity: sha512-DtCS0AspqUSvHIHduNv/87cn7f6PYiLyInA+azEftwaFPd9g8Yoi4S2rdnxOcYxsJzwZD4Aie0LHVyRKBa+tXA==}
     peerDependencies:
       react: ^18.0.0 || ^19.0.0
     peerDependenciesMeta:
@@ -5965,7 +5965,7 @@ snapshots:
     dependencies:
       punycode: 2.3.1
 
-  use-prms@0.2.0(react@19.2.3):
+  use-prms@0.3.0(react@19.2.3):
     optionalDependencies:
       react: 19.2.3
 
