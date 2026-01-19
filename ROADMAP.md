@@ -11,38 +11,6 @@ A downstream app should need minimal code to integrate hotkeys:
 
 Everything else comes from the library.
 
-## Completed
-
-### Permissive Conflict Resolution ✓
-
-Prefix conflicts (`h` vs `h \d+`) and exact conflicts (`h`→A, `h`→B) no longer disable bindings by default. SeqM handles disambiguation:
-
-1. **Permissive by default** - `disableConflicts` defaults to `false` (set to `true` for strict mode)
-2. **SeqM shows all matching completions** - complete matches show `↵`, continuations show next keys
-3. **Enter executes selected** - first completion selected by default
-4. **Timeout iff exactly one completion** - gives user time to continue or let it auto-execute
-5. **Arrow interaction cancels timeout** - user is actively choosing
-
-Handlers should handle `captures: undefined` with sensible defaults:
-```typescript
-'move:down': (e, captures) => {
-  const n = captures?.[0] ?? 1  // Default to 1 if no digits
-  moveDown(n)
-}
-```
-
-### Components Use Context ✓
-
-ShortcutsModal, Omnibar, LookupModal, and SequenceModal all use `useHotkeysContext()` internally. Props are optional overrides. No more props drilling or `handlersRef` bridges.
-
-### Static Site Deployment ✓
-
-Demo site deployed at [kbd.rbw.sh](https://kbd.rbw.sh) via GitHub Pages.
-
-### Smart Backspace During Sequences ✓
-
-Backspace intelligently handles sequence editing: if no bindings match continuing with Backspace, it removes the last pending key. If a binding like `g backspace` exists and matches, Backspace advances the sequence normally.
-
 ## Current Problems
 
 ### 1. Global Static ACTIONS Without Handlers
@@ -218,11 +186,7 @@ function AppContent() {
 
 ## Implementation Plan
 
-### Phase 1: Library - Components Use Context ✓ (DONE)
-
-Components now use context internally. Props are optional overrides.
-
-### Phase 2: Library - Built-in Modal Content (NEXT)
+### Phase 1: Library - Built-in Modal Content
 
 Move generic logic from awair's ShortcutsModalContent into library:
 
@@ -244,14 +208,14 @@ Expose customization:
 />
 ```
 
-### Phase 3: Library - Type Safety
+### Phase 2: Library - Type Safety
 
 1. Generic type params: `defineActions<ActionId, GroupId>`
 2. ActionId union type derived from action keys
 3. GroupId union type derived from group values
 4. Type-safe handler maps
 
-### Phase 4: App Migration
+### Phase 3: App Migration
 
 1. Create `AwairHotkeysProvider` with callback factory pattern
 2. Simplify App.tsx to use zero-prop components
@@ -261,17 +225,12 @@ Expose customization:
 ## Files to Change
 
 ### use-kbd (Phase 1)
-- `src/ShortcutsModal.tsx` - Use context for defaults
-- `src/Omnibar.tsx` - Use context for defaults, use executeAction
-- `src/HotkeysProvider.tsx` - Ensure executeAction uses all handlers
-
-### use-kbd (Phase 2)
 - `src/ShortcutsModal.tsx` - Built-in editing UI
 - `src/components/GroupRenderer.tsx` - Default group rendering
 - `src/components/BindingEditor.tsx` - Binding add/edit/remove
 - `src/hooks/useTabNavigation.ts` - Focus management
 
-### awair (Phase 4)
+### awair (Phase 3)
 - `src/config/hotkeyConfig.ts` - Callback factory pattern
 - `src/providers/AwairHotkeysProvider.tsx` - New file
 - `src/App.tsx` - Simplified
