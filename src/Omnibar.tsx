@@ -208,11 +208,11 @@ export function Omnibar({
   })
 
   // Create execute handler that falls back to context
-  const handleExecute = useCallback((actionId: string) => {
+  const handleExecute = useCallback((actionId: string, captures?: number[]) => {
     if (onExecuteProp) {
       onExecuteProp(actionId)
     } else if (ctx?.executeAction) {
-      ctx.executeAction(actionId)
+      ctx.executeAction(actionId, captures)
     }
   }, [onExecuteProp, ctx])
 

@@ -552,6 +552,87 @@ test.describe('Data Table Demo', () => {
     const statusCell = page.locator('.data-table tbody tr:first-child td:nth-child(2)')
     await expect(statusCell).toContainText('active')
   })
+
+  test('omnibar number-aware search shows placeholder actions', async ({ page }) => {
+    // Click first row to select it
+    const rows = page.locator('.data-table tbody tr')
+    await rows.first().click()
+    await expect(rows.first()).toHaveClass(/selected/)
+
+    // Open omnibar and type text + number to find placeholder actions
+    await page.keyboard.press('Meta+k')
+    await page.waitForSelector('.kbd-omnibar', { timeout: 5000 })
+
+    // Type "up n" - this should match "Up N rows"
+    await page.keyboard.type('up n')
+
+    // Wait for "Up N rows" to appear in results (with increased timeout for CI)
+    await expect(page.getByText('Up N rows', { exact: true })).toBeVisible({ timeout: 10000 })
+
+    // Verify it has the ## placeholder indicator in the binding
+    await expect(page.getByText('##').first()).toBeVisible()
+
+    await page.keyboard.press('Escape')
+  })
+
+  test('omnibar number-aware search executes with captured value', async ({ page }) => {
+    // Click first row to select it
+    const rows = page.locator('.data-table tbody tr')
+    await rows.first().click()
+    await expect(rows.first()).toHaveClass(/selected/)
+
+    // Open omnibar and search for "down 3"
+    await page.keyboard.press('Meta+k')
+    await page.waitForSelector('.kbd-omnibar', { timeout: 5000 })
+
+    await page.keyboard.type('down 3')
+    await page.waitForTimeout(200)
+
+    // Should show "Down N rows" at the top (boosted because of placeholder match)
+    const firstResult = page.locator('.kbd-omnibar-result-label').first()
+    await expect(firstResult).toHaveText('Down N rows')
+
+    // Press Enter to execute
+    await page.keyboard.press('Enter')
+    await page.waitForTimeout(200)
+
+    // Should have moved down 3 rows (row 3 should be selected, 0-indexed)
+    await expect(rows.nth(3)).toHaveClass(/selected/)
+  })
+
+  test('omnibar shows parameter entry for placeholder action without number', async ({ page }) => {
+    // Click first row to select it
+    const rows = page.locator('.data-table tbody tr')
+    await rows.first().click()
+    await expect(rows.first()).toHaveClass(/selected/)
+
+    // Open omnibar and search for "down rows" without a number
+    await page.keyboard.press('Meta+k')
+    await page.waitForSelector('.kbd-omnibar', { timeout: 5000 })
+
+    await page.keyboard.type('down rows')
+    await page.waitForTimeout(200)
+
+    // Should show "Down N rows" at the top
+    const firstResult = page.locator('.kbd-omnibar-result-label').first()
+    await expect(firstResult).toHaveText('Down N rows')
+
+    // Click on "Down N rows" (which has placeholder)
+    await firstResult.click()
+    await page.waitForTimeout(100)
+
+    // Should show parameter entry UI
+    await expect(page.locator('.kbd-omnibar-param-entry')).toBeVisible()
+    await expect(page.locator('.kbd-omnibar-param-label', { hasText: 'Down N rows' })).toBeVisible()
+
+    // Enter a value
+    await page.keyboard.type('4')
+    await page.keyboard.press('Enter')
+    await page.waitForTimeout(200)
+
+    // Should have moved down 4 rows
+    await expect(rows.nth(4)).toHaveClass(/selected/)
+  })
 })
 
 test.describe('Canvas Demo', () => {

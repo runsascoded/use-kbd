@@ -1002,21 +1002,43 @@ export function hasAnyPlaceholderBindings(bindings: string[]): boolean {
 }
 
 /**
- * Parse a query to extract trailing numbers for placeholder matching.
- * E.g., "smooth 3" → { text: "smooth", numbers: [3] }
- * E.g., "range 24" → { text: "range", numbers: [24] }
- * E.g., "smooth" → { text: "smooth", numbers: [] }
+ * Parse a query to extract numbers for placeholder matching.
+ * Supports multiple formats:
+ * - "smooth 3" → { text: "smooth", numbers: [3] }
+ * - "3 smooth" → { text: "smooth", numbers: [3] }
+ * - "3" → { text: "", numbers: [3] }
+ * - "smooth" → { text: "smooth", numbers: [] }
  */
 export function parseQueryNumbers(query: string): { text: string; numbers: number[] } {
-  // Match trailing number(s) with optional space prefix
-  const match = query.match(/^(.+?)\s+(\d+)$/)
-  if (match) {
+  const trimmed = query.trim()
+
+  // Check if query is just a number
+  if (/^\d+$/.test(trimmed)) {
     return {
-      text: match[1].trim(),
-      numbers: [parseInt(match[2], 10)],
+      text: '',
+      numbers: [parseInt(trimmed, 10)],
     }
   }
-  return { text: query, numbers: [] }
+
+  // Match number at the start followed by text: "5 smooth" or "5smooth"
+  const startMatch = trimmed.match(/^(\d+)\s*(.+)$/)
+  if (startMatch) {
+    return {
+      text: startMatch[2].trim(),
+      numbers: [parseInt(startMatch[1], 10)],
+    }
+  }
+
+  // Match trailing number: "smooth 3"
+  const endMatch = trimmed.match(/^(.+?)\s+(\d+)$/)
+  if (endMatch) {
+    return {
+      text: endMatch[1].trim(),
+      numbers: [parseInt(endMatch[2], 10)],
+    }
+  }
+
+  return { text: trimmed, numbers: [] }
 }
 
 /**
@@ -1056,6 +1078,10 @@ export function searchActions(
     // If query has numbers and action has placeholder bindings, use text-only query
     const effectiveQuery = (queryNumbers.length > 0 && hasPlaceholders) ? queryText : query
 
+    // Special case: if query is just a number and action has placeholders, include it
+    const isNumberOnlyQuery = queryNumbers.length > 0 && queryText === ''
+    const includeForPlaceholder = isNumberOnlyQuery && hasPlaceholders
+
     // Match against multiple fields
     const labelMatch = fuzzyMatch(effectiveQuery, action.label)
     const descMatch = action.description ? fuzzyMatch(effectiveQuery, action.description) : { matched: false, score: 0, ranges: [] }
@@ -1074,7 +1100,7 @@ export function searchActions(
     }
 
     // Calculate total score (label weighted highest)
-    const matched = labelMatch.matched || descMatch.matched || groupMatch.matched || idMatch.matched || keywordScore > 0
+    const matched = labelMatch.matched || descMatch.matched || groupMatch.matched || idMatch.matched || keywordScore > 0 || includeForPlaceholder
     if (!matched && effectiveQuery) continue
 
     let score =
