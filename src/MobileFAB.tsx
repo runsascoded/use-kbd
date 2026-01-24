@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useMaybeHotkeysContext } from './HotkeysProvider'
 
 export interface MobileFABProps {
@@ -15,6 +15,14 @@ export interface MobileFABProps {
    * - 'never': Never show (useful for conditional rendering)
    */
   visibility?: 'auto' | 'always' | 'never'
+  /**
+   * Hide the FAB while scrolling (default: true)
+   */
+  hideOnScroll?: boolean
+  /**
+   * Delay in ms before showing FAB after scroll stops (default: 800)
+   */
+  scrollIdleDelay?: number
   /** Custom CSS class for the FAB button */
   className?: string
   /** Accessible label for the button */
@@ -33,12 +41,12 @@ function SearchIcon({ className }: { className?: string }) {
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth="2.5"
       strokeLinecap="round"
       strokeLinejoin="round"
     >
-      <circle cx="11" cy="11" r="8" />
-      <path d="m21 21-4.3-4.3" />
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-4-4" />
     </svg>
   )
 }
@@ -52,6 +60,8 @@ function SearchIcon({ className }: { className?: string }) {
  * By default, the FAB only appears on mobile/touch devices (viewport < 640px
  * or no hover capability). Set `visibility="always"` to show it everywhere.
  *
+ * The FAB hides while scrolling and reappears after the user stops scrolling.
+ *
  * @example
  * ```tsx
  * // Basic usage - shows on mobile, opens omnibar
@@ -62,16 +72,43 @@ function SearchIcon({ className }: { className?: string }) {
  *
  * // Always visible (desktop + mobile)
  * <MobileFAB visibility="always" />
+ *
+ * // Disable hide-on-scroll
+ * <MobileFAB hideOnScroll={false} />
  * ```
  */
 export function MobileFAB({
   target = 'omnibar',
   visibility = 'auto',
+  hideOnScroll = true,
+  scrollIdleDelay = 800,
   className,
   ariaLabel,
   icon,
 }: MobileFABProps) {
   const ctx = useMaybeHotkeysContext()
+  const [isScrolling, setIsScrolling] = useState(false)
+
+  // Hide on scroll behavior
+  useEffect(() => {
+    if (!hideOnScroll) return
+
+    let scrollTimeout: ReturnType<typeof setTimeout>
+
+    const handleScroll = () => {
+      setIsScrolling(true)
+      clearTimeout(scrollTimeout)
+      scrollTimeout = setTimeout(() => {
+        setIsScrolling(false)
+      }, scrollIdleDelay)
+    }
+
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => {
+      window.removeEventListener('scroll', handleScroll)
+      clearTimeout(scrollTimeout)
+    }
+  }, [hideOnScroll, scrollIdleDelay])
 
   const handleClick = useCallback(() => {
     if (!ctx) return
@@ -93,6 +130,9 @@ export function MobileFAB({
   const classNames = ['kbd-fab']
   if (visibility === 'auto') {
     classNames.push('kbd-fab-auto')
+  }
+  if (isScrolling) {
+    classNames.push('kbd-fab-hidden')
   }
   if (className) {
     classNames.push(className)

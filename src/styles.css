@@ -798,35 +798,49 @@
 /* === Mobile FAB (Floating Action Button) === */
 .kbd-fab {
   position: fixed;
-  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
-  right: 16px;
-  width: 56px;
-  height: 56px;
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  right: 20px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   background-color: var(--kbd-accent);
   color: white;
-  border: none;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--kbd-border);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 9990;
-  transition: transform var(--kbd-transition), box-shadow var(--kbd-transition);
+  opacity: 0.7;
+  transition:
+    transform 200ms ease,
+    box-shadow 200ms ease,
+    opacity 300ms ease;
 }
 
-.kbd-fab:hover {
-  transform: scale(1.05);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+.kbd-fab:hover,
+.kbd-fab:focus {
+  opacity: 1;
+  transform: scale(1.08);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
 }
 
 .kbd-fab:active {
   transform: scale(0.95);
+  opacity: 1;
 }
 
 .kbd-fab-icon {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
+}
+
+/* Hidden state (e.g., while scrolling) */
+.kbd-fab-hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.8);
 }
 
 /* Auto-visibility: hidden on desktop, shown on mobile */
