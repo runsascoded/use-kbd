@@ -183,6 +183,10 @@ export interface ActionSearchResult {
   score: number
   /** Matched ranges in label for highlighting */
   labelMatches: Array<[number, number]>
+  /** Whether this action has bindings with digit placeholders (\d or \d+) */
+  hasPlaceholders?: boolean
+  /** Captured digit values from query (e.g., "smooth 3" → [3]) */
+  captures?: number[]
 }
 
 /**

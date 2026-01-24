@@ -63,7 +63,7 @@ export interface UseOmnibarOptions {
   /** Whether omnibar hotkey is enabled (default: true) */
   enabled?: boolean
   /** Called when an action is executed (if handlers not provided, or in addition to) */
-  onExecute?: (actionId: string) => void
+  onExecute?: (actionId: string, captures?: number[]) => void
   /** Called when a remote entry is executed */
   onExecuteRemote?: (entry: OmnibarEntry) => void
   /** Called when omnibar opens */
@@ -109,8 +109,8 @@ export interface UseOmnibarResult {
   selectNext: () => void
   /** Select the previous result */
   selectPrev: () => void
-  /** Execute the selected action (or a specific action by ID) */
-  execute: (actionId?: string) => void
+  /** Execute the selected action (or a specific action by ID, with optional captures) */
+  execute: (actionId?: string, captures?: number[]) => void
   /** Reset selection to first result */
   resetSelection: () => void
   /** Sequence completions based on pending keys */
@@ -119,6 +119,12 @@ export interface UseOmnibarResult {
   pendingKeys: HotkeySequence
   /** Whether currently awaiting more keys in a sequence */
   isAwaitingSequence: boolean
+  /** Action ID pending parameter entry (null if not awaiting input) */
+  pendingParamAction: string | null
+  /** Submit parameter value for pending action */
+  submitParam: (value: number) => void
+  /** Cancel parameter entry */
+  cancelParam: () => void
 }
 
 /**
@@ -199,6 +205,8 @@ export function useOmnibar(options: UseOmnibarOptions): UseOmnibarResult {
   const [selectedIndex, setSelectedIndex] = useState(0)
   // Per-endpoint pagination state
   const [endpointStates, setEndpointStates] = useState<Map<string, EndpointState>>(new Map())
+  // Pending parameter entry (for placeholder actions)
+  const [pendingParamAction, setPendingParamAction] = useState<string | null>(null)
 
   // Refs for stable callbacks
   const handlersRef = useRef(handlers)
@@ -576,7 +584,16 @@ export function useOmnibar(options: UseOmnibarOptions): UseOmnibarResult {
     setSelectedIndex(0)
   }, [])
 
-  const execute = useCallback((actionId?: string) => {
+  const executeWithCaptures = useCallback((actionId: string, captures?: number[]) => {
+    close()
+    if (handlersRef.current?.[actionId]) {
+      const event = new KeyboardEvent('keydown', { key: 'Enter' })
+      handlersRef.current[actionId](event, captures)
+    }
+    onExecuteRef.current?.(actionId, captures)
+  }, [close])
+
+  const execute = useCallback((actionId?: string, captures?: number[]) => {
     // Determine if executing a local action or remote entry
     const localCount = results.length
 
@@ -594,28 +611,36 @@ export function useOmnibar(options: UseOmnibarOptions): UseOmnibarResult {
         return
       }
 
-      // Otherwise treat as local action
-      close()
-      if (handlersRef.current?.[actionId]) {
-        const event = new KeyboardEvent('keydown', { key: 'Enter' })
-        handlersRef.current[actionId](event)
+      // Find the result to check for placeholders
+      const result = results.find(r => r.id === actionId)
+      const effectiveCaptures = captures ?? result?.captures
+
+      // If action has placeholders but no captures, prompt for parameter
+      if (result?.hasPlaceholders && !effectiveCaptures?.length) {
+        setPendingParamAction(actionId)
+        return
       }
-      onExecuteRef.current?.(actionId)
+
+      // Execute with captures
+      executeWithCaptures(actionId, effectiveCaptures)
       return
     }
 
     // No actionId - use selectedIndex
     if (selectedIndex < localCount) {
       // Local action
-      const id = results[selectedIndex]?.id
-      if (!id) return
+      const result = results[selectedIndex]
+      if (!result) return
 
-      close()
-      if (handlersRef.current?.[id]) {
-        const event = new KeyboardEvent('keydown', { key: 'Enter' })
-        handlersRef.current[id](event)
+      const effectiveCaptures = captures ?? result.captures
+
+      // If action has placeholders but no captures, prompt for parameter
+      if (result.hasPlaceholders && !effectiveCaptures?.length) {
+        setPendingParamAction(result.id)
+        return
       }
-      onExecuteRef.current?.(id)
+
+      executeWithCaptures(result.id, effectiveCaptures)
     } else {
       // Remote entry
       const remoteIndex = selectedIndex - localCount
@@ -629,7 +654,18 @@ export function useOmnibar(options: UseOmnibarOptions): UseOmnibarResult {
       }
       onExecuteRemoteRef.current?.(entry)
     }
-  }, [results, remoteResults, selectedIndex, close])
+  }, [results, remoteResults, selectedIndex, close, executeWithCaptures])
+
+  const submitParam = useCallback((value: number) => {
+    if (pendingParamAction) {
+      executeWithCaptures(pendingParamAction, [value])
+      setPendingParamAction(null)
+    }
+  }, [pendingParamAction, executeWithCaptures])
+
+  const cancelParam = useCallback(() => {
+    setPendingParamAction(null)
+  }, [])
 
   // Handle keyboard navigation when open
   useEffect(() => {
@@ -692,5 +728,8 @@ export function useOmnibar(options: UseOmnibarOptions): UseOmnibarResult {
     completions,
     pendingKeys,
     isAwaitingSequence,
+    pendingParamAction,
+    submitParam,
+    cancelParam,
   }
 }

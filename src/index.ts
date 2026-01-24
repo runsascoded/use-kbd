@@ -97,6 +97,7 @@ export type { KeyIconProps, KeyIconType } from './KeyIcons'
 
 // Utilities
 export {
+  bindingHasPlaceholders,
   findConflicts,
   formatBinding,
   formatCombination,
@@ -106,6 +107,7 @@ export {
   getActionBindings,
   getConflictsArray,
   getSequenceCompletions,
+  hasAnyPlaceholderBindings,
   hasConflicts,
   hasDigitPlaceholders,
   hotkeySequenceToKeySeq,
@@ -120,6 +122,7 @@ export {
   normalizeKey,
   parseHotkeyString,
   parseKeySeq,
+  parseQueryNumbers,
   searchActions,
 } from './utils'
 

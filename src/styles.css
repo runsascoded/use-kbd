@@ -416,6 +416,62 @@
   color: var(--kbd-text-secondary);
 }
 
+/* Parameter entry mode */
+.kbd-omnibar-param-entry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px var(--kbd-padding);
+  border-bottom: 1px solid var(--kbd-border);
+}
+
+.kbd-omnibar-param-label {
+  font-size: 0.875rem;
+  color: var(--kbd-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 50%;
+}
+
+.kbd-omnibar-param-input {
+  flex: 1;
+  min-width: 80px;
+  padding: 6px 10px;
+  border: 1px solid var(--kbd-border);
+  border-radius: var(--kbd-radius-sm);
+  font-size: 1rem;
+  background-color: var(--kbd-bg);
+  color: var(--kbd-text);
+  outline: none;
+  transition: border-color var(--kbd-transition);
+}
+
+.kbd-omnibar-param-input:focus {
+  border-color: var(--kbd-accent);
+}
+
+.kbd-omnibar-param-input::placeholder {
+  color: var(--kbd-text-secondary);
+}
+
+/* Hide number input spinners */
+.kbd-omnibar-param-input::-webkit-outer-spin-button,
+.kbd-omnibar-param-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.kbd-omnibar-param-input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+.kbd-omnibar-param-hint {
+  font-size: 0.7rem;
+  color: var(--kbd-text-secondary);
+  white-space: nowrap;
+}
+
 .kbd-omnibar-results {
   max-height: var(--kbd-omnibar-max-height);
   overflow-y: auto;

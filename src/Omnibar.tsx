@@ -1,4 +1,4 @@
-import { Fragment, KeyboardEvent, MouseEvent, ReactNode, RefObject, useCallback, useEffect, useMemo, useRef } from 'react'
+import { Fragment, KeyboardEvent, MouseEvent, ReactNode, RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ACTION_OMNIBAR } from './constants'
 import { useMaybeHotkeysContext } from './HotkeysProvider'
 import { ModifierIcon } from './ModifierIcons'
@@ -84,12 +84,18 @@ export interface OmnibarRenderProps {
   totalResults: number
   selectNext: () => void
   selectPrev: () => void
-  execute: (actionId?: string) => void
+  execute: (actionId?: string, captures?: number[]) => void
   close: () => void
   completions: SequenceCompletion[]
   pendingKeys: HotkeySequence
   isAwaitingSequence: boolean
   inputRef: RefObject<HTMLInputElement | null>
+  /** Action ID pending parameter entry */
+  pendingParamAction: string | null
+  /** Submit parameter value */
+  submitParam: (value: number) => void
+  /** Cancel parameter entry */
+  cancelParam: () => void
 }
 
 /**
@@ -183,6 +189,8 @@ export function Omnibar({
   omnibarClassName = 'kbd-omnibar',
 }: OmnibarProps) {
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const paramInputRef = useRef<HTMLInputElement | null>(null)
+  const [paramValue, setParamValue] = useState('')
 
   // Try to get context (returns null if not within HotkeysProvider)
   const ctx = useMaybeHotkeysContext()
@@ -254,6 +262,9 @@ export function Omnibar({
     completions,
     pendingKeys,
     isAwaitingSequence,
+    pendingParamAction,
+    submitParam,
+    cancelParam,
   } = useOmnibar({
     actions,
     handlers: handlersProp,
@@ -297,6 +308,47 @@ export function Omnibar({
       })
     }
   }, [isOpen])
+
+  // Focus parameter input when entering param mode
+  useEffect(() => {
+    if (pendingParamAction) {
+      setParamValue('')
+      requestAnimationFrame(() => {
+        paramInputRef.current?.focus()
+      })
+    }
+  }, [pendingParamAction])
+
+  // Handle parameter input keydown
+  const handleParamKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      switch (e.key) {
+        case 'Escape':
+          e.preventDefault()
+          cancelParam()
+          // Return focus to main input
+          requestAnimationFrame(() => inputRef.current?.focus())
+          break
+        case 'Enter':
+          e.preventDefault()
+          if (paramValue) {
+            const num = parseInt(paramValue, 10)
+            if (!isNaN(num)) {
+              submitParam(num)
+            }
+          }
+          break
+        case 'Backspace':
+          if (!paramValue) {
+            e.preventDefault()
+            cancelParam()
+            requestAnimationFrame(() => inputRef.current?.focus())
+          }
+          break
+      }
+    },
+    [paramValue, cancelParam, submitParam],
+  )
 
   // IntersectionObserver for scroll-based pagination
   useEffect(() => {
@@ -418,28 +470,58 @@ export function Omnibar({
           pendingKeys,
           isAwaitingSequence,
           inputRef,
+          pendingParamAction,
+          submitParam,
+          cancelParam,
         })}
       </>
     )
   }
 
+  // Get pending action label for parameter input
+  const pendingActionLabel = pendingParamAction
+    ? results.find(r => r.id === pendingParamAction)?.action.label ?? pendingParamAction
+    : null
+
   // Default render
   return (
     <div className={backdropClassName} onClick={handleBackdropClick}>
       <div className={omnibarClassName} role="dialog" aria-modal="true" aria-label="Command palette">
-        <input
-          ref={inputRef}
-          type="text"
-          className="kbd-omnibar-input"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={placeholder}
-          autoComplete="off"
-          autoCorrect="off"
-          autoCapitalize="off"
-          spellCheck={false}
-        />
+        {pendingParamAction ? (
+          // Parameter entry mode
+          <div className="kbd-omnibar-param-entry">
+            <span className="kbd-omnibar-param-label">{pendingActionLabel}</span>
+            <input
+              ref={paramInputRef}
+              type="number"
+              className="kbd-omnibar-param-input"
+              value={paramValue}
+              onChange={(e) => setParamValue(e.target.value)}
+              onKeyDown={handleParamKeyDown}
+              placeholder="Enter value..."
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              min="0"
+            />
+            <span className="kbd-omnibar-param-hint">↵ to confirm · Esc to cancel</span>
+          </div>
+        ) : (
+          <input
+            ref={inputRef}
+            type="text"
+            className="kbd-omnibar-input"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={placeholder}
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+          />
+        )}
 
         <div className="kbd-omnibar-results" ref={resultsContainerRef}>
           {totalResults === 0 && !isLoadingRemote ? (

@@ -988,12 +988,50 @@ export function fuzzyMatch(pattern: string, text: string): FuzzyMatchResult {
 }
 
 /**
+ * Check if a binding string contains digit placeholders (\d or \d+)
+ */
+export function bindingHasPlaceholders(binding: string): boolean {
+  return binding.includes('\\d')
+}
+
+/**
+ * Check if any bindings have digit placeholders
+ */
+export function hasAnyPlaceholderBindings(bindings: string[]): boolean {
+  return bindings.some(bindingHasPlaceholders)
+}
+
+/**
+ * Parse a query to extract trailing numbers for placeholder matching.
+ * E.g., "smooth 3" → { text: "smooth", numbers: [3] }
+ * E.g., "range 24" → { text: "range", numbers: [24] }
+ * E.g., "smooth" → { text: "smooth", numbers: [] }
+ */
+export function parseQueryNumbers(query: string): { text: string; numbers: number[] } {
+  // Match trailing number(s) with optional space prefix
+  const match = query.match(/^(.+?)\s+(\d+)$/)
+  if (match) {
+    return {
+      text: match[1].trim(),
+      numbers: [parseInt(match[2], 10)],
+    }
+  }
+  return { text: query, numbers: [] }
+}
+
+/**
  * Search actions by query with fuzzy matching.
+ * Supports number-aware search: "smooth 3" matches actions with `\d+` placeholders
+ * and captures the number for execution.
  *
  * @example
  * ```tsx
  * const results = searchActions('temp', actions, keymap)
  * // Returns ActionSearchResult[] sorted by relevance
+ *
+ * // Number-aware search
+ * const results = searchActions('smooth 3', actions, keymap)
+ * // Matches "Smooth: N hours" with captures: [3]
  * ```
  */
 export function searchActions(
@@ -1004,21 +1042,31 @@ export function searchActions(
   const actionBindings = keymap ? getActionBindings(keymap) : new Map<string, string[]>()
   const results: ActionSearchResult[] = []
 
+  // Parse query for trailing numbers (e.g., "smooth 3" → text: "smooth", numbers: [3])
+  const { text: queryText, numbers: queryNumbers } = parseQueryNumbers(query)
+
   for (const [id, action] of Object.entries(actions)) {
     // Skip disabled actions
     if (action.enabled === false) continue
 
+    const bindings = actionBindings.get(id) ?? []
+    const hasPlaceholders = hasAnyPlaceholderBindings(bindings)
+
+    // Try matching with the text part of the query
+    // If query has numbers and action has placeholder bindings, use text-only query
+    const effectiveQuery = (queryNumbers.length > 0 && hasPlaceholders) ? queryText : query
+
     // Match against multiple fields
-    const labelMatch = fuzzyMatch(query, action.label)
-    const descMatch = action.description ? fuzzyMatch(query, action.description) : { matched: false, score: 0, ranges: [] }
-    const groupMatch = action.group ? fuzzyMatch(query, action.group) : { matched: false, score: 0, ranges: [] }
-    const idMatch = fuzzyMatch(query, id)
+    const labelMatch = fuzzyMatch(effectiveQuery, action.label)
+    const descMatch = action.description ? fuzzyMatch(effectiveQuery, action.description) : { matched: false, score: 0, ranges: [] }
+    const groupMatch = action.group ? fuzzyMatch(effectiveQuery, action.group) : { matched: false, score: 0, ranges: [] }
+    const idMatch = fuzzyMatch(effectiveQuery, id)
 
     // Check keywords
     let keywordScore = 0
     if (action.keywords) {
       for (const keyword of action.keywords) {
-        const kwMatch = fuzzyMatch(query, keyword)
+        const kwMatch = fuzzyMatch(effectiveQuery, keyword)
         if (kwMatch.matched) {
           keywordScore = max(keywordScore, kwMatch.score)
         }
@@ -1027,22 +1075,37 @@ export function searchActions(
 
     // Calculate total score (label weighted highest)
     const matched = labelMatch.matched || descMatch.matched || groupMatch.matched || idMatch.matched || keywordScore > 0
-    if (!matched && query) continue
+    if (!matched && effectiveQuery) continue
 
-    const score =
+    let score =
       (labelMatch.matched ? labelMatch.score * 3 : 0) +
       (descMatch.matched ? descMatch.score * 1.5 : 0) +
       (groupMatch.matched ? groupMatch.score : 0) +
       (idMatch.matched ? idMatch.score * 0.5 : 0) +
       keywordScore * 2
 
-    results.push({
+    // Boost score for placeholder actions when query contains a number
+    if (queryNumbers.length > 0 && hasPlaceholders) {
+      score += 5 // Boost actions with placeholders when user provided a number
+    }
+
+    const result: ActionSearchResult = {
       id,
       action,
-      bindings: actionBindings.get(id) ?? [],
+      bindings,
       score,
       labelMatches: labelMatch.ranges,
-    })
+    }
+
+    // Include placeholder info and captures if applicable
+    if (hasPlaceholders) {
+      result.hasPlaceholders = true
+      if (queryNumbers.length > 0) {
+        result.captures = queryNumbers
+      }
+    }
+
+    results.push(result)
   }
 
   // Sort by score (descending)
