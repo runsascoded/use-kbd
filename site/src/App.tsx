@@ -2,7 +2,6 @@ import { Route, Routes, useLocation } from 'react-router-dom'
 import {
   HotkeysProvider,
   LookupModal,
-  MobileFAB,
   Omnibar,
   SequenceModal,
   useAction,
@@ -106,7 +105,6 @@ function AppContent() {
       <Omnibar />
       <SequenceModal />
       <LookupModal />
-      <MobileFAB />
       <FloatingControls />
     </div>
   )

@@ -3,6 +3,8 @@ import react from '@vitejs/plugin-react'
 import mdx from '@mdx-js/rollup'
 import rehypeExternalLinks from 'rehype-external-links'
 
+const allowedHosts = process.env.VITE_ALLOWED_HOSTS?.split(',') ?? []
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
@@ -23,4 +25,8 @@ export default defineConfig({
     outDir: '../docs',
     emptyOutDir: true,
   },
+  server: {
+    port: 5174,
+    ...(allowedHosts.length > 0 && { allowedHosts }),
+  }
 })

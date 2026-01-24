@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
-import { FaGithub, FaKeyboard } from 'react-icons/fa'
+import { FaGithub, FaKeyboard, FaSearch } from 'react-icons/fa'
 import { MdBrightnessAuto, MdLightMode, MdDarkMode } from 'react-icons/md'
 import Tooltip from '@mui/material/Tooltip'
 import { useHotkeysContext } from 'use-kbd'
@@ -131,7 +131,7 @@ export function FloatingControls() {
             <FaGithub />
           </a>
         </Tooltip>
-        {canHover && (
+        {canHover ? (
           <Tooltip title="Keyboard shortcuts (?)" arrow placement="top">
             <button
               className="floating-btn shortcuts-btn"
@@ -139,6 +139,16 @@ export function FloatingControls() {
               aria-label="Show keyboard shortcuts"
             >
               <FaKeyboard />
+            </button>
+          </Tooltip>
+        ) : (
+          <Tooltip title="Search commands" arrow placement="top">
+            <button
+              className="floating-btn search-btn"
+              onClick={() => ctx.openOmnibar()}
+              aria-label="Open command palette"
+            >
+              <FaSearch />
             </button>
           </Tooltip>
         )}
