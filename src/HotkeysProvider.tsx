@@ -21,7 +21,7 @@ export interface HotkeysConfig {
   /** When true, keys with conflicts are disabled (default: true) */
   disableConflicts?: boolean
 
-  /** Minimum viewport width to enable hotkeys (false = always enabled) */
+  /** Minimum viewport width to enable hotkeys (default: false = no viewport restriction) */
   minViewportWidth?: number | false
 
   /** Whether to show hotkey UI on touch-only devices (default: false) */
@@ -96,7 +96,7 @@ const DEFAULT_CONFIG: Required<HotkeysConfig> = {
   storageKey: 'use-kbd',
   sequenceTimeout: DEFAULT_SEQUENCE_TIMEOUT,
   disableConflicts: false,  // Keep conflicting bindings active; SeqM handles disambiguation
-  minViewportWidth: 768,
+  minViewportWidth: false,  // Don't disable based on viewport; use enableOnTouch instead
   enableOnTouch: false,
 }
 
