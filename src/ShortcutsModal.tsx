@@ -198,12 +198,18 @@ function organizeShortcuts(
 
   // Helper to get group name for an action (consistent logic for both paths)
   const getGroupName = (actionId: string): string => {
+    let groupKey: string
+
     // First, check if action has a registered group in the registry
     const registeredGroup = actionRegistry?.[actionId]?.group
-    if (registeredGroup) return registeredGroup
+    if (registeredGroup) {
+      groupKey = registeredGroup
+    } else {
+      // Fall back to parsing actionId prefix
+      groupKey = parseActionId(actionId).group
+    }
 
-    // Fall back to parsing actionId prefix and looking up in groupNames
-    const { group: groupKey } = parseActionId(actionId)
+    // Apply groupNames mapping to ALL groups (both registered and prefix-derived)
     return groupNames?.[groupKey] ?? groupKey
   }
 
