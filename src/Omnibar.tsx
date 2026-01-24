@@ -493,7 +493,9 @@ export function Omnibar({
             <span className="kbd-omnibar-param-label">{pendingActionLabel}</span>
             <input
               ref={paramInputRef}
-              type="number"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
               className="kbd-omnibar-param-input"
               value={paramValue}
               onChange={(e) => setParamValue(e.target.value)}
@@ -503,7 +505,6 @@ export function Omnibar({
               autoCorrect="off"
               autoCapitalize="off"
               spellCheck={false}
-              min="0"
             />
             <span className="kbd-omnibar-param-hint">↵ to confirm · Esc to cancel</span>
           </div>
