@@ -22,7 +22,20 @@ import { Tooltip } from '../components/Tooltip'
 
 Keyboard shortcuts, navigation, omnibar for React apps.
 
-Try them on this page:
+import { FaSearch } from 'react-icons/fa'
+import { useHotkeysContext } from 'use-kbd'
+
+export const MobileSearchButton = () => {
+  const { openOmnibar } = useHotkeysContext()
+  return (
+    <button className="mobile-search-btn" onClick={() => openOmnibar()} aria-label="Open search">
+      <FaSearch />
+    </button>
+  )
+}
+
+<span className="try-intro desktop-only">Try them on this page:</span>
+<span className="try-intro mobile-only">Try them on this page, or tap <MobileSearchButton />:</span>
 
 <div className="components-table-wrapper">
   <table className="components-table">

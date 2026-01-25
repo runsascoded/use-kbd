@@ -144,6 +144,46 @@
     }
   }
 
+  // Try intro with mobile/desktop variants
+  .try-intro {
+    display: block;
+    margin-bottom: 0.5rem;
+  }
+
+  .desktop-only {
+    @media (hover: none) {
+      display: none;
+    }
+  }
+
+  .mobile-only {
+    display: none;
+    @media (hover: none) {
+      display: block;
+    }
+  }
+
+  .mobile-search-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-primary);
+    border-radius: 50%;
+    color: var(--text-secondary);
+    cursor: pointer;
+    vertical-align: middle;
+    margin: 0 0.25rem;
+    transition: background 0.15s, color 0.15s;
+
+    &:active {
+      background: var(--accent-color);
+      color: white;
+    }
+  }
+
   // Components table wrapper (scrollable on mobile)
   .components-table-wrapper {
     overflow-x: auto;
