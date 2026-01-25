@@ -27,8 +27,11 @@ export function FloatingControls() {
   const prevTheme = useRef(theme)
   const themeAnimTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Hide keyboard shortcuts button on touch-only devices
+  // Detect touch-only devices (no hover capability)
+  // Use both media query AND screen width as fallback since DevTools doesn't always simulate (hover: hover) correctly
   const canHover = typeof window !== 'undefined' && window.matchMedia('(hover: hover)').matches
+  const isSmallScreen = typeof window !== 'undefined' && window.innerWidth <= 768
+  const isTouchDevice = !canHover || isSmallScreen
 
   // Detect theme changes and show controls with animation
   useEffect(() => {
@@ -60,6 +63,12 @@ export function FloatingControls() {
   }, [theme])
 
   useEffect(() => {
+    // On touch devices, always show unless explicitly hidden
+    if (isTouchDevice) {
+      setIsVisible(true)
+      return
+    }
+
     const handleScroll = () => {
       const currentScrollY = window.scrollY
       const scrollingDown = currentScrollY > lastScrollY.current
@@ -85,7 +94,7 @@ export function FloatingControls() {
       window.removeEventListener('scroll', handleScroll)
       if (hideTimeout.current) clearTimeout(hideTimeout.current)
     }
-  }, [])
+  }, [isTouchDevice])
 
   const cycleTheme = () => {
     if (theme === 'light') setTheme('dark')
@@ -109,7 +118,9 @@ export function FloatingControls() {
     }
   }
 
-  const showControls = isVisible || isHovering
+  // On touch devices, always show
+  // On desktop, show on hover or after scroll
+  const showControls = isTouchDevice || isVisible || isHovering
   const file = ROUTE_FILES[location.pathname] || 'Home.tsx'
   const githubUrl = `${GITHUB_BASE}/${file}`
 

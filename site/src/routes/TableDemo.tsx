@@ -92,13 +92,16 @@ function DataTable() {
   useEffect(() => {
     const handleDocumentClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement
-      // Don't deselect if clicking inside the table, pagination, modals, or omnibar
+      // Don't deselect if clicking inside the table, pagination, modals, omnibar, or floating controls
       if (
         tableRef.current?.contains(target) ||
         target.closest('.pagination-controls') ||
         target.closest('.kbd-modal') ||
         target.closest('.kbd-backdrop') ||
-        target.closest('.kbd-omnibar')
+        target.closest('.kbd-omnibar') ||
+        target.closest('.kbd-omnibar-backdrop') ||
+        target.closest('.floating-controls-container') ||
+        target.closest('.floating-controls')
       ) {
         return
       }
