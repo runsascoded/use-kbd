@@ -57,6 +57,7 @@ export function LookupModal({ defaultBinding = 'meta+shift+k' }: LookupModalProp
   // Internal pending keys state (separate from global)
   const [pendingKeys, setPendingKeys] = useState<HotkeySequence>([])
   const [selectedIndex, setSelectedIndex] = useState(0)
+  const inputRef = useRef<HTMLInputElement | null>(null)
 
   // Track whether close was triggered by popstate (back button)
   const closedByPopstateRef = useRef(false)
@@ -80,6 +81,10 @@ export function LookupModal({ defaultBinding = 'meta+shift+k' }: LookupModalProp
     const handlePopstate = () => {
       // User pressed back button / swiped back - close the modal
       closedByPopstateRef.current = true
+      // Blur any focused element (e.g., the Kbd that opened this)
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur()
+      }
       closeLookup()
     }
 
@@ -211,6 +216,10 @@ export function LookupModal({ defaultBinding = 'meta+shift+k' }: LookupModalProp
     if (isLookupOpen) {
       setPendingKeys(lookupInitialKeys)
       setSelectedIndex(0)
+      // Focus input for mobile keyboard
+      requestAnimationFrame(() => {
+        inputRef.current?.focus()
+      })
     }
   }, [isLookupOpen, lookupInitialKeys])
 
@@ -219,7 +228,25 @@ export function LookupModal({ defaultBinding = 'meta+shift+k' }: LookupModalProp
     setSelectedIndex(0)
   }, [filteredBindings.length])
 
-  // Handle keyboard input
+  // Handle input change (for mobile keyboard support)
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value
+    if (!value) return
+
+    // Convert each character to a key combination
+    for (const char of value) {
+      const newCombo: KeyCombination = {
+        key: normalizeKey(char),
+        modifiers: { ctrl: false, alt: false, shift: false, meta: false },
+      }
+      setPendingKeys(prev => [...prev, newCombo])
+    }
+
+    // Clear the input (we display keys ourselves)
+    e.target.value = ''
+  }, [])
+
+  // Handle keyboard input (special keys + desktop typing with modifiers)
   useEffect(() => {
     if (!isLookupOpen) return
 
@@ -268,18 +295,21 @@ export function LookupModal({ defaultBinding = 'meta+shift+k' }: LookupModalProp
       // Skip modifier-only keys
       if (isModifierKey(e.key)) return
 
-      // Add this key to pending
-      e.preventDefault()
-      const newCombo: KeyCombination = {
-        key: normalizeKey(e.key),
-        modifiers: {
-          ctrl: e.ctrlKey,
-          alt: e.altKey,
-          shift: e.shiftKey,
-          meta: e.metaKey,
-        },
+      // On desktop, handle keys with modifiers directly (bypass input)
+      // On mobile, input onChange will handle regular typing
+      if (e.ctrlKey || e.altKey || e.metaKey) {
+        e.preventDefault()
+        const newCombo: KeyCombination = {
+          key: normalizeKey(e.key),
+          modifiers: {
+            ctrl: e.ctrlKey,
+            alt: e.altKey,
+            shift: e.shiftKey,
+            meta: e.metaKey,
+          },
+        }
+        setPendingKeys(prev => [...prev, newCombo])
       }
-      setPendingKeys(prev => [...prev, newCombo])
     }
 
     window.addEventListener('keydown', handleKeyDown)
@@ -299,10 +329,19 @@ export function LookupModal({ defaultBinding = 'meta+shift+k' }: LookupModalProp
         {/* Search/filter display */}
         <div className="kbd-lookup-header">
           <div className="kbd-lookup-search">
-            {formattedPendingKeys ? (
+            <input
+              ref={inputRef}
+              type="text"
+              className="kbd-lookup-input"
+              onChange={handleInputChange}
+              placeholder={pendingKeys.length === 0 ? 'Type keys to filter...' : ''}
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+            />
+            {formattedPendingKeys && (
               <kbd className="kbd-sequence-keys">{formattedPendingKeys}</kbd>
-            ) : (
-              <span className="kbd-lookup-placeholder">Type keys to filter...</span>
             )}
           </div>
           <span className="kbd-lookup-hint">

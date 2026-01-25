@@ -628,6 +628,10 @@ export function ShortcutsModal({
     const handlePopstate = () => {
       // User pressed back button / swiped back - close the modal
       closedByPopstateRef.current = true
+      // Blur any focused element (e.g., the Kbd that opened this)
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur()
+      }
       close()
     }
 
