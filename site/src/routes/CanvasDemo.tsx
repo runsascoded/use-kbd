@@ -139,7 +139,7 @@ function Canvas() {
     redraw()
   }, [redraw])
 
-  const getPoint = (e: React.MouseEvent<HTMLCanvasElement>): Point => {
+  const getPoint = (e: React.PointerEvent<HTMLCanvasElement>): Point => {
     const canvas = canvasRef.current!
     const rect = canvas.getBoundingClientRect()
     return {
@@ -148,7 +148,9 @@ function Canvas() {
     }
   }
 
-  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    // Capture pointer for reliable move/up events
+    e.currentTarget.setPointerCapture(e.pointerId)
     const point = getPoint(e)
     setIsDrawing(true)
     const effectiveColor = tool === 'eraser' ? canvasBg : color
@@ -162,7 +164,7 @@ function Canvas() {
     })
   }
 
-  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!isDrawing || !currentStroke) return
     const point = getPoint(e)
 
@@ -173,7 +175,7 @@ function Canvas() {
     }
   }
 
-  const handleMouseUp = () => {
+  const handlePointerUp = () => {
     if (currentStroke) {
       setHistory(h => [...h, strokes])
       setRedoStack([])
@@ -372,10 +374,10 @@ function Canvas() {
         <canvas
           ref={canvasRef}
           className="drawing-canvas"
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerLeave={handlePointerUp}
         />
       </div>
 

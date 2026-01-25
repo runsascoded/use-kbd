@@ -116,6 +116,7 @@
 .drawing-canvas {
   display: block;
   cursor: crosshair;
+  touch-action: none; // Prevent page scroll when drawing on mobile
 }
 
 .canvas-status {
