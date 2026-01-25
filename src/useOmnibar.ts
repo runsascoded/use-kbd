@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useHotkeys, HotkeyMap, HandlerMap } from './useHotkeys'
 
 const { max, min } = Math
-import { searchActions, getSequenceCompletions, fuzzyMatch } from './utils'
+import { searchActions, getSequenceCompletions, fuzzyMatch, getActionBindings, hasAnyPlaceholderBindings } from './utils'
 import type { ActionRegistry, ActionSearchResult, EndpointPaginationMode, HotkeySequence, OmnibarEntry } from './types'
 import type { SequenceCompletion } from './types'
 import type { EndpointQueryResult, OmnibarEndpointsRegistryValue } from './OmnibarEndpointsRegistry'
@@ -76,6 +76,8 @@ export interface UseOmnibarOptions {
   endpointsRegistry?: OmnibarEndpointsRegistryValue
   /** Debounce time for remote queries in ms (default: 150) */
   debounceMs?: number
+  /** Recently executed action IDs to show first when query is empty */
+  recentActionIds?: string[]
 }
 
 export interface UseOmnibarResult {
@@ -198,6 +200,7 @@ export function useOmnibar(options: UseOmnibarOptions): UseOmnibarResult {
     maxResults = 10,
     endpointsRegistry,
     debounceMs = DEFAULT_DEBOUNCE_MS,
+    recentActionIds = [],
   } = options
 
   const [isOpen, setIsOpen] = useState(false)
@@ -251,8 +254,41 @@ export function useOmnibar(options: UseOmnibarOptions): UseOmnibarResult {
   // Search results (local actions)
   const results = useMemo(() => {
     const allResults = searchActions(query, actions, keymap)
+
+    // When query is empty, show recent actions first
+    if (!query.trim() && recentActionIds.length > 0) {
+      // Build a map of action -> bindings for lookup
+      const actionBindings = getActionBindings(keymap)
+
+      // Build results for recent actions that still exist
+      const recentResults: ActionSearchResult[] = []
+      const recentIdSet = new Set<string>()
+
+      for (const actionId of recentActionIds) {
+        const action = actions[actionId]
+        if (action) {
+          const bindings = actionBindings.get(actionId) ?? []
+          const hasPlaceholders = hasAnyPlaceholderBindings(bindings)
+          recentResults.push({
+            id: actionId,
+            action,
+            bindings,
+            score: 1000, // High score to ensure they appear first
+            labelMatches: [],
+            ...(hasPlaceholders && { hasPlaceholders: true }),
+          })
+          recentIdSet.add(actionId)
+        }
+      }
+
+      // Filter out recents from the rest of the results to avoid duplicates
+      const otherResults = allResults.filter(r => !recentIdSet.has(r.id))
+
+      return [...recentResults, ...otherResults].slice(0, maxResults)
+    }
+
     return allResults.slice(0, maxResults)
-  }, [query, actions, keymap, maxResults])
+  }, [query, actions, keymap, maxResults, recentActionIds])
 
   // Query endpoints - sync immediately, async debounced
   useEffect(() => {
@@ -458,8 +494,11 @@ export function useOmnibar(options: UseOmnibarOptions): UseOmnibarResult {
     const processed: RemoteOmnibarResult[] = []
 
     for (const [endpointId, state] of endpointStates) {
+      // Skip entries for endpoints that no longer exist (were unregistered)
       const endpoint = endpointsRegistry.endpoints.get(endpointId)
-      const priority = endpoint?.config.priority ?? 0
+      if (!endpoint) continue
+
+      const priority = endpoint.config.priority ?? 0
 
       for (const entry of state.entries) {
         // Score the entry against the query

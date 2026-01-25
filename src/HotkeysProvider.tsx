@@ -70,6 +70,8 @@ export interface HotkeysContextValue {
   toggleLookup: () => void
   /** Execute an action by ID */
   executeAction: (id: string, captures?: number[]) => void
+  /** Recently executed action IDs (most recent first) */
+  recentActionIds: string[]
   /** Sequence state: pending key combinations */
   pendingKeys: HotkeySequence
   /** Sequence state: whether waiting for more keys */
@@ -214,6 +216,35 @@ export function HotkeysProvider({
   // Editing binding state (set by ShortcutsModal when recording a new binding)
   const [isEditingBinding, setIsEditingBinding] = useState(false)
 
+  // Recent actions (persisted to localStorage)
+  const recentsStorageKey = `${config.storageKey}-recents`
+  const MAX_RECENTS = 5
+  const [recentActionIds, setRecentActionIds] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return []
+    try {
+      const stored = localStorage.getItem(recentsStorageKey)
+      return stored ? JSON.parse(stored) : []
+    } catch {
+      return []
+    }
+  })
+
+  // Track action execution for recents
+  const trackRecentAction = useCallback((actionId: string) => {
+    setRecentActionIds(prev => {
+      // Remove if already in list, add to front
+      const filtered = prev.filter(id => id !== actionId)
+      const updated = [actionId, ...filtered].slice(0, MAX_RECENTS)
+      // Persist
+      try {
+        localStorage.setItem(recentsStorageKey, JSON.stringify(updated))
+      } catch {
+        // Ignore storage errors
+      }
+      return updated
+    })
+  }, [recentsStorageKey])
+
   // Use registry keymap directly
   const keymap = registry.keymap
 
@@ -278,6 +309,12 @@ export function HotkeysProvider({
     [keymap, registry.actionRegistry]
   )
 
+  // Wrap execute to track recents
+  const executeAction = useCallback((id: string, captures?: number[]) => {
+    registry.execute(id, captures)
+    trackRecentAction(id)
+  }, [registry, trackRecentAction])
+
   const value = useMemo<HotkeysContextValue>(() => ({
     registry,
     endpointsRegistry,
@@ -297,7 +334,8 @@ export function HotkeysProvider({
     toggleLookup,
     isEditingBinding,
     setIsEditingBinding,
-    executeAction: registry.execute,
+    executeAction,
+    recentActionIds,
     pendingKeys,
     isAwaitingSequence,
     cancelSequence,
@@ -325,6 +363,8 @@ export function HotkeysProvider({
     closeLookup,
     toggleLookup,
     isEditingBinding,
+    executeAction,
+    recentActionIds,
     pendingKeys,
     isAwaitingSequence,
     cancelSequence,
