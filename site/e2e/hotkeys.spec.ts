@@ -633,6 +633,190 @@ test.describe('Data Table Demo', () => {
     // Should have moved down 4 rows
     await expect(rows.nth(4)).toHaveClass(/selected/)
   })
+
+  test('omnibar click execution: Row down moves selection', async ({ page }) => {
+    // Simulate mobile-style usage: clicking through omnibar instead of keyboard
+    const rows = page.locator('.data-table tbody tr')
+    await rows.first().click()
+    await expect(rows.first()).toHaveClass(/selected/)
+
+    // Open omnibar via Cmd+K (or could use a click on FAB in real mobile)
+    await page.keyboard.press('Meta+k')
+    await page.waitForSelector('.kbd-omnibar', { timeout: 5000 })
+
+    // Type to find "Row down"
+    await page.keyboard.type('row down')
+    await page.waitForTimeout(200)
+
+    // Click on "Row down" result
+    const rowDownResult = page.locator('.kbd-omnibar-result-label', { hasText: 'Row down' })
+    await expect(rowDownResult).toBeVisible()
+    await rowDownResult.click()
+    await page.waitForTimeout(200)
+
+    // Should have moved down 1 row (row 1 selected, 0-indexed)
+    await expect(rows.nth(1)).toHaveClass(/selected/)
+    await expect(rows.first()).not.toHaveClass(/selected/)
+  })
+
+  test('omnibar click execution: can execute same action repeatedly', async ({ page }) => {
+    // Test that clicking the same action multiple times works
+    const rows = page.locator('.data-table tbody tr')
+    await rows.first().click()
+    await expect(rows.first()).toHaveClass(/selected/)
+
+    // Execute "Row down" 3 times via omnibar clicks
+    for (let i = 0; i < 3; i++) {
+      await page.keyboard.press('Meta+k')
+      await page.waitForSelector('.kbd-omnibar', { timeout: 5000 })
+
+      // Type to find "Row down"
+      await page.keyboard.type('row down')
+      await page.waitForTimeout(200)
+
+      const rowDownResult = page.locator('.kbd-omnibar-result-label', { hasText: 'Row down' })
+      await rowDownResult.click()
+      await page.waitForTimeout(200)
+    }
+
+    // Should be on row 3 (started at 0, moved down 3 times)
+    await expect(rows.nth(3)).toHaveClass(/selected/)
+  })
+
+  test('omnibar click execution: recent actions appear first', async ({ page }) => {
+    const rows = page.locator('.data-table tbody tr')
+    await rows.first().click()
+
+    // Execute "Row down" via omnibar
+    await page.keyboard.press('Meta+k')
+    await page.waitForSelector('.kbd-omnibar', { timeout: 5000 })
+    await page.keyboard.type('row down')
+    await page.waitForTimeout(200)
+    const rowDownResult = page.locator('.kbd-omnibar-result-label', { hasText: 'Row down' })
+    await rowDownResult.click()
+    await page.waitForTimeout(200)
+
+    // Open omnibar again with empty query
+    await page.keyboard.press('Meta+k')
+    await page.waitForSelector('.kbd-omnibar', { timeout: 5000 })
+
+    // "Row down" should be first (as a recent action)
+    const firstResult = page.locator('.kbd-omnibar-result-label').first()
+    await expect(firstResult).toHaveText('Row down')
+
+    // Click to execute again
+    await firstResult.click()
+    await page.waitForTimeout(200)
+
+    // Should now be on row 2
+    await expect(rows.nth(2)).toHaveClass(/selected/)
+  })
+
+  test('omnibar parameter entry: Down 4 rows moves to row 4 (not row 3)', async ({ page }) => {
+    // This test reproduces a bug where "Down N rows" was moving N-1 rows
+    // User workflow: page loads with row 0 selected by default (no click)
+    const rows = page.locator('.data-table tbody tr')
+
+    // Verify row 0 is selected by default (hoveredIndex initializes to 0)
+    await expect(rows.first()).toHaveClass(/selected/)
+
+    // Open omnibar WITHOUT clicking on the table first
+    await page.keyboard.press('Meta+k')
+    await page.waitForSelector('.kbd-omnibar', { timeout: 5000 })
+
+    // Search for "Down N rows"
+    await page.keyboard.type('down n')
+    await page.waitForTimeout(200)
+
+    // Click on it to trigger parameter entry
+    const downNResult = page.getByText('Down N rows', { exact: true })
+    await downNResult.click()
+    await page.waitForTimeout(100)
+
+    // Enter "4" and confirm
+    await expect(page.locator('.kbd-omnibar-param-entry')).toBeVisible()
+    await page.keyboard.type('4')
+    await page.keyboard.press('Enter')
+    await page.waitForTimeout(200)
+
+    // Should be at row 4 (Epsilon-1), NOT row 3 (Delta-1)
+    // Row indices: 0=Alpha, 1=Beta, 2=Gamma, 3=Delta, 4=Epsilon
+    await expect(rows.nth(4)).toHaveClass(/selected/)
+    await expect(rows.nth(3)).not.toHaveClass(/selected/)
+  })
+
+  test('clicking FAB to open omnibar does not reset table selection', async ({ page }) => {
+    // Bug: clicking the floating search button triggered document click handler
+    // which reset hoveredIndex to -1, causing off-by-one errors
+    const rows = page.locator('.data-table tbody tr')
+
+    // Select row 2 (Gamma-1) first
+    await rows.nth(2).click()
+    await expect(rows.nth(2)).toHaveClass(/selected/)
+
+    // Click the search button in floating controls (simulates mobile FAB usage)
+    const searchBtn = page.locator('.floating-controls .search-btn, .floating-controls .shortcuts-btn')
+    // Make controls visible first (they might be hidden)
+    await page.evaluate(() => {
+      const controls = document.querySelector('.floating-controls')
+      if (controls) controls.classList.add('visible')
+    })
+    await page.waitForTimeout(100)
+
+    // Click any button in floating controls
+    const anyFloatingBtn = page.locator('.floating-controls .floating-btn').first()
+    if (await anyFloatingBtn.isVisible()) {
+      await anyFloatingBtn.click()
+      await page.waitForTimeout(100)
+    }
+
+    // Selection should still be on row 2 (not reset to -1)
+    await expect(rows.nth(2)).toHaveClass(/selected/)
+  })
+
+  test('omnibar click execution: placeholder action shows param entry on repeat', async ({ page }) => {
+    const rows = page.locator('.data-table tbody tr')
+    await rows.first().click()
+
+    // First, execute "Down N rows" with parameter entry
+    await page.keyboard.press('Meta+k')
+    await page.waitForSelector('.kbd-omnibar', { timeout: 5000 })
+    await page.keyboard.type('down n rows')
+    await page.waitForTimeout(200)
+    const downNResult = page.getByText('Down N rows', { exact: true })
+    await downNResult.click()
+    await page.waitForTimeout(100)
+
+    // Enter parameter
+    await expect(page.locator('.kbd-omnibar-param-entry')).toBeVisible()
+    await page.keyboard.type('2')
+    await page.keyboard.press('Enter')
+    await page.waitForTimeout(200)
+
+    // Should be at row 2
+    await expect(rows.nth(2)).toHaveClass(/selected/)
+
+    // Now open omnibar again - "Down N rows" should be in recents
+    await page.keyboard.press('Meta+k')
+    await page.waitForSelector('.kbd-omnibar', { timeout: 5000 })
+
+    // Click on it again (should show param entry, not execute immediately)
+    const firstResult = page.locator('.kbd-omnibar-result-label').first()
+    await expect(firstResult).toHaveText('Down N rows')
+    await firstResult.click()
+    await page.waitForTimeout(100)
+
+    // Should show parameter entry again
+    await expect(page.locator('.kbd-omnibar-param-entry')).toBeVisible()
+
+    // Enter new value
+    await page.keyboard.type('3')
+    await page.keyboard.press('Enter')
+    await page.waitForTimeout(200)
+
+    // Should be at row 5 (2 + 3)
+    await expect(rows.nth(5)).toHaveClass(/selected/)
+  })
 })
 
 test.describe('Canvas Demo', () => {
@@ -640,8 +824,65 @@ test.describe('Canvas Demo', () => {
     await page.addInitScript(() => {
       localStorage.removeItem('use-kbd-demo')
       localStorage.removeItem('use-kbd-demo-removed')
+      localStorage.removeItem('use-kbd-demo-recents')
     })
     await page.goto('/canvas')
+  })
+
+  test('omnibar only shows canvas actions, not table actions', async ({ page }) => {
+    // Open omnibar
+    await page.keyboard.press('Meta+k')
+    await page.waitForSelector('.kbd-omnibar', { timeout: 5000 })
+
+    // Search for "row" - should NOT find TableDemo's row navigation actions
+    await page.keyboard.type('row')
+    await page.waitForTimeout(200)
+
+    // Should show "No matching commands" or only canvas-related results
+    // Specifically, should NOT show "Row down" or "Row up" from TableDemo
+    const rowDownResult = page.locator('.kbd-omnibar-result-label', { hasText: 'Row down' })
+    await expect(rowDownResult).not.toBeVisible()
+
+    const rowUpResult = page.locator('.kbd-omnibar-result-label', { hasText: 'Row up' })
+    await expect(rowUpResult).not.toBeVisible()
+
+    await page.keyboard.press('Escape')
+
+    // Search for "sort" - should NOT find TableDemo's sort actions
+    await page.keyboard.press('Meta+k')
+    await page.waitForSelector('.kbd-omnibar', { timeout: 5000 })
+    await page.keyboard.type('sort')
+    await page.waitForTimeout(200)
+
+    const sortResult = page.locator('.kbd-omnibar-result-label', { hasText: 'Sort' })
+    await expect(sortResult).not.toBeVisible()
+
+    await page.keyboard.press('Escape')
+  })
+
+  test('recent actions from other pages do not appear in canvas omnibar', async ({ page }) => {
+    // First, go to table and execute an action
+    await page.goto('/table')
+    const rows = page.locator('.data-table tbody tr')
+    await rows.first().click()
+
+    // Execute "Row down" via keyboard
+    await page.keyboard.press('j')
+    await page.waitForTimeout(100)
+
+    // Now navigate to canvas
+    await page.goto('/canvas')
+    await page.waitForTimeout(100)
+
+    // Open omnibar - recents should NOT show table actions
+    await page.keyboard.press('Meta+k')
+    await page.waitForSelector('.kbd-omnibar', { timeout: 5000 })
+
+    // The recents should not show "Row down" since that action doesn't exist here
+    const rowDownResult = page.locator('.kbd-omnibar-result-label', { hasText: 'Row down' })
+    await expect(rowDownResult).not.toBeVisible()
+
+    await page.keyboard.press('Escape')
   })
 
   test('can switch tools with hotkeys', async ({ page }) => {
