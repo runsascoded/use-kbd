@@ -329,6 +329,9 @@ export function LookupModal({ defaultBinding = 'meta+shift+k' }: LookupModalProp
         {/* Search/filter display */}
         <div className="kbd-lookup-header">
           <div className="kbd-lookup-search">
+            {formattedPendingKeys && (
+              <kbd className="kbd-sequence-keys">{formattedPendingKeys}</kbd>
+            )}
             <input
               ref={inputRef}
               type="text"
@@ -340,9 +343,6 @@ export function LookupModal({ defaultBinding = 'meta+shift+k' }: LookupModalProp
               autoCapitalize="off"
               spellCheck={false}
             />
-            {formattedPendingKeys && (
-              <kbd className="kbd-sequence-keys">{formattedPendingKeys}</kbd>
-            )}
           </div>
           <span className="kbd-lookup-hint">
             ↑↓ navigate · Enter select · Esc {pendingKeys.length > 0 ? 'clear' : 'close'} · ⌫ back

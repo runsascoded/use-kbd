@@ -838,9 +838,8 @@
 }
 
 .kbd-lookup-input {
-  position: absolute;
-  inset: 0;
-  width: 100%;
+  flex: 1;
+  min-width: 20px;
   background: transparent;
   border: none;
   color: transparent;
