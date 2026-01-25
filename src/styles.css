@@ -297,6 +297,18 @@
 
 /* === Clickable kbd === */
 .kbd-clickable {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background-color: var(--kbd-kbd-bg);
+  border: 1px solid var(--kbd-kbd-border);
+  border-radius: var(--kbd-radius-sm);
+  padding: 3px 6px;
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+  font-size: 0.75rem;
+  color: var(--kbd-kbd-text);
+  min-height: 24px;
+  white-space: nowrap;
   cursor: pointer;
   transition: all var(--kbd-transition);
 }
@@ -388,24 +400,59 @@
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding-top: 20vh;
+  padding: 10vh 1rem 1rem;
   z-index: 9999;
+  overflow: hidden;
 }
 
 .kbd-omnibar {
   background-color: var(--kbd-bg);
   border-radius: var(--kbd-radius);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-  width: 90vw;
+  width: 100%;
   max-width: 500px;
   overflow: hidden;
 }
 
+.kbd-omnibar-header {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--kbd-border);
+}
+
+.kbd-omnibar-close {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  border-left: 1px solid var(--kbd-border);
+  color: var(--kbd-text-secondary);
+  font-size: 1.5rem;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.kbd-omnibar-close:hover {
+  background-color: var(--kbd-hover);
+  color: var(--kbd-text);
+}
+
+/* Hide close button on desktop (can use Escape), show on touch devices */
+@media (hover: hover) and (pointer: fine) {
+  .kbd-omnibar-close {
+    display: none;
+  }
+}
+
 .kbd-omnibar-input {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   padding: 12px var(--kbd-padding);
   border: none;
-  border-bottom: 1px solid var(--kbd-border);
   font-size: 1rem;
   background-color: var(--kbd-bg);
   color: var(--kbd-text);
@@ -418,11 +465,12 @@
 
 /* Parameter entry mode */
 .kbd-omnibar-param-entry {
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 12px var(--kbd-padding);
-  border-bottom: 1px solid var(--kbd-border);
 }
 
 .kbd-omnibar-param-label {
@@ -473,6 +521,8 @@
   cursor: pointer;
   gap: var(--kbd-gap);
   transition: background-color var(--kbd-transition);
+  min-width: 0;
+  overflow: hidden;
 }
 
 .kbd-omnibar-result:hover,
@@ -487,17 +537,34 @@
 
 .kbd-omnibar-result-label {
   flex: 1;
+  min-width: 0;
   font-size: 0.875rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .kbd-omnibar-result-category {
   font-size: 0.75rem;
   color: var(--kbd-text-secondary);
+  flex-shrink: 0;
 }
 
 .kbd-omnibar-result-bindings {
   display: flex;
   gap: 4px;
+  flex-shrink: 0;
+}
+
+/* Mobile: hide category, show only first binding */
+@media (max-width: 480px) {
+  .kbd-omnibar-result-category {
+    display: none;
+  }
+
+  .kbd-omnibar-result-bindings .kbd-kbd:not(:first-child) {
+    display: none;
+  }
 }
 
 .kbd-omnibar-no-results {
