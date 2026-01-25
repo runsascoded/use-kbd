@@ -238,6 +238,7 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
         keywords: config.keywords,
         hideFromModal: config.hideFromModal,
         enabled: config.enabled,
+        protected: config.protected,
       }
     }
     return registry

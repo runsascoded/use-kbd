@@ -36,6 +36,8 @@ export interface ActionConfig {
   priority?: number
   /** Hide from ShortcutsModal (still searchable in omnibar) */
   hideFromModal?: boolean
+  /** Protect bindings from removal (user can still add more, but not remove existing) */
+  protected?: boolean
 }
 
 /**
@@ -104,6 +106,8 @@ export function useAction(id: string, config: ActionConfig): void {
     JSON.stringify(config.defaultBindings),
     JSON.stringify(config.keywords),
     config.priority,
+    config.hideFromModal,
+    config.protected,
   ])
 }
 
@@ -165,6 +169,8 @@ export function useActions(actions: Record<string, ActionConfig>): void {
         c.defaultBindings,
         c.keywords,
         c.priority,
+        c.hideFromModal,
+        c.protected,
       ])
     ),
   ])

@@ -652,6 +652,7 @@ export function ShortcutsModal({
     label: 'Show shortcuts',
     group: 'Global',
     defaultBindings: defaultBinding ? [defaultBinding] : [],
+    protected: true, // Prevent users from removing the only way to edit shortcuts
     handler: useCallback(() => {
       if (ctx) {
         ctx.toggleModal()
@@ -910,6 +911,8 @@ export function ShortcutsModal({
         : true
       // Check if this binding would conflict with current pending input
       const isPendingConflict = pendingConflictInfo.conflictingKeys.has(key)
+      // Check if action is protected (bindings cannot be removed)
+      const isProtected = ctx?.registry.actionRegistry?.[actionId]?.protected ?? false
 
       return (
         <BindingDisplay
@@ -938,14 +941,14 @@ export function ShortcutsModal({
             }
             startEditingBinding(actionId, key)
           }}
-          onRemove={editable && showRemove ? () => removeBinding(actionId, key) : undefined}
+          onRemove={editable && showRemove && !isProtected ? () => removeBinding(actionId, key) : undefined}
           pendingKeys={pendingKeys}
           activeKeys={activeKeys}
           timeoutDuration={pendingConflictInfo.hasConflict ? Infinity : sequenceTimeout}
         />
       )
     },
-    [editingAction, editingKey, addingAction, conflicts, defaults, editable, startEditingBinding, removeBinding, pendingKeys, activeKeys, isRecording, cancel, handleBindingAdd, handleBindingChange, sequenceTimeout, pendingConflictInfo],
+    [editingAction, editingKey, addingAction, conflicts, defaults, editable, startEditingBinding, removeBinding, pendingKeys, activeKeys, isRecording, cancel, handleBindingAdd, handleBindingChange, sequenceTimeout, pendingConflictInfo, ctx?.registry.actionRegistry],
   )
 
   // Helper: render add button for an action

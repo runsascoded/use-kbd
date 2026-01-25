@@ -162,6 +162,8 @@ export interface ActionDefinition {
   enabled?: boolean
   /** Hide from ShortcutsModal (still searchable in omnibar) */
   hideFromModal?: boolean
+  /** Protect bindings from removal (user can still add more, but not remove existing) */
+  protected?: boolean
 }
 
 /**

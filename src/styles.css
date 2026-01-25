@@ -378,14 +378,31 @@
     background var(--kbd-transition);
 }
 
-.kbd-kbd:hover .kbd-remove-btn,
-.kbd-kbd:focus-within .kbd-remove-btn {
-  opacity: 1;
-  transform: scale(1);
+/* Only show remove button on hover for devices that support it */
+@media (hover: hover) {
+  .kbd-kbd:hover .kbd-remove-btn,
+  .kbd-kbd:focus-within .kbd-remove-btn {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  .kbd-remove-btn:hover {
+    background: #b91c1c;
+  }
 }
 
-.kbd-remove-btn:hover {
-  background: #b91c1c;
+/* Touch devices: always show remove button (smaller) when editing is possible */
+@media (hover: none) {
+  .kbd-kbd.editable .kbd-remove-btn {
+    opacity: 0.7;
+    transform: scale(0.9);
+  }
+
+  .kbd-remove-btn:active {
+    background: #b91c1c;
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 /* === Timeout bar === */
