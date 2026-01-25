@@ -313,9 +313,20 @@
   transition: all var(--kbd-transition);
 }
 
-.kbd-clickable:hover {
-  background: var(--kbd-accent);
-  color: white;
+/* Only apply hover on devices that support it (not touch) */
+@media (hover: hover) {
+  .kbd-clickable:hover {
+    background: var(--kbd-accent);
+    color: white;
+  }
+}
+
+/* Touch devices: use :active for tap feedback */
+@media (hover: none) {
+  .kbd-clickable:active {
+    background: var(--kbd-accent);
+    color: white;
+  }
 }
 
 .kbd-clickable:focus-visible {
@@ -806,6 +817,28 @@
   display: flex;
   align-items: center;
   min-height: 32px;
+  position: relative;
+}
+
+.kbd-lookup-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: transparent;
+  caret-color: var(--kbd-text);
+  font-size: 0.875rem;
+  outline: none;
+}
+
+.kbd-lookup-input::placeholder {
+  color: var(--kbd-text-secondary);
+}
+
+/* When there are pending keys, hide the input text but keep it focusable */
+.kbd-lookup-input:not(:placeholder-shown) {
+  color: transparent;
 }
 
 .kbd-lookup-placeholder {
