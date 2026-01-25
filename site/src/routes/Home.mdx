@@ -24,21 +24,23 @@ Keyboard shortcuts, navigation, omnibar for React apps.
 
 Try them on this page:
 
-<table className="components-table">
-  <thead>
-    <tr>
-      <th>Keys</th>
-      <th><Tooltip title="View source on GitHub"><A href="https://github.com/runsascoded/use-kbd/tree/main/site/#readme" style={{ color: 'inherit' }}><FaGithub size={20} /></A></Tooltip></th>
-      <th>Description</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr><td><KbdModal /></td><td><ShortcutsModalLink /></td><td>View/Edit key-bindings</td></tr>
-    <tr><td><KbdOmnibar /></td><td><OmnibarLink /></td><td>Search and select actions</td></tr>
-    <tr><td><KbdLookup /></td><td><LookupModalLink /></td><td>Look up actions by key-binding</td></tr>
-    <tr><td><KbdSequence keys="g" /></td><td><SequenceModalLink /></td><td>View completions for a key-sequence</td></tr>
-  </tbody>
-</table>
+<div className="components-table-wrapper">
+  <table className="components-table">
+    <thead>
+      <tr>
+        <th>Keys</th>
+        <th><Tooltip title="View source on GitHub"><A href="https://github.com/runsascoded/use-kbd/tree/main/site/#readme" style={{ color: 'inherit' }}><FaGithub size={20} /></A></Tooltip></th>
+        <th>Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td><KbdModal /></td><td><ShortcutsModalLink /></td><td>View/Edit key-bindings</td></tr>
+      <tr><td><KbdOmnibar /></td><td><OmnibarLink /></td><td>Search and select actions</td></tr>
+      <tr><td><KbdLookup /></td><td><LookupModalLink /></td><td>Look up actions by key-binding</td></tr>
+      <tr><td><KbdSequence keys="g" /></td><td><SequenceModalLink /></td><td>View completions for a key-sequence</td></tr>
+    </tbody>
+  </table>
+</div>
 
 or view source [on GitHub][`site`].
 

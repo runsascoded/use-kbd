@@ -128,10 +128,16 @@
     font-size: 0.9em;
   }
 
+  // Components table wrapper (scrollable on mobile)
+  .components-table-wrapper {
+    overflow-x: auto;
+    margin: 1rem 0;
+  }
+
   // Components table (intro section)
   .components-table {
-    margin: 1rem 0;
     border-collapse: collapse;
+    min-width: 100%;
 
     th, td {
       padding: 0.4rem 0.75rem;
@@ -148,8 +154,12 @@
       text-align: right;
     }
 
+    // Description column: allow wrapping, limit width
+    th:last-child,
     td:last-child {
       color: var(--text-secondary);
+      max-width: 150px;
+      text-align: right;
     }
 
     tbody tr:last-child td {
