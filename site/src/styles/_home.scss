@@ -128,6 +128,22 @@
     font-size: 0.9em;
   }
 
+  // List indentation - reduce on mobile
+  ol, ul {
+    padding-left: 1.5rem;
+  }
+
+  @media (max-width: 480px) {
+    ol, ul {
+      padding-left: 1rem;
+    }
+
+    // Nested lists: even tighter
+    ol ul, ul ul, ol ol, ul ol {
+      padding-left: 0.75rem;
+    }
+  }
+
   // Components table wrapper (scrollable on mobile)
   .components-table-wrapper {
     overflow-x: auto;
