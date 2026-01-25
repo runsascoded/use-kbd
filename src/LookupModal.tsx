@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ACTION_LOOKUP } from './constants'
 import { useHotkeysContext } from './HotkeysProvider'
 import { renderKeySeq } from './KeyElements'
@@ -57,6 +57,43 @@ export function LookupModal({ defaultBinding = 'meta+shift+k' }: LookupModalProp
   // Internal pending keys state (separate from global)
   const [pendingKeys, setPendingKeys] = useState<HotkeySequence>([])
   const [selectedIndex, setSelectedIndex] = useState(0)
+
+  // Track whether close was triggered by popstate (back button)
+  const closedByPopstateRef = useRef(false)
+
+  // Handle browser back button to close modal
+  useEffect(() => {
+    if (!isLookupOpen) {
+      closedByPopstateRef.current = false
+      return
+    }
+
+    // Push history state when modal opens
+    const stateKey = 'kbdLookupModalOpen'
+    const currentState = window.history.state
+
+    // Only push if we haven't already
+    if (!currentState?.[stateKey]) {
+      window.history.pushState({ ...currentState, [stateKey]: true }, '')
+    }
+
+    const handlePopstate = () => {
+      // User pressed back button / swiped back - close the modal
+      closedByPopstateRef.current = true
+      closeLookup()
+    }
+
+    window.addEventListener('popstate', handlePopstate)
+    return () => {
+      window.removeEventListener('popstate', handlePopstate)
+
+      // If we're closing normally (not via back button), go back in history
+      // to remove the state we pushed
+      if (!closedByPopstateRef.current && window.history.state?.kbdLookupModalOpen) {
+        window.history.back()
+      }
+    }
+  }, [isLookupOpen, closeLookup])
 
   // Get all bindings from keymap
   const allBindings = useMemo((): LookupResult[] => {

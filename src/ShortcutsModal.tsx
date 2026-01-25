@@ -566,6 +566,9 @@ export function ShortcutsModal({
   // Use prop, then context, then internal state
   const isOpen = isOpenProp ?? ctx?.isModalOpen ?? internalIsOpen
 
+  // Track whether close was triggered by popstate (back button)
+  const closedByPopstateRef = useRef(false)
+
   // Editing state - use key-based tracking (not index-based)
   const [editingAction, setEditingAction] = useState<string | null>(null)
   const [editingKey, setEditingKey] = useState<string | null>(null)
@@ -605,6 +608,40 @@ export function ShortcutsModal({
       ctx.closeModal()
     }
   }, [onCloseProp, ctx])
+
+  // Handle browser back button to close modal
+  useEffect(() => {
+    if (!isOpen) {
+      closedByPopstateRef.current = false
+      return
+    }
+
+    // Push history state when modal opens
+    const stateKey = 'kbdShortcutsModalOpen'
+    const currentState = window.history.state
+
+    // Only push if we haven't already
+    if (!currentState?.[stateKey]) {
+      window.history.pushState({ ...currentState, [stateKey]: true }, '')
+    }
+
+    const handlePopstate = () => {
+      // User pressed back button / swiped back - close the modal
+      closedByPopstateRef.current = true
+      close()
+    }
+
+    window.addEventListener('popstate', handlePopstate)
+    return () => {
+      window.removeEventListener('popstate', handlePopstate)
+
+      // If we're closing normally (not via back button), go back in history
+      // to remove the state we pushed
+      if (!closedByPopstateRef.current && window.history.state?.kbdShortcutsModalOpen) {
+        window.history.back()
+      }
+    }
+  }, [isOpen, close])
 
   // Register the shortcuts modal trigger action
   useAction(ACTION_MODAL, {

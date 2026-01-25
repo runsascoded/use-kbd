@@ -277,6 +277,7 @@ export function Omnibar({
     onExecuteRemote: handleExecuteRemote,
     maxResults,
     endpointsRegistry: ctx?.endpointsRegistry,
+    recentActionIds: ctx?.recentActionIds,
   })
 
   // Use prop, then context, then internal state
@@ -298,6 +299,43 @@ export function Omnibar({
     }
     return grouped
   }, [remoteResults])
+
+  // Track whether close was triggered by popstate (back button)
+  const closedByPopstateRef = useRef(false)
+
+  // Handle browser back button to close omnibar
+  useEffect(() => {
+    if (!isOpen) {
+      closedByPopstateRef.current = false
+      return
+    }
+
+    // Push history state when omnibar opens
+    const stateKey = 'kbdOmnibarOpen'
+    const currentState = window.history.state
+
+    // Only push if we haven't already
+    if (!currentState?.[stateKey]) {
+      window.history.pushState({ ...currentState, [stateKey]: true }, '')
+    }
+
+    const handlePopstate = () => {
+      // User pressed back button / swiped back - close the omnibar
+      closedByPopstateRef.current = true
+      close()
+    }
+
+    window.addEventListener('popstate', handlePopstate)
+    return () => {
+      window.removeEventListener('popstate', handlePopstate)
+
+      // If we're closing normally (not via back button), go back in history
+      // to remove the state we pushed
+      if (!closedByPopstateRef.current && window.history.state?.kbdOmnibarOpen) {
+        window.history.back()
+      }
+    }
+  }, [isOpen, close])
 
   // Focus input when opened
   useEffect(() => {
@@ -487,42 +525,52 @@ export function Omnibar({
   return (
     <div className={backdropClassName} onClick={handleBackdropClick}>
       <div className={omnibarClassName} role="dialog" aria-modal="true" aria-label="Command palette">
-        {pendingParamAction ? (
-          // Parameter entry mode
-          <div className="kbd-omnibar-param-entry">
-            <span className="kbd-omnibar-param-label">{pendingActionLabel}</span>
+        <div className="kbd-omnibar-header">
+          {pendingParamAction ? (
+            // Parameter entry mode
+            <div className="kbd-omnibar-param-entry">
+              <span className="kbd-omnibar-param-label">{pendingActionLabel}</span>
+              <input
+                ref={paramInputRef}
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                className="kbd-omnibar-param-input"
+                value={paramValue}
+                onChange={(e) => setParamValue(e.target.value)}
+                onKeyDown={handleParamKeyDown}
+                placeholder="Enter value..."
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
+              />
+              <span className="kbd-omnibar-param-hint">↵ to confirm · Esc to cancel</span>
+            </div>
+          ) : (
             <input
-              ref={paramInputRef}
+              ref={inputRef}
               type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              className="kbd-omnibar-param-input"
-              value={paramValue}
-              onChange={(e) => setParamValue(e.target.value)}
-              onKeyDown={handleParamKeyDown}
-              placeholder="Enter value..."
+              className="kbd-omnibar-input"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={placeholder}
               autoComplete="off"
               autoCorrect="off"
               autoCapitalize="off"
               spellCheck={false}
             />
-            <span className="kbd-omnibar-param-hint">↵ to confirm · Esc to cancel</span>
-          </div>
-        ) : (
-          <input
-            ref={inputRef}
-            type="text"
-            className="kbd-omnibar-input"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={placeholder}
-            autoComplete="off"
-            autoCorrect="off"
-            autoCapitalize="off"
-            spellCheck={false}
-          />
-        )}
+          )}
+          <button
+            type="button"
+            className="kbd-omnibar-close"
+            onClick={close}
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
 
         <div className="kbd-omnibar-results" ref={resultsContainerRef}>
           {totalResults === 0 && !isLoadingRemote ? (
