@@ -297,13 +297,36 @@
 
 /* === Clickable kbd === */
 .kbd-clickable {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background-color: var(--kbd-kbd-bg);
+  border: 1px solid var(--kbd-kbd-border);
+  border-radius: var(--kbd-radius-sm);
+  padding: 3px 6px;
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+  font-size: 0.75rem;
+  color: var(--kbd-kbd-text);
+  min-height: 24px;
+  white-space: nowrap;
   cursor: pointer;
   transition: all var(--kbd-transition);
 }
 
-.kbd-clickable:hover {
-  background: var(--kbd-accent);
-  color: white;
+/* Only apply hover on devices that support it (not touch) */
+@media (hover: hover) {
+  .kbd-clickable:hover {
+    background: var(--kbd-accent);
+    color: white;
+  }
+}
+
+/* Touch devices: use :active for tap feedback */
+@media (hover: none) {
+  .kbd-clickable:active {
+    background: var(--kbd-accent);
+    color: white;
+  }
 }
 
 .kbd-clickable:focus-visible {
@@ -355,14 +378,31 @@
     background var(--kbd-transition);
 }
 
-.kbd-kbd:hover .kbd-remove-btn,
-.kbd-kbd:focus-within .kbd-remove-btn {
-  opacity: 1;
-  transform: scale(1);
+/* Only show remove button on hover for devices that support it */
+@media (hover: hover) {
+  .kbd-kbd:hover .kbd-remove-btn,
+  .kbd-kbd:focus-within .kbd-remove-btn {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  .kbd-remove-btn:hover {
+    background: #b91c1c;
+  }
 }
 
-.kbd-remove-btn:hover {
-  background: #b91c1c;
+/* Touch devices: always show remove button (smaller) when editing is possible */
+@media (hover: none) {
+  .kbd-kbd.editable .kbd-remove-btn {
+    opacity: 0.7;
+    transform: scale(0.9);
+  }
+
+  .kbd-remove-btn:active {
+    background: #b91c1c;
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 /* === Timeout bar === */
@@ -388,24 +428,59 @@
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding-top: 20vh;
+  padding: 10vh 1rem 1rem;
   z-index: 9999;
+  overflow: hidden;
 }
 
 .kbd-omnibar {
   background-color: var(--kbd-bg);
   border-radius: var(--kbd-radius);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-  width: 90vw;
+  width: 100%;
   max-width: 500px;
   overflow: hidden;
 }
 
+.kbd-omnibar-header {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--kbd-border);
+}
+
+.kbd-omnibar-close {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  border-left: 1px solid var(--kbd-border);
+  color: var(--kbd-text-secondary);
+  font-size: 1.5rem;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.kbd-omnibar-close:hover {
+  background-color: var(--kbd-hover);
+  color: var(--kbd-text);
+}
+
+/* Hide close button on desktop (can use Escape), show on touch devices */
+@media (hover: hover) and (pointer: fine) {
+  .kbd-omnibar-close {
+    display: none;
+  }
+}
+
 .kbd-omnibar-input {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   padding: 12px var(--kbd-padding);
   border: none;
-  border-bottom: 1px solid var(--kbd-border);
   font-size: 1rem;
   background-color: var(--kbd-bg);
   color: var(--kbd-text);
@@ -414,6 +489,52 @@
 
 .kbd-omnibar-input::placeholder {
   color: var(--kbd-text-secondary);
+}
+
+/* Parameter entry mode */
+.kbd-omnibar-param-entry {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px var(--kbd-padding);
+}
+
+.kbd-omnibar-param-label {
+  font-size: 0.875rem;
+  color: var(--kbd-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 50%;
+}
+
+.kbd-omnibar-param-input {
+  flex: 1;
+  min-width: 80px;
+  padding: 6px 10px;
+  border: 1px solid var(--kbd-border);
+  border-radius: var(--kbd-radius-sm);
+  font-size: 1rem;
+  background-color: var(--kbd-bg);
+  color: var(--kbd-text);
+  outline: none;
+  transition: border-color var(--kbd-transition);
+}
+
+.kbd-omnibar-param-input:focus {
+  border-color: var(--kbd-accent);
+}
+
+.kbd-omnibar-param-input::placeholder {
+  color: var(--kbd-text-secondary);
+}
+
+.kbd-omnibar-param-hint {
+  font-size: 0.7rem;
+  color: var(--kbd-text-secondary);
+  white-space: nowrap;
 }
 
 .kbd-omnibar-results {
@@ -428,6 +549,8 @@
   cursor: pointer;
   gap: var(--kbd-gap);
   transition: background-color var(--kbd-transition);
+  min-width: 0;
+  overflow: hidden;
 }
 
 .kbd-omnibar-result:hover,
@@ -442,17 +565,34 @@
 
 .kbd-omnibar-result-label {
   flex: 1;
+  min-width: 0;
   font-size: 0.875rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .kbd-omnibar-result-category {
   font-size: 0.75rem;
   color: var(--kbd-text-secondary);
+  flex-shrink: 0;
 }
 
 .kbd-omnibar-result-bindings {
   display: flex;
   gap: 4px;
+  flex-shrink: 0;
+}
+
+/* Mobile: hide category, show only first binding */
+@media (max-width: 480px) {
+  .kbd-omnibar-result-category {
+    display: none;
+  }
+
+  .kbd-omnibar-result-bindings .kbd-kbd:not(:first-child) {
+    display: none;
+  }
 }
 
 .kbd-omnibar-no-results {
@@ -694,6 +834,27 @@
   display: flex;
   align-items: center;
   min-height: 32px;
+  position: relative;
+}
+
+.kbd-lookup-input {
+  flex: 1;
+  min-width: 20px;
+  background: transparent;
+  border: none;
+  color: transparent;
+  caret-color: var(--kbd-text);
+  font-size: 0.875rem;
+  outline: none;
+}
+
+.kbd-lookup-input::placeholder {
+  color: var(--kbd-text-secondary);
+}
+
+/* When there are pending keys, hide the input text but keep it focusable */
+.kbd-lookup-input:not(:placeholder-shown) {
+  color: transparent;
 }
 
 .kbd-lookup-placeholder {
@@ -793,4 +954,189 @@
     --kbd-kbd-border: #4b5563;
     --kbd-kbd-text: #e5e7eb;
   }
+}
+
+/* === Mobile FAB (Floating Action Button) === */
+.kbd-fab {
+  position: fixed;
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  right: 20px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background-color: var(--kbd-accent);
+  color: white;
+  border: 1px solid var(--kbd-border);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9990;
+  opacity: 0.7;
+  transition:
+    transform 200ms ease,
+    box-shadow 200ms ease,
+    opacity 300ms ease;
+}
+
+.kbd-fab:hover,
+.kbd-fab:focus {
+  opacity: 1;
+  transform: scale(1.08);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+.kbd-fab:active {
+  transform: scale(0.95);
+  opacity: 1;
+}
+
+.kbd-fab-icon {
+  width: 20px;
+  height: 20px;
+}
+
+/* Hidden state (e.g., while scrolling) */
+.kbd-fab-hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.8);
+}
+
+/* Auto-visibility: hidden on desktop, shown on mobile */
+.kbd-fab-auto {
+  display: none;
+}
+
+@media (max-width: 640px), (hover: none) {
+  .kbd-fab-auto {
+    display: flex;
+  }
+}
+
+/* === Mobile Full-Screen Mode === */
+/* Applied via media query or .kbd-mobile class */
+
+@media (max-width: 640px), (hover: none) {
+  /* Omnibar mobile layout */
+  .kbd-omnibar-backdrop {
+    padding-top: 0;
+    align-items: stretch;
+  }
+
+  .kbd-omnibar {
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    border-radius: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .kbd-omnibar-input {
+    padding: 16px;
+    padding-top: calc(16px + env(safe-area-inset-top, 0px));
+    font-size: 1.125rem;
+  }
+
+  .kbd-omnibar-results {
+    flex: 1;
+    max-height: none;
+  }
+
+  .kbd-omnibar-result {
+    padding: 14px 16px;
+  }
+
+  .kbd-omnibar-result-label {
+    font-size: 1rem;
+  }
+
+  /* Lookup modal mobile layout */
+  .kbd-lookup-backdrop {
+    padding-top: 0;
+    align-items: stretch;
+  }
+
+  .kbd-lookup {
+    width: 100%;
+    max-width: none;
+    max-height: none;
+    height: 100%;
+    border-radius: 0;
+  }
+
+  .kbd-lookup-header {
+    padding: 12px 16px;
+    padding-top: calc(12px + env(safe-area-inset-top, 0px));
+  }
+
+  .kbd-lookup-hint {
+    display: none; /* Hide keyboard hints on mobile */
+  }
+
+  .kbd-lookup-results {
+    flex: 1;
+  }
+
+  .kbd-lookup-result {
+    padding: 12px 16px;
+  }
+
+  .kbd-lookup-labels {
+    font-size: 1rem;
+  }
+
+  /* Sequence modal mobile layout */
+  .kbd-sequence-backdrop {
+    padding-top: 0;
+    align-items: flex-end; /* Slide up from bottom on mobile */
+  }
+
+  .kbd-sequence {
+    width: 100%;
+    max-width: none;
+    border-radius: var(--kbd-radius) var(--kbd-radius) 0 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+
+/* Manual mobile class override (for programmatic control) */
+.kbd-mobile .kbd-omnibar-backdrop,
+.kbd-mobile .kbd-lookup-backdrop {
+  padding-top: 0;
+  align-items: stretch;
+}
+
+.kbd-mobile .kbd-omnibar,
+.kbd-mobile .kbd-lookup {
+  width: 100%;
+  max-width: none;
+  max-height: none;
+  height: 100%;
+  border-radius: 0;
+}
+
+.kbd-mobile .kbd-omnibar {
+  display: flex;
+  flex-direction: column;
+}
+
+.kbd-mobile .kbd-omnibar-input {
+  padding-top: calc(16px + env(safe-area-inset-top, 0px));
+}
+
+.kbd-mobile .kbd-omnibar-results,
+.kbd-mobile .kbd-lookup-results {
+  flex: 1;
+  max-height: none;
+}
+
+.kbd-mobile .kbd-lookup-header {
+  padding-top: calc(12px + env(safe-area-inset-top, 0px));
+}
+
+.kbd-mobile .kbd-lookup-hint {
+  display: none;
 }

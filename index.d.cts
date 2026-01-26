@@ -157,6 +157,8 @@ interface ActionDefinition {
     enabled?: boolean;
     /** Hide from ShortcutsModal (still searchable in omnibar) */
     hideFromModal?: boolean;
+    /** Protect bindings from removal (user can still add more, but not remove existing) */
+    protected?: boolean;
 }
 /**
  * Registry of all available actions
@@ -176,6 +178,10 @@ interface ActionSearchResult {
     score: number;
     /** Matched ranges in label for highlighting */
     labelMatches: Array<[number, number]>;
+    /** Whether this action has bindings with digit placeholders (\d or \d+) */
+    hasPlaceholders?: boolean;
+    /** Captured digit values from query (e.g., "smooth 3" → [3]) */
+    captures?: number[];
 }
 /**
  * A possible completion for a partially-typed sequence
@@ -490,7 +496,7 @@ interface UseOmnibarOptions {
     /** Whether omnibar hotkey is enabled (default: true) */
     enabled?: boolean;
     /** Called when an action is executed (if handlers not provided, or in addition to) */
-    onExecute?: (actionId: string) => void;
+    onExecute?: (actionId: string, captures?: number[]) => void;
     /** Called when a remote entry is executed */
     onExecuteRemote?: (entry: OmnibarEntry) => void;
     /** Called when omnibar opens */
@@ -503,6 +509,8 @@ interface UseOmnibarOptions {
     endpointsRegistry?: OmnibarEndpointsRegistryValue;
     /** Debounce time for remote queries in ms (default: 150) */
     debounceMs?: number;
+    /** Recently executed action IDs to show first when query is empty */
+    recentActionIds?: string[];
 }
 interface UseOmnibarResult {
     /** Whether omnibar is open */
@@ -535,8 +543,8 @@ interface UseOmnibarResult {
     selectNext: () => void;
     /** Select the previous result */
     selectPrev: () => void;
-    /** Execute the selected action (or a specific action by ID) */
-    execute: (actionId?: string) => void;
+    /** Execute the selected action (or a specific action by ID, with optional captures) */
+    execute: (actionId?: string, captures?: number[]) => void;
     /** Reset selection to first result */
     resetSelection: () => void;
     /** Sequence completions based on pending keys */
@@ -545,6 +553,12 @@ interface UseOmnibarResult {
     pendingKeys: HotkeySequence;
     /** Whether currently awaiting more keys in a sequence */
     isAwaitingSequence: boolean;
+    /** Action ID pending parameter entry (null if not awaiting input) */
+    pendingParamAction: string | null;
+    /** Submit parameter value for pending action */
+    submitParam: (value: number) => void;
+    /** Cancel parameter entry */
+    cancelParam: () => void;
 }
 /**
  * Hook for implementing an omnibar/command palette.
@@ -832,7 +846,7 @@ interface ShortcutsModalRenderProps {
  * />
  * ```
  */
-declare function ShortcutsModal({ keymap: keymapProp, defaults: defaultsProp, labels: labelsProp, descriptions: descriptionsProp, groups: groupNamesProp, groupOrder, groupRenderers, isOpen: isOpenProp, onClose: onCloseProp, defaultBinding, editable, onBindingChange, onBindingAdd, onBindingRemove, onReset, multipleBindings, children, backdropClassName, modalClassName, title, hint, showUnbound, TooltipComponent: TooltipComponentProp, }: ShortcutsModalProps): react_jsx_runtime.JSX.Element | null;
+declare function ShortcutsModal({ keymap: keymapProp, defaults: defaultsProp, labels: labelsProp, descriptions: descriptionsProp, groups: groupNamesProp, groupOrder, groupRenderers, isOpen: isOpenProp, onClose: onCloseProp, defaultBinding, editable: editableProp, onBindingChange, onBindingAdd, onBindingRemove, onReset, multipleBindings, children, backdropClassName, modalClassName, title, hint, showUnbound, TooltipComponent: TooltipComponentProp, }: ShortcutsModalProps): react_jsx_runtime.JSX.Element | null;
 
 /**
  * Configuration for a row in a two-column table
@@ -960,12 +974,18 @@ interface OmnibarRenderProps {
     totalResults: number;
     selectNext: () => void;
     selectPrev: () => void;
-    execute: (actionId?: string) => void;
+    execute: (actionId?: string, captures?: number[]) => void;
     close: () => void;
     completions: SequenceCompletion[];
     pendingKeys: HotkeySequence;
     isAwaitingSequence: boolean;
     inputRef: RefObject<HTMLInputElement | null>;
+    /** Action ID pending parameter entry */
+    pendingParamAction: string | null;
+    /** Submit parameter value */
+    submitParam: (value: number) => void;
+    /** Cancel parameter entry */
+    cancelParam: () => void;
 }
 /**
  * Command palette for searching and executing actions by name.
@@ -1162,12 +1182,38 @@ interface FuzzyMatchResult {
  */
 declare function fuzzyMatch(pattern: string, text: string): FuzzyMatchResult;
 /**
+ * Check if a binding string contains digit placeholders (\d or \d+)
+ */
+declare function bindingHasPlaceholders(binding: string): boolean;
+/**
+ * Check if any bindings have digit placeholders
+ */
+declare function hasAnyPlaceholderBindings(bindings: string[]): boolean;
+/**
+ * Parse a query to extract numbers for placeholder matching.
+ * Supports multiple formats:
+ * - "smooth 3" → { text: "smooth", numbers: [3] }
+ * - "3 smooth" → { text: "smooth", numbers: [3] }
+ * - "3" → { text: "", numbers: [3] }
+ * - "smooth" → { text: "smooth", numbers: [] }
+ */
+declare function parseQueryNumbers(query: string): {
+    text: string;
+    numbers: number[];
+};
+/**
  * Search actions by query with fuzzy matching.
+ * Supports number-aware search: "smooth 3" matches actions with `\d+` placeholders
+ * and captures the number for execution.
  *
  * @example
  * ```tsx
  * const results = searchActions('temp', actions, keymap)
  * // Returns ActionSearchResult[] sorted by relevance
+ *
+ * // Number-aware search
+ * const results = searchActions('smooth 3', actions, keymap)
+ * // Matches "Smooth: N hours" with captures: [3]
  * ```
  */
 declare function searchActions(query: string, actions: ActionRegistry, keymap?: Record<string, string | string[]>): ActionSearchResult[];
@@ -1206,6 +1252,8 @@ interface ActionConfig {
     priority?: number;
     /** Hide from ShortcutsModal (still searchable in omnibar) */
     hideFromModal?: boolean;
+    /** Protect bindings from removal (user can still add more, but not remove existing) */
+    protected?: boolean;
 }
 /**
  * Register an action with the hotkeys system.
@@ -1302,7 +1350,7 @@ interface HotkeysConfig {
     sequenceTimeout?: number;
     /** When true, keys with conflicts are disabled (default: true) */
     disableConflicts?: boolean;
-    /** Minimum viewport width to enable hotkeys (false = always enabled) */
+    /** Minimum viewport width to enable hotkeys (default: false = no viewport restriction) */
     minViewportWidth?: number | false;
     /** Whether to show hotkey UI on touch-only devices (default: false) */
     enableOnTouch?: boolean;
@@ -1349,6 +1397,8 @@ interface HotkeysContextValue {
     toggleLookup: () => void;
     /** Execute an action by ID */
     executeAction: (id: string, captures?: number[]) => void;
+    /** Recently executed action IDs (most recent first) */
+    recentActionIds: string[];
     /** Sequence state: pending key combinations */
     pendingKeys: HotkeySequence;
     /** Sequence state: whether waiting for more keys */
@@ -1588,6 +1638,105 @@ interface LookupModalProps {
  */
 declare function LookupModal({ defaultBinding }?: LookupModalProps): react_jsx_runtime.JSX.Element | null;
 
+interface MobileFABProps {
+    /**
+     * Which modal to open when tapped.
+     * - 'omnibar': Opens the command palette (default)
+     * - 'lookup': Opens the key lookup modal
+     */
+    target?: 'omnibar' | 'lookup';
+    /**
+     * Whether to show the FAB.
+     * - 'auto': Show on mobile/touch devices only (default)
+     * - 'always': Always show
+     * - 'never': Never show (useful for conditional rendering)
+     */
+    visibility?: 'auto' | 'always' | 'never';
+    /**
+     * Hide the FAB while scrolling (default: true)
+     */
+    hideOnScroll?: boolean;
+    /**
+     * Delay in ms before showing FAB after scroll stops (default: 800)
+     */
+    scrollIdleDelay?: number;
+    /** Custom CSS class for the FAB button */
+    className?: string;
+    /** Accessible label for the button */
+    ariaLabel?: string;
+    /** Custom icon (defaults to search icon) */
+    icon?: React.ReactNode;
+}
+/**
+ * Floating Action Button for triggering omnibar/lookup on mobile devices.
+ *
+ * On mobile, keyboard shortcuts aren't available, but users can still benefit
+ * from the omnibar's fuzzy search to discover and execute actions quickly.
+ *
+ * By default, the FAB only appears on mobile/touch devices (viewport < 640px
+ * or no hover capability). Set `visibility="always"` to show it everywhere.
+ *
+ * The FAB hides while scrolling and reappears after the user stops scrolling.
+ *
+ * @example
+ * ```tsx
+ * // Basic usage - shows on mobile, opens omnibar
+ * <MobileFAB />
+ *
+ * // Open lookup modal instead
+ * <MobileFAB target="lookup" />
+ *
+ * // Always visible (desktop + mobile)
+ * <MobileFAB visibility="always" />
+ *
+ * // Disable hide-on-scroll
+ * <MobileFAB hideOnScroll={false} />
+ * ```
+ */
+declare function MobileFAB({ target, visibility, hideOnScroll, scrollIdleDelay, className, ariaLabel, icon, }: MobileFABProps): react_jsx_runtime.JSX.Element | null;
+
+interface SearchTriggerProps {
+    /**
+     * Which modal to open when clicked.
+     * - 'omnibar': Opens the command palette (default)
+     * - 'lookup': Opens the key lookup modal
+     */
+    target?: 'omnibar' | 'lookup';
+    /** Custom CSS class */
+    className?: string;
+    /** Accessible label for the button */
+    ariaLabel?: string;
+    /** Custom children (defaults to search icon) */
+    children?: React.ReactNode;
+}
+/**
+ * Search icon SVG
+ */
+declare function SearchIcon({ className }: {
+    className?: string;
+}): react_jsx_runtime.JSX.Element;
+/**
+ * A simple button to trigger the omnibar or lookup modal.
+ *
+ * Use this to integrate search into your existing UI (FABs, menus, toolbars).
+ * For a standalone floating action button, use `MobileFAB` instead.
+ *
+ * @example
+ * ```tsx
+ * // In a custom FAB or menu
+ * <SearchTrigger className="my-menu-item" />
+ *
+ * // Open lookup instead of omnibar
+ * <SearchTrigger target="lookup" />
+ *
+ * // Custom content
+ * <SearchTrigger>
+ *   <MyCustomIcon /> Search
+ * </SearchTrigger>
+ * ```
+ */
+declare function SearchTrigger({ target, className, ariaLabel, children, }: SearchTriggerProps): react_jsx_runtime.JSX.Element | null;
+
 /**
  * Modal that appears during multi-key sequence input (e.g., `g t` for "go to table").
  *
@@ -1670,4 +1819,4 @@ declare const ACTION_MODAL = "__hotkeys:modal";
 declare const ACTION_OMNIBAR = "__hotkeys:omnibar";
 declare const ACTION_LOOKUP = "__hotkeys:lookup";
 
-export { ACTION_LOOKUP, ACTION_MODAL, ACTION_OMNIBAR, type ActionConfig, type ActionDefinition, type ActionHandler, type ActionRegistry, type ActionSearchResult, ActionsRegistryContext, type ActionsRegistryValue, Alt, Backspace, type BindingInfo, Command, Ctrl, DEFAULT_SEQUENCE_TIMEOUT, DIGITS_PLACEHOLDER, DIGIT_PLACEHOLDER, Down, type EndpointPagination, type EndpointPaginationInfo, type EndpointPaginationMode, type EndpointQueryResult, type EndpointResponse, Enter, type FuzzyMatchResult, type GroupRenderer, type GroupRendererProps, type HandlerMap, type HotkeyHandler, type HotkeyMap, type HotkeySequence, type HotkeysConfig, type HotkeysContextValue, HotkeysProvider, type HotkeysProviderProps, Kbd, KbdLookup, KbdModal, KbdOmnibar, type KbdProps, Kbds, Key, type KeyCombination, type KeyCombinationDisplay, type KeyConflict, type KeyIconProps, type KeyIconType, type KeySeq, KeybindingEditor, type KeybindingEditorProps, type KeybindingEditorRenderProps, Left, LookupModal, ModifierIcon, type ModifierIconProps, type ModifierType, type Modifiers, Omnibar, type OmnibarActionEntry, type OmnibarEndpointAsyncConfig, type OmnibarEndpointConfig, type OmnibarEndpointConfigBase, type OmnibarEndpointSyncConfig, OmnibarEndpointsRegistryContext, type OmnibarEndpointsRegistryValue, type OmnibarEntry, type OmnibarEntryBase, type OmnibarLinkEntry, type OmnibarProps, type OmnibarRenderProps, Option, type RecordHotkeyOptions, type RecordHotkeyResult, type RegisteredAction, type RegisteredEndpoint, type RemoteOmnibarResult, Right, type SeqElem, type SeqElemState, type SeqMatchState, type SequenceCompletion, SequenceModal, Shift, type ShortcutGroup, ShortcutsModal, type ShortcutsModalProps, type ShortcutsModalRenderProps, type TooltipComponent, type TooltipProps, type TwoColumnConfig, type TwoColumnRow, Up, type UseEditableHotkeysOptions, type UseEditableHotkeysResult, type UseHotkeysOptions, type UseHotkeysResult, type UseOmnibarOptions, type UseOmnibarResult, countPlaceholders, createTwoColumnRenderer, extractCaptures, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, formatKeySeq, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasConflicts, hasDigitPlaceholders, hotkeySequenceToKeySeq, isDigitPlaceholder, isMac, isModifierKey, isPlaceholderSentinel, isSequence, isShiftedSymbol, keySeqToHotkeySequence, normalizeKey, parseHotkeyString, parseKeySeq, searchActions, useAction, useActions, useActionsRegistry, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useOmnibar, useOmnibarEndpoint, useOmnibarEndpointsRegistry, useRecordHotkey };
+export { ACTION_LOOKUP, ACTION_MODAL, ACTION_OMNIBAR, type ActionConfig, type ActionDefinition, type ActionHandler, type ActionRegistry, type ActionSearchResult, ActionsRegistryContext, type ActionsRegistryValue, Alt, Backspace, type BindingInfo, Command, Ctrl, DEFAULT_SEQUENCE_TIMEOUT, DIGITS_PLACEHOLDER, DIGIT_PLACEHOLDER, Down, type EndpointPagination, type EndpointPaginationInfo, type EndpointPaginationMode, type EndpointQueryResult, type EndpointResponse, Enter, type FuzzyMatchResult, type GroupRenderer, type GroupRendererProps, type HandlerMap, type HotkeyHandler, type HotkeyMap, type HotkeySequence, type HotkeysConfig, type HotkeysContextValue, HotkeysProvider, type HotkeysProviderProps, Kbd, KbdLookup, KbdModal, KbdOmnibar, type KbdProps, Kbds, Key, type KeyCombination, type KeyCombinationDisplay, type KeyConflict, type KeyIconProps, type KeyIconType, type KeySeq, KeybindingEditor, type KeybindingEditorProps, type KeybindingEditorRenderProps, Left, LookupModal, MobileFAB, type MobileFABProps, ModifierIcon, type ModifierIconProps, type ModifierType, type Modifiers, Omnibar, type OmnibarActionEntry, type OmnibarEndpointAsyncConfig, type OmnibarEndpointConfig, type OmnibarEndpointConfigBase, type OmnibarEndpointSyncConfig, OmnibarEndpointsRegistryContext, type OmnibarEndpointsRegistryValue, type OmnibarEntry, type OmnibarEntryBase, type OmnibarLinkEntry, type OmnibarProps, type OmnibarRenderProps, Option, type RecordHotkeyOptions, type RecordHotkeyResult, type RegisteredAction, type RegisteredEndpoint, type RemoteOmnibarResult, Right, SearchIcon, SearchTrigger, type SearchTriggerProps, type SeqElem, type SeqElemState, type SeqMatchState, type SequenceCompletion, SequenceModal, Shift, type ShortcutGroup, ShortcutsModal, type ShortcutsModalProps, type ShortcutsModalRenderProps, type TooltipComponent, type TooltipProps, type TwoColumnConfig, type TwoColumnRow, Up, type UseEditableHotkeysOptions, type UseEditableHotkeysResult, type UseHotkeysOptions, type UseHotkeysResult, type UseOmnibarOptions, type UseOmnibarResult, bindingHasPlaceholders, countPlaceholders, createTwoColumnRenderer, extractCaptures, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, formatKeySeq, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasAnyPlaceholderBindings, hasConflicts, hasDigitPlaceholders, hotkeySequenceToKeySeq, isDigitPlaceholder, isMac, isModifierKey, isPlaceholderSentinel, isSequence, isShiftedSymbol, keySeqToHotkeySequence, normalizeKey, parseHotkeyString, parseKeySeq, parseQueryNumbers, searchActions, useAction, useActions, useActionsRegistry, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useOmnibar, useOmnibarEndpoint, useOmnibarEndpointsRegistry, useRecordHotkey };

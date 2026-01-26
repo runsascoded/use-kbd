@@ -184,7 +184,8 @@ function useActionsRegistry(options = {}) {
         group: config.group,
         keywords: config.keywords,
         hideFromModal: config.hideFromModal,
-        enabled: config.enabled
+        enabled: config.enabled,
+        protected: config.protected
       };
     }
     return registry;
@@ -975,34 +976,80 @@ function fuzzyMatch(pattern, text) {
   }
   return { matched, score, ranges };
 }
+function bindingHasPlaceholders(binding) {
+  return binding.includes("\\d");
+}
+function hasAnyPlaceholderBindings(bindings) {
+  return bindings.some(bindingHasPlaceholders);
+}
+function parseQueryNumbers(query) {
+  const trimmed = query.trim();
+  if (/^\d+$/.test(trimmed)) {
+    return {
+      text: "",
+      numbers: [parseInt(trimmed, 10)]
+    };
+  }
+  const startMatch = trimmed.match(/^(\d+)\s*(.+)$/);
+  if (startMatch) {
+    return {
+      text: startMatch[2].trim(),
+      numbers: [parseInt(startMatch[1], 10)]
+    };
+  }
+  const endMatch = trimmed.match(/^(.+?)\s+(\d+)$/);
+  if (endMatch) {
+    return {
+      text: endMatch[1].trim(),
+      numbers: [parseInt(endMatch[2], 10)]
+    };
+  }
+  return { text: trimmed, numbers: [] };
+}
 function searchActions(query, actions, keymap) {
   const actionBindings = keymap ? getActionBindings(keymap) : /* @__PURE__ */ new Map();
   const results = [];
+  const { text: queryText, numbers: queryNumbers } = parseQueryNumbers(query);
   for (const [id, action] of Object.entries(actions)) {
     if (action.enabled === false) continue;
-    const labelMatch = fuzzyMatch(query, action.label);
-    const descMatch = action.description ? fuzzyMatch(query, action.description) : { matched: false, score: 0};
-    const groupMatch = action.group ? fuzzyMatch(query, action.group) : { matched: false, score: 0};
-    const idMatch = fuzzyMatch(query, id);
+    const bindings = actionBindings.get(id) ?? [];
+    const hasPlaceholders = hasAnyPlaceholderBindings(bindings);
+    const effectiveQuery = queryNumbers.length > 0 && hasPlaceholders ? queryText : query;
+    const isNumberOnlyQuery = queryNumbers.length > 0 && queryText === "";
+    const includeForPlaceholder = isNumberOnlyQuery && hasPlaceholders;
+    const labelMatch = fuzzyMatch(effectiveQuery, action.label);
+    const descMatch = action.description ? fuzzyMatch(effectiveQuery, action.description) : { matched: false, score: 0};
+    const groupMatch = action.group ? fuzzyMatch(effectiveQuery, action.group) : { matched: false, score: 0};
+    const idMatch = fuzzyMatch(effectiveQuery, id);
     let keywordScore = 0;
     if (action.keywords) {
       for (const keyword of action.keywords) {
-        const kwMatch = fuzzyMatch(query, keyword);
+        const kwMatch = fuzzyMatch(effectiveQuery, keyword);
         if (kwMatch.matched) {
           keywordScore = max(keywordScore, kwMatch.score);
         }
       }
     }
-    const matched = labelMatch.matched || descMatch.matched || groupMatch.matched || idMatch.matched || keywordScore > 0;
-    if (!matched && query) continue;
-    const score = (labelMatch.matched ? labelMatch.score * 3 : 0) + (descMatch.matched ? descMatch.score * 1.5 : 0) + (groupMatch.matched ? groupMatch.score : 0) + (idMatch.matched ? idMatch.score * 0.5 : 0) + keywordScore * 2;
-    results.push({
+    const matched = labelMatch.matched || descMatch.matched || groupMatch.matched || idMatch.matched || keywordScore > 0 || includeForPlaceholder;
+    if (!matched && effectiveQuery) continue;
+    let score = (labelMatch.matched ? labelMatch.score * 3 : 0) + (descMatch.matched ? descMatch.score * 1.5 : 0) + (groupMatch.matched ? groupMatch.score : 0) + (idMatch.matched ? idMatch.score * 0.5 : 0) + keywordScore * 2;
+    if (queryNumbers.length > 0 && hasPlaceholders) {
+      score += 5;
+    }
+    const result = {
       id,
       action,
-      bindings: actionBindings.get(id) ?? [],
+      bindings,
       score,
       labelMatches: labelMatch.ranges
-    });
+    };
+    if (hasPlaceholders) {
+      result.hasPlaceholders = true;
+      if (queryNumbers.length > 0) {
+        result.captures = queryNumbers;
+      }
+    }
+    results.push(result);
   }
   results.sort((a, b) => b.score - a.score);
   return results;
@@ -1514,7 +1561,8 @@ var DEFAULT_CONFIG = {
   sequenceTimeout: DEFAULT_SEQUENCE_TIMEOUT,
   disableConflicts: false,
   // Keep conflicting bindings active; SeqM handles disambiguation
-  minViewportWidth: 768,
+  minViewportWidth: false,
+  // Don't disable based on viewport; use enableOnTouch instead
   enableOnTouch: false
 };
 function HotkeysProvider({
@@ -1573,7 +1621,67 @@ function HotkeysProvider({
   }, []);
   const closeLookup = react.useCallback(() => setIsLookupOpen(false), []);
   const toggleLookup = react.useCallback(() => setIsLookupOpen((prev) => !prev), []);
+  const activeModal = isModalOpen ? "shortcuts" : isOmnibarOpen ? "omnibar" : isLookupOpen ? "lookup" : null;
+  const closedByPopstateRef = react.useRef(false);
+  const prevActiveModalRef = react.useRef(null);
+  react.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const stateKey = "kbdActiveModal";
+    const prevModal = prevActiveModalRef.current;
+    prevActiveModalRef.current = activeModal;
+    if (!activeModal) {
+      if (prevModal && !closedByPopstateRef.current && window.history.state?.[stateKey]) {
+        window.history.back();
+      }
+      closedByPopstateRef.current = false;
+      return;
+    }
+    const currentState = window.history.state;
+    if (!currentState?.[stateKey]) {
+      window.history.pushState({ ...currentState, [stateKey]: activeModal }, "");
+    } else if (currentState[stateKey] !== activeModal) {
+      window.history.replaceState({ ...currentState, [stateKey]: activeModal }, "");
+    }
+    const handlePopstate = () => {
+      if (window.history.state?.[stateKey]) {
+        return;
+      }
+      closedByPopstateRef.current = true;
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+      }
+      if (isModalOpen) setIsModalOpen(false);
+      if (isOmnibarOpen) setIsOmnibarOpen(false);
+      if (isLookupOpen) setIsLookupOpen(false);
+    };
+    window.addEventListener("popstate", handlePopstate);
+    return () => {
+      window.removeEventListener("popstate", handlePopstate);
+    };
+  }, [activeModal, isModalOpen, isOmnibarOpen, isLookupOpen]);
   const [isEditingBinding, setIsEditingBinding] = react.useState(false);
+  const recentsStorageKey = `${config.storageKey}-recents`;
+  const MAX_RECENTS = 5;
+  const [recentActionIds, setRecentActionIds] = react.useState(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const stored = localStorage.getItem(recentsStorageKey);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+  const trackRecentAction = react.useCallback((actionId) => {
+    setRecentActionIds((prev) => {
+      const filtered = prev.filter((id) => id !== actionId);
+      const updated = [actionId, ...filtered].slice(0, MAX_RECENTS);
+      try {
+        localStorage.setItem(recentsStorageKey, JSON.stringify(updated));
+      } catch {
+      }
+      return updated;
+    });
+  }, [recentsStorageKey]);
   const keymap = registry.keymap;
   const conflicts = react.useMemo(() => findConflicts(keymap), [keymap]);
   const hasConflicts2 = conflicts.size > 0;
@@ -1620,6 +1728,10 @@ function HotkeysProvider({
     (pending) => getSequenceCompletions(pending, keymap, registry.actionRegistry),
     [keymap, registry.actionRegistry]
   );
+  const executeAction = react.useCallback((id, captures) => {
+    registry.execute(id, captures);
+    trackRecentAction(id);
+  }, [registry, trackRecentAction]);
   const value = react.useMemo(() => ({
     registry,
     endpointsRegistry,
@@ -1639,7 +1751,8 @@ function HotkeysProvider({
     toggleLookup,
     isEditingBinding,
     setIsEditingBinding,
-    executeAction: registry.execute,
+    executeAction,
+    recentActionIds,
     pendingKeys,
     isAwaitingSequence,
     cancelSequence,
@@ -1667,6 +1780,8 @@ function HotkeysProvider({
     closeLookup,
     toggleLookup,
     isEditingBinding,
+    executeAction,
+    recentActionIds,
     pendingKeys,
     isAwaitingSequence,
     cancelSequence,
@@ -1719,7 +1834,9 @@ function useAction(id, config) {
     // Compare bindings by value
     JSON.stringify(config.defaultBindings),
     JSON.stringify(config.keywords),
-    config.priority
+    config.priority,
+    config.hideFromModal,
+    config.protected
   ]);
 }
 function useActions(actions) {
@@ -1760,7 +1877,9 @@ function useActions(actions) {
         c.group,
         c.defaultBindings,
         c.keywords,
-        c.priority
+        c.priority,
+        c.hideFromModal,
+        c.protected
       ])
     )
   ]);
@@ -2186,12 +2305,14 @@ function useOmnibar(options) {
     onClose,
     maxResults = 10,
     endpointsRegistry,
-    debounceMs = DEFAULT_DEBOUNCE_MS
+    debounceMs = DEFAULT_DEBOUNCE_MS,
+    recentActionIds = []
   } = options;
   const [isOpen, setIsOpen] = react.useState(false);
   const [query, setQuery] = react.useState("");
   const [selectedIndex, setSelectedIndex] = react.useState(0);
   const [endpointStates, setEndpointStates] = react.useState(/* @__PURE__ */ new Map());
+  const [pendingParamAction, setPendingParamAction] = react.useState(null);
   const handlersRef = react.useRef(handlers);
   handlersRef.current = handlers;
   const onExecuteRef = react.useRef(onExecute);
@@ -2225,8 +2346,32 @@ function useOmnibar(options) {
   );
   const results = react.useMemo(() => {
     const allResults = searchActions(query, actions, keymap);
+    if (!query.trim() && recentActionIds.length > 0) {
+      const actionBindings = getActionBindings(keymap);
+      const recentResults = [];
+      const recentIdSet = /* @__PURE__ */ new Set();
+      for (const actionId of recentActionIds) {
+        const action = actions[actionId];
+        if (action) {
+          const bindings = actionBindings.get(actionId) ?? [];
+          const hasPlaceholders = hasAnyPlaceholderBindings(bindings);
+          recentResults.push({
+            id: actionId,
+            action,
+            bindings,
+            score: 1e3,
+            // High score to ensure they appear first
+            labelMatches: [],
+            ...hasPlaceholders && { hasPlaceholders: true }
+          });
+          recentIdSet.add(actionId);
+        }
+      }
+      const otherResults = allResults.filter((r) => !recentIdSet.has(r.id));
+      return [...recentResults, ...otherResults].slice(0, maxResults);
+    }
     return allResults.slice(0, maxResults);
-  }, [query, actions, keymap, maxResults]);
+  }, [query, actions, keymap, maxResults, recentActionIds]);
   react.useEffect(() => {
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
@@ -2395,7 +2540,8 @@ function useOmnibar(options) {
     const processed = [];
     for (const [endpointId, state] of endpointStates) {
       const endpoint = endpointsRegistry.endpoints.get(endpointId);
-      const priority = endpoint?.config.priority ?? 0;
+      if (!endpoint) continue;
+      const priority = endpoint.config.priority ?? 0;
       for (const entry of state.entries) {
         const labelMatch = fuzzyMatch(query, entry.label);
         const descMatch = entry.description ? fuzzyMatch(query, entry.description) : null;
@@ -2493,7 +2639,15 @@ function useOmnibar(options) {
   const resetSelection = react.useCallback(() => {
     setSelectedIndex(0);
   }, []);
-  const execute = react.useCallback((actionId) => {
+  const executeWithCaptures = react.useCallback((actionId, captures) => {
+    close();
+    if (handlersRef.current?.[actionId]) {
+      const event = new KeyboardEvent("keydown", { key: "Enter" });
+      handlersRef.current[actionId](event, captures);
+    }
+    onExecuteRef.current?.(actionId, captures);
+  }, [close]);
+  const execute = react.useCallback((actionId, captures) => {
     const localCount = results.length;
     if (actionId) {
       const remoteResult = remoteResults.find((r) => r.id === actionId);
@@ -2506,23 +2660,24 @@ function useOmnibar(options) {
         onExecuteRemoteRef.current?.(entry);
         return;
       }
-      close();
-      if (handlersRef.current?.[actionId]) {
-        const event = new KeyboardEvent("keydown", { key: "Enter" });
-        handlersRef.current[actionId](event);
+      const result = results.find((r) => r.id === actionId);
+      const effectiveCaptures = captures ?? result?.captures;
+      if (result?.hasPlaceholders && !effectiveCaptures?.length) {
+        setPendingParamAction(actionId);
+        return;
       }
-      onExecuteRef.current?.(actionId);
+      executeWithCaptures(actionId, effectiveCaptures);
       return;
     }
     if (selectedIndex < localCount) {
-      const id = results[selectedIndex]?.id;
-      if (!id) return;
-      close();
-      if (handlersRef.current?.[id]) {
-        const event = new KeyboardEvent("keydown", { key: "Enter" });
-        handlersRef.current[id](event);
+      const result = results[selectedIndex];
+      if (!result) return;
+      const effectiveCaptures = captures ?? result.captures;
+      if (result.hasPlaceholders && !effectiveCaptures?.length) {
+        setPendingParamAction(result.id);
+        return;
       }
-      onExecuteRef.current?.(id);
+      executeWithCaptures(result.id, effectiveCaptures);
     } else {
       const remoteIndex = selectedIndex - localCount;
       const remoteResult = remoteResults[remoteIndex];
@@ -2534,7 +2689,16 @@ function useOmnibar(options) {
       }
       onExecuteRemoteRef.current?.(entry);
     }
-  }, [results, remoteResults, selectedIndex, close]);
+  }, [results, remoteResults, selectedIndex, close, executeWithCaptures]);
+  const submitParam = react.useCallback((value) => {
+    if (pendingParamAction) {
+      executeWithCaptures(pendingParamAction, [value]);
+      setPendingParamAction(null);
+    }
+  }, [pendingParamAction, executeWithCaptures]);
+  const cancelParam = react.useCallback(() => {
+    setPendingParamAction(null);
+  }, []);
   react.useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e) => {
@@ -2588,7 +2752,10 @@ function useOmnibar(options) {
     resetSelection,
     completions,
     pendingKeys,
-    isAwaitingSequence
+    isAwaitingSequence,
+    pendingParamAction,
+    submitParam,
+    cancelParam
   };
 }
 var baseStyle = {
@@ -3189,6 +3356,7 @@ function LookupModal({ defaultBinding = "meta+shift+k" } = {}) {
   });
   const [pendingKeys, setPendingKeys] = react.useState([]);
   const [selectedIndex, setSelectedIndex] = react.useState(0);
+  const inputRef = react.useRef(null);
   const allBindings = react.useMemo(() => {
     const results = [];
     const keymap = registry.keymap;
@@ -3265,11 +3433,26 @@ function LookupModal({ defaultBinding = "meta+shift+k" } = {}) {
     if (isLookupOpen) {
       setPendingKeys(lookupInitialKeys);
       setSelectedIndex(0);
+      requestAnimationFrame(() => {
+        inputRef.current?.focus();
+      });
     }
   }, [isLookupOpen, lookupInitialKeys]);
   react.useEffect(() => {
     setSelectedIndex(0);
   }, [filteredBindings.length]);
+  const handleInputChange = react.useCallback((e) => {
+    const value = e.target.value;
+    if (!value) return;
+    for (const char of value) {
+      const newCombo = {
+        key: normalizeKey(char),
+        modifiers: { ctrl: false, alt: false, shift: false, meta: false }
+      };
+      setPendingKeys((prev) => [...prev, newCombo]);
+    }
+    e.target.value = "";
+  }, []);
   react.useEffect(() => {
     if (!isLookupOpen) return;
     const handleKeyDown = (e) => {
@@ -3307,17 +3490,19 @@ function LookupModal({ defaultBinding = "meta+shift+k" } = {}) {
         return;
       }
       if (isModifierKey(e.key)) return;
-      e.preventDefault();
-      const newCombo = {
-        key: normalizeKey(e.key),
-        modifiers: {
-          ctrl: e.ctrlKey,
-          alt: e.altKey,
-          shift: e.shiftKey,
-          meta: e.metaKey
-        }
-      };
-      setPendingKeys((prev) => [...prev, newCombo]);
+      if (e.ctrlKey || e.altKey || e.metaKey) {
+        e.preventDefault();
+        const newCombo = {
+          key: normalizeKey(e.key),
+          modifiers: {
+            ctrl: e.ctrlKey,
+            alt: e.altKey,
+            shift: e.shiftKey,
+            meta: e.metaKey
+          }
+        };
+        setPendingKeys((prev) => [...prev, newCombo]);
+      }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
@@ -3328,7 +3513,23 @@ function LookupModal({ defaultBinding = "meta+shift+k" } = {}) {
   if (!isLookupOpen) return null;
   return /* @__PURE__ */ jsxRuntime.jsx("div", { className: "kbd-lookup-backdrop", onClick: handleBackdropClick, children: /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "kbd-lookup", onClick: (e) => e.stopPropagation(), children: [
     /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "kbd-lookup-header", children: [
-      /* @__PURE__ */ jsxRuntime.jsx("div", { className: "kbd-lookup-search", children: formattedPendingKeys ? /* @__PURE__ */ jsxRuntime.jsx("kbd", { className: "kbd-sequence-keys", children: formattedPendingKeys }) : /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-lookup-placeholder", children: "Type keys to filter..." }) }),
+      /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "kbd-lookup-search", children: [
+        formattedPendingKeys && /* @__PURE__ */ jsxRuntime.jsx("kbd", { className: "kbd-sequence-keys", children: formattedPendingKeys }),
+        /* @__PURE__ */ jsxRuntime.jsx(
+          "input",
+          {
+            ref: inputRef,
+            type: "text",
+            className: "kbd-lookup-input",
+            onChange: handleInputChange,
+            placeholder: pendingKeys.length === 0 ? "Type keys to filter..." : "",
+            autoComplete: "off",
+            autoCorrect: "off",
+            autoCapitalize: "off",
+            spellCheck: false
+          }
+        )
+      ] }),
       /* @__PURE__ */ jsxRuntime.jsxs("span", { className: "kbd-lookup-hint", children: [
         "\u2191\u2193 navigate \xB7 Enter select \xB7 Esc ",
         pendingKeys.length > 0 ? "clear" : "close",
@@ -3359,6 +3560,130 @@ function LookupModal({ defaultBinding = "meta+shift+k" } = {}) {
       groupedByNextKey.size > 9 && /* @__PURE__ */ jsxRuntime.jsx("span", { children: "..." })
     ] })
   ] }) });
+}
+function SearchIcon({ className }) {
+  return /* @__PURE__ */ jsxRuntime.jsxs(
+    "svg",
+    {
+      className,
+      viewBox: "0 0 24 24",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: "2.5",
+      strokeLinecap: "round",
+      strokeLinejoin: "round",
+      children: [
+        /* @__PURE__ */ jsxRuntime.jsx("circle", { cx: "11", cy: "11", r: "7" }),
+        /* @__PURE__ */ jsxRuntime.jsx("path", { d: "m20 20-4-4" })
+      ]
+    }
+  );
+}
+function MobileFAB({
+  target = "omnibar",
+  visibility = "auto",
+  hideOnScroll = true,
+  scrollIdleDelay = 800,
+  className,
+  ariaLabel,
+  icon
+}) {
+  const ctx = useMaybeHotkeysContext();
+  const [isScrolling, setIsScrolling] = react.useState(false);
+  react.useEffect(() => {
+    if (!hideOnScroll) return;
+    let scrollTimeout;
+    const handleScroll = () => {
+      setIsScrolling(true);
+      clearTimeout(scrollTimeout);
+      scrollTimeout = setTimeout(() => {
+        setIsScrolling(false);
+      }, scrollIdleDelay);
+    };
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+      clearTimeout(scrollTimeout);
+    };
+  }, [hideOnScroll, scrollIdleDelay]);
+  const handleClick = react.useCallback(() => {
+    if (!ctx) return;
+    if (target === "lookup") {
+      ctx.openLookup();
+    } else {
+      ctx.openOmnibar();
+    }
+  }, [ctx, target]);
+  if (visibility === "never") return null;
+  if (!ctx) return null;
+  const classNames = ["kbd-fab"];
+  if (visibility === "auto") {
+    classNames.push("kbd-fab-auto");
+  }
+  if (isScrolling) {
+    classNames.push("kbd-fab-hidden");
+  }
+  if (className) {
+    classNames.push(className);
+  }
+  const label = ariaLabel ?? (target === "lookup" ? "Open key lookup" : "Open command palette");
+  return /* @__PURE__ */ jsxRuntime.jsx(
+    "button",
+    {
+      type: "button",
+      className: classNames.join(" "),
+      onClick: handleClick,
+      "aria-label": label,
+      children: icon ?? /* @__PURE__ */ jsxRuntime.jsx(SearchIcon, { className: "kbd-fab-icon" })
+    }
+  );
+}
+function SearchIcon2({ className }) {
+  return /* @__PURE__ */ jsxRuntime.jsxs(
+    "svg",
+    {
+      className,
+      viewBox: "0 0 24 24",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: "2.5",
+      strokeLinecap: "round",
+      strokeLinejoin: "round",
+      style: { width: "1em", height: "1em" },
+      children: [
+        /* @__PURE__ */ jsxRuntime.jsx("circle", { cx: "11", cy: "11", r: "7" }),
+        /* @__PURE__ */ jsxRuntime.jsx("path", { d: "m20 20-4-4" })
+      ]
+    }
+  );
+}
+function SearchTrigger({
+  target = "omnibar",
+  className,
+  ariaLabel,
+  children
+}) {
+  const ctx = useMaybeHotkeysContext();
+  const handleClick = react.useCallback(() => {
+    if (!ctx) return;
+    if (target === "lookup") {
+      ctx.openLookup();
+    } else {
+      ctx.openOmnibar();
+    }
+  }, [ctx, target]);
+  if (!ctx) return null;
+  const label = ariaLabel ?? (target === "lookup" ? "Open key lookup" : "Open command palette");
+  return /* @__PURE__ */ jsxRuntime.jsx(
+    "button",
+    {
+      type: "button",
+      className,
+      onClick: handleClick,
+      "aria-label": label,
+      children: children ?? /* @__PURE__ */ jsxRuntime.jsx(SearchIcon2, {})
+    }
+  );
 }
 function SeqElemBadge({ elem }) {
   if (elem.type === "digit") {
@@ -3399,6 +3724,8 @@ function Omnibar({
   omnibarClassName = "kbd-omnibar"
 }) {
   const inputRef = react.useRef(null);
+  const paramInputRef = react.useRef(null);
+  const [paramValue, setParamValue] = react.useState("");
   const ctx = useMaybeHotkeysContext();
   const actions = actionsProp ?? ctx?.registry.actionRegistry ?? {};
   const keymap = keymapProp ?? ctx?.registry.keymap ?? {};
@@ -3408,11 +3735,11 @@ function Omnibar({
     defaultBindings: defaultBinding ? [defaultBinding] : [],
     handler: react.useCallback(() => ctx?.toggleOmnibar(), [ctx?.toggleOmnibar])
   });
-  const handleExecute = react.useCallback((actionId) => {
+  const handleExecute = react.useCallback((actionId, captures) => {
     if (onExecuteProp) {
       onExecuteProp(actionId);
     } else if (ctx?.executeAction) {
-      ctx.executeAction(actionId);
+      ctx.executeAction(actionId, captures);
     }
   }, [onExecuteProp, ctx]);
   const handleClose = react.useCallback(() => {
@@ -3453,7 +3780,10 @@ function Omnibar({
     execute,
     completions,
     pendingKeys,
-    isAwaitingSequence
+    isAwaitingSequence,
+    pendingParamAction,
+    submitParam,
+    cancelParam
   } = useOmnibar({
     actions,
     handlers: handlersProp,
@@ -3466,7 +3796,8 @@ function Omnibar({
     onExecute: handleExecute,
     onExecuteRemote: handleExecuteRemote,
     maxResults,
-    endpointsRegistry: ctx?.endpointsRegistry
+    endpointsRegistry: ctx?.endpointsRegistry,
+    recentActionIds: ctx?.recentActionIds
   });
   const isOpen = isOpenProp ?? ctx?.isOmnibarOpen ?? internalIsOpen;
   const resultsContainerRef = react.useRef(null);
@@ -3487,6 +3818,42 @@ function Omnibar({
       });
     }
   }, [isOpen]);
+  react.useEffect(() => {
+    if (pendingParamAction) {
+      setParamValue("");
+      requestAnimationFrame(() => {
+        paramInputRef.current?.focus();
+      });
+    }
+  }, [pendingParamAction]);
+  const handleParamKeyDown = react.useCallback(
+    (e) => {
+      switch (e.key) {
+        case "Escape":
+          e.preventDefault();
+          cancelParam();
+          requestAnimationFrame(() => inputRef.current?.focus());
+          break;
+        case "Enter":
+          e.preventDefault();
+          if (paramValue) {
+            const num = parseInt(paramValue, 10);
+            if (!isNaN(num)) {
+              submitParam(num);
+            }
+          }
+          break;
+        case "Backspace":
+          if (!paramValue) {
+            e.preventDefault();
+            cancelParam();
+            requestAnimationFrame(() => inputRef.current?.focus());
+          }
+          break;
+      }
+    },
+    [paramValue, cancelParam, submitParam]
+  );
   react.useEffect(() => {
     if (!isOpen) return;
     const container = resultsContainerRef.current;
@@ -3581,26 +3948,66 @@ function Omnibar({
       completions,
       pendingKeys,
       isAwaitingSequence,
-      inputRef
+      inputRef,
+      pendingParamAction,
+      submitParam,
+      cancelParam
     }) });
   }
+  const pendingActionLabel = pendingParamAction ? results.find((r) => r.id === pendingParamAction)?.action.label ?? pendingParamAction : null;
   return /* @__PURE__ */ jsxRuntime.jsx("div", { className: backdropClassName, onClick: handleBackdropClick, children: /* @__PURE__ */ jsxRuntime.jsxs("div", { className: omnibarClassName, role: "dialog", "aria-modal": "true", "aria-label": "Command palette", children: [
-    /* @__PURE__ */ jsxRuntime.jsx(
-      "input",
-      {
-        ref: inputRef,
-        type: "text",
-        className: "kbd-omnibar-input",
-        value: query,
-        onChange: (e) => setQuery(e.target.value),
-        onKeyDown: handleKeyDown,
-        placeholder,
-        autoComplete: "off",
-        autoCorrect: "off",
-        autoCapitalize: "off",
-        spellCheck: false
-      }
-    ),
+    /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "kbd-omnibar-header", children: [
+      pendingParamAction ? (
+        // Parameter entry mode
+        /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "kbd-omnibar-param-entry", children: [
+          /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-omnibar-param-label", children: pendingActionLabel }),
+          /* @__PURE__ */ jsxRuntime.jsx(
+            "input",
+            {
+              ref: paramInputRef,
+              type: "text",
+              inputMode: "numeric",
+              pattern: "[0-9]*",
+              className: "kbd-omnibar-param-input",
+              value: paramValue,
+              onChange: (e) => setParamValue(e.target.value),
+              onKeyDown: handleParamKeyDown,
+              placeholder: "Enter value...",
+              autoComplete: "off",
+              autoCorrect: "off",
+              autoCapitalize: "off",
+              spellCheck: false
+            }
+          ),
+          /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-omnibar-param-hint", children: "\u21B5 to confirm \xB7 Esc to cancel" })
+        ] })
+      ) : /* @__PURE__ */ jsxRuntime.jsx(
+        "input",
+        {
+          ref: inputRef,
+          type: "text",
+          className: "kbd-omnibar-input",
+          value: query,
+          onChange: (e) => setQuery(e.target.value),
+          onKeyDown: handleKeyDown,
+          placeholder,
+          autoComplete: "off",
+          autoCorrect: "off",
+          autoCapitalize: "off",
+          spellCheck: false
+        }
+      ),
+      /* @__PURE__ */ jsxRuntime.jsx(
+        "button",
+        {
+          type: "button",
+          className: "kbd-omnibar-close",
+          onClick: close,
+          "aria-label": "Close",
+          children: "\xD7"
+        }
+      )
+    ] }),
     /* @__PURE__ */ jsxRuntime.jsx("div", { className: "kbd-omnibar-results", ref: resultsContainerRef, children: totalResults === 0 && !isLoadingRemote ? /* @__PURE__ */ jsxRuntime.jsx("div", { className: "kbd-omnibar-no-results", children: query ? "No matching commands" : "Start typing to search commands..." }) : /* @__PURE__ */ jsxRuntime.jsxs(jsxRuntime.Fragment, { children: [
       results.map((result, i) => /* @__PURE__ */ jsxRuntime.jsxs(
         "div",
@@ -3795,9 +4202,13 @@ function organizeShortcuts(keymap, labels, descriptions, groupNames, groupOrder,
   const groupMap = /* @__PURE__ */ new Map();
   const includedActions = /* @__PURE__ */ new Set();
   const getGroupName = (actionId) => {
+    let groupKey;
     const registeredGroup = actionRegistry?.[actionId]?.group;
-    if (registeredGroup) return registeredGroup;
-    const { group: groupKey } = parseActionId(actionId);
+    if (registeredGroup) {
+      groupKey = registeredGroup;
+    } else {
+      groupKey = parseActionId(actionId).group;
+    }
     return groupNames?.[groupKey] ?? groupKey;
   };
   for (const [actionId, bindings] of actionBindings) {
@@ -3970,7 +4381,7 @@ function ShortcutsModal({
   isOpen: isOpenProp,
   onClose: onCloseProp,
   defaultBinding = "?",
-  editable = false,
+  editable: editableProp = false,
   onBindingChange,
   onBindingAdd,
   onBindingRemove,
@@ -3985,6 +4396,13 @@ function ShortcutsModal({
   TooltipComponent: TooltipComponentProp = DefaultTooltip
 }) {
   const ctx = useMaybeHotkeysContext();
+  const [isTouchDevice, setIsTouchDevice] = react.useState(false);
+  react.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const hasHover = window.matchMedia("(hover: hover)").matches;
+    setIsTouchDevice(!hasHover);
+  }, []);
+  const editable = editableProp && !isTouchDevice;
   const contextLabels = react.useMemo(() => {
     const registry = ctx?.registry.actionRegistry;
     if (!registry) return void 0;
@@ -4066,6 +4484,8 @@ function ShortcutsModal({
     label: "Show shortcuts",
     group: "Global",
     defaultBindings: defaultBinding ? [defaultBinding] : [],
+    protected: true,
+    // Prevent users from removing the only way to edit shortcuts
     handler: react.useCallback(() => {
       if (ctx) {
         ctx.toggleModal();
@@ -4261,6 +4681,7 @@ function ShortcutsModal({
         return defaultActions.includes(actionId);
       })() : true;
       const isPendingConflict = pendingConflictInfo.conflictingKeys.has(key);
+      const isProtected = ctx?.registry.actionRegistry?.[actionId]?.protected ?? false;
       return /* @__PURE__ */ jsxRuntime.jsx(
         BindingDisplay2,
         {
@@ -4287,7 +4708,7 @@ function ShortcutsModal({
             }
             startEditingBinding(actionId, key);
           },
-          onRemove: editable && showRemove ? () => removeBinding(actionId, key) : void 0,
+          onRemove: editable && showRemove && !isProtected ? () => removeBinding(actionId, key) : void 0,
           pendingKeys,
           activeKeys,
           timeoutDuration: pendingConflictInfo.hasConflict ? Infinity : sequenceTimeout
@@ -4295,7 +4716,7 @@ function ShortcutsModal({
         key
       );
     },
-    [editingAction, editingKey, addingAction, conflicts, defaults, editable, startEditingBinding, removeBinding, pendingKeys, activeKeys, isRecording, cancel, handleBindingAdd, handleBindingChange, sequenceTimeout, pendingConflictInfo]
+    [editingAction, editingKey, addingAction, conflicts, defaults, editable, startEditingBinding, removeBinding, pendingKeys, activeKeys, isRecording, cancel, handleBindingAdd, handleBindingChange, sequenceTimeout, pendingConflictInfo, ctx?.registry.actionRegistry]
   );
   const renderAddButton = react.useCallback(
     (actionId) => {
@@ -4539,15 +4960,19 @@ exports.Key = Key;
 exports.KeybindingEditor = KeybindingEditor;
 exports.Left = Left;
 exports.LookupModal = LookupModal;
+exports.MobileFAB = MobileFAB;
 exports.ModifierIcon = ModifierIcon;
 exports.Omnibar = Omnibar;
 exports.OmnibarEndpointsRegistryContext = OmnibarEndpointsRegistryContext;
 exports.Option = Option;
 exports.Right = Right;
+exports.SearchIcon = SearchIcon2;
+exports.SearchTrigger = SearchTrigger;
 exports.SequenceModal = SequenceModal;
 exports.Shift = Shift;
 exports.ShortcutsModal = ShortcutsModal;
 exports.Up = Up;
+exports.bindingHasPlaceholders = bindingHasPlaceholders;
 exports.countPlaceholders = countPlaceholders;
 exports.createTwoColumnRenderer = createTwoColumnRenderer;
 exports.extractCaptures = extractCaptures;
@@ -4562,6 +4987,7 @@ exports.getConflictsArray = getConflictsArray;
 exports.getKeyIcon = getKeyIcon;
 exports.getModifierIcon = getModifierIcon;
 exports.getSequenceCompletions = getSequenceCompletions;
+exports.hasAnyPlaceholderBindings = hasAnyPlaceholderBindings;
 exports.hasConflicts = hasConflicts;
 exports.hasDigitPlaceholders = hasDigitPlaceholders;
 exports.hotkeySequenceToKeySeq = hotkeySequenceToKeySeq;
@@ -4575,6 +5001,7 @@ exports.keySeqToHotkeySequence = keySeqToHotkeySequence;
 exports.normalizeKey = normalizeKey;
 exports.parseHotkeyString = parseHotkeyString;
 exports.parseKeySeq = parseKeySeq;
+exports.parseQueryNumbers = parseQueryNumbers;
 exports.searchActions = searchActions;
 exports.useAction = useAction;
 exports.useActions = useActions;
