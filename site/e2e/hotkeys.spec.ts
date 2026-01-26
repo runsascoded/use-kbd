@@ -754,8 +754,6 @@ test.describe('Data Table Demo', () => {
     await rows.nth(2).click()
     await expect(rows.nth(2)).toHaveClass(/selected/)
 
-    // Click the search button in floating controls (simulates mobile FAB usage)
-    const searchBtn = page.locator('.floating-controls .search-btn, .floating-controls .shortcuts-btn')
     // Make controls visible first (they might be hidden)
     await page.evaluate(() => {
       const controls = document.querySelector('.floating-controls')

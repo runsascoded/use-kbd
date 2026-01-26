@@ -65,6 +65,7 @@ export function FloatingControls() {
   useEffect(() => {
     // On touch devices, always show unless explicitly hidden
     if (isTouchDevice) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: ensure visibility on touch
       setIsVisible(true)
       return
     }
