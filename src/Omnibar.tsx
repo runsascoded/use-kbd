@@ -300,46 +300,7 @@ export function Omnibar({
     return grouped
   }, [remoteResults])
 
-  // Track whether close was triggered by popstate (back button)
-  const closedByPopstateRef = useRef(false)
-
-  // Handle browser back button to close omnibar
-  useEffect(() => {
-    if (!isOpen) {
-      closedByPopstateRef.current = false
-      return
-    }
-
-    // Push history state when omnibar opens
-    const stateKey = 'kbdOmnibarOpen'
-    const currentState = window.history.state
-
-    // Only push if we haven't already
-    if (!currentState?.[stateKey]) {
-      window.history.pushState({ ...currentState, [stateKey]: true }, '')
-    }
-
-    const handlePopstate = () => {
-      // User pressed back button / swiped back - close the omnibar
-      closedByPopstateRef.current = true
-      // Blur any focused element (e.g., the Kbd that opened this)
-      if (document.activeElement instanceof HTMLElement) {
-        document.activeElement.blur()
-      }
-      close()
-    }
-
-    window.addEventListener('popstate', handlePopstate)
-    return () => {
-      window.removeEventListener('popstate', handlePopstate)
-
-      // If we're closing normally (not via back button), go back in history
-      // to remove the state we pushed
-      if (!closedByPopstateRef.current && window.history.state?.kbdOmnibarOpen) {
-        window.history.back()
-      }
-    }
-  }, [isOpen, close])
+  // Note: Browser back button handling is centralized in HotkeysProvider
 
   // Focus input when opened
   useEffect(() => {

@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ActionsRegistryContext, useActionsRegistry } from './ActionsRegistry'
 import { OmnibarEndpointsRegistryContext, useOmnibarEndpointsRegistry } from './OmnibarEndpointsRegistry'
 import { DEFAULT_SEQUENCE_TIMEOUT } from './constants'
@@ -212,6 +212,73 @@ export function HotkeysProvider({
   }, [])
   const closeLookup = useCallback(() => setIsLookupOpen(false), [])
   const toggleLookup = useCallback(() => setIsLookupOpen(prev => !prev), [])
+
+  // Centralized history management for all modals
+  // This prevents race conditions when switching between modals
+  type ActiveModal = 'shortcuts' | 'omnibar' | 'lookup' | null
+  const activeModal: ActiveModal = isModalOpen ? 'shortcuts'
+    : isOmnibarOpen ? 'omnibar'
+    : isLookupOpen ? 'lookup'
+    : null
+
+  // Track whether close was triggered by popstate (to avoid double history.back())
+  const closedByPopstateRef = useRef(false)
+  // Track the previous activeModal to detect transitions
+  const prevActiveModalRef = useRef<ActiveModal>(null)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const stateKey = 'kbdActiveModal'
+    const prevModal = prevActiveModalRef.current
+    prevActiveModalRef.current = activeModal
+
+    if (!activeModal) {
+      // No modal open
+      // If we had a modal open before and it wasn't closed via back button, clean up history
+      if (prevModal && !closedByPopstateRef.current && window.history.state?.[stateKey]) {
+        window.history.back()
+      }
+      closedByPopstateRef.current = false
+      return
+    }
+
+    // A modal is open - manage history state
+    const currentState = window.history.state
+    if (!currentState?.[stateKey]) {
+      // No modal state in history - push new state
+      window.history.pushState({ ...currentState, [stateKey]: activeModal }, '')
+    } else if (currentState[stateKey] !== activeModal) {
+      // Switching between modals - replace state (no push/pop needed)
+      window.history.replaceState({ ...currentState, [stateKey]: activeModal }, '')
+    }
+
+    const handlePopstate = () => {
+      // Check if our modal state is still in history
+      if (window.history.state?.[stateKey]) {
+        return
+      }
+
+      // User pressed back button - close the active modal
+      closedByPopstateRef.current = true
+
+      // Blur any focused element
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur()
+      }
+
+      // Close whichever modal is open
+      if (isModalOpen) setIsModalOpen(false)
+      if (isOmnibarOpen) setIsOmnibarOpen(false)
+      if (isLookupOpen) setIsLookupOpen(false)
+    }
+
+    window.addEventListener('popstate', handlePopstate)
+    return () => {
+      window.removeEventListener('popstate', handlePopstate)
+      // Note: Don't call history.back() here - it's handled when activeModal becomes null
+    }
+  }, [activeModal, isModalOpen, isOmnibarOpen, isLookupOpen])
 
   // Editing binding state (set by ShortcutsModal when recording a new binding)
   const [isEditingBinding, setIsEditingBinding] = useState(false)
