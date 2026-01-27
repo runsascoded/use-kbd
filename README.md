@@ -88,6 +88,17 @@ useAction('doc:save', {
 })
 ```
 
+Protect essential bindings from removal with `protected`:
+
+```tsx
+useAction('app:shortcuts', {
+  label: 'Show shortcuts',
+  defaultBindings: ['?'],
+  protected: true,  // Users can add bindings, but can't remove this one
+  handler: () => openShortcutsModal(),
+})
+```
+
 ### Sequences
 
 Multi-key sequences like Vim's `g g` (go to top) are supported:
@@ -135,17 +146,19 @@ Wrap your app to enable the hotkeys system:
 ```tsx
 <HotkeysProvider config={{
   storageKey: 'use-kbd',      // localStorage key for user overrides (default)
-  modalTrigger: '?',          // Open shortcuts modal (default; false to disable)
-  omnibarTrigger: 'meta+k',   // Open omnibar (default; false to disable)
   sequenceTimeout: Infinity,  // ms before sequence times out (default: no timeout)
+  disableConflicts: false,    // Disable keys with multiple actions (default: false)
+  enableOnTouch: false,       // Enable hotkeys on touch devices (default: false)
 }}>
   {children}
 </HotkeysProvider>
 ```
 
+Note: Modal/omnibar trigger bindings are configured via component props (`defaultBinding`), not provider config.
+
 ### `<ShortcutsModal>`
 
-Displays all registered actions grouped by category. Users can click bindings to edit them.
+Displays all registered actions grouped by category. Users can click bindings to edit them (disabled on touch devices since there's no physical keyboard).
 
 ```tsx
 <ShortcutsModal groups={[
