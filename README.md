@@ -158,7 +158,7 @@ Note: Modal/omnibar trigger bindings are configured via component props (`defaul
 
 ### `<ShortcutsModal>`
 
-Displays all registered actions grouped by category. Users can click bindings to edit them (disabled on touch devices since there's no physical keyboard).
+Displays all registered actions grouped by category. Users can click bindings to edit them on desktop.
 
 ```tsx
 <ShortcutsModal groups={[
@@ -230,6 +230,28 @@ Dark mode is automatically applied via `[data-theme="dark"]` or `.dark` selector
 See [awair's use-kbd-demo branch] for a real-world integration example.
 
 [awair's use-kbd-demo branch]: https://github.com/runsascoded/awair/compare/use-kbd-demo~1...use-kbd-demo
+
+## Mobile Support
+
+While keyboard shortcuts are primarily a desktop feature, use-kbd provides solid mobile UX out of the box. **[Try the demos on your phone →][kbd.rbw.sh]**
+
+**What works on mobile:**
+
+- **Omnibar search** – Tap the search icon or `⌘K` badge to open, then search and execute actions
+- **LookupModal** – Browse shortcuts by typing on the virtual keyboard
+- **ShortcutsModal** – View all available shortcuts (editing disabled since there's no physical keyboard)
+- **Back button/swipe** – Native gesture closes modals
+- **Responsive layouts** – All components adapt to small screens
+
+**Demo-specific features:**
+
+- [Table demo][table-demo] – Tap search icon in the floating controls to open omnibar
+- [Canvas demo][canvas-demo] – Touch-to-draw support alongside keyboard shortcuts
+
+[table-demo]: https://kbd.rbw.sh/table
+[canvas-demo]: https://kbd.rbw.sh/canvas
+
+For apps that want keyboard shortcuts on desktop but still need the omnibar/search on mobile, this covers the common case without extra configuration.
 
 ## Patterns
 
