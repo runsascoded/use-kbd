@@ -258,7 +258,9 @@ export function LookupModal({ defaultBinding = 'meta+shift+k' }: LookupModalProp
 
       // On desktop, handle keys with modifiers directly (bypass input)
       // On mobile, input onChange will handle regular typing
-      if (e.ctrlKey || e.altKey || e.metaKey) {
+      // Check for any modifier (including shift for shifted keys like Shift+T)
+      const hasModifier = e.ctrlKey || e.altKey || e.metaKey || e.shiftKey
+      if (hasModifier) {
         e.preventDefault()
         const newCombo: KeyCombination = {
           key: normalizeKey(e.key),
