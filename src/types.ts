@@ -329,3 +329,24 @@ export interface OmnibarEndpointSyncConfig extends OmnibarEndpointConfigBase {
  * Configuration for an omnibar endpoint (async or sync)
  */
 export type OmnibarEndpointConfig = OmnibarEndpointAsyncConfig | OmnibarEndpointSyncConfig
+
+// ============================================================================
+// Bindings export/import types
+// ============================================================================
+
+/**
+ * Exported bindings format for import/export functionality.
+ * Contains user customizations (overrides and removed defaults).
+ */
+export interface BindingsExport {
+  /** Version of the export format / library */
+  version: string
+  /** ISO timestamp of when the export was created */
+  exportedAt: string
+  /** Origin URL where the export was created (for reference) */
+  origin?: string
+  /** User binding overrides: key → action (e.g., "ctrl+s" → "doc:save") */
+  overrides: Record<string, string | string[]>
+  /** Default bindings that were removed: action → keys (e.g., "nav:goto" → ["g"]) */
+  removedDefaults: Record<string, string[]>
+}

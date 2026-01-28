@@ -129,6 +129,10 @@ export interface ShortcutsModalProps {
   onBindingRemove?: (action: string, key: string) => void
   /** Called when reset is requested */
   onReset?: () => void
+  /** Called when bindings are exported */
+  onExport?: () => void
+  /** Called when bindings are imported (with import data) */
+  onImport?: (file: File) => Promise<void>
   /** Whether to allow multiple bindings per action (default: true) */
   multipleBindings?: boolean
   /** Custom render function for the modal content */
@@ -493,6 +497,8 @@ export function ShortcutsModal({
   onBindingAdd,
   onBindingRemove,
   onReset,
+  onExport,
+  onImport,
   multipleBindings = true,
   children,
   backdropClassName = 'kbd-backdrop',
@@ -570,6 +576,46 @@ export function ShortcutsModal({
   const handleReset = onReset ?? (ctx ? () => {
     ctx.registry.resetOverrides()
   } : undefined)
+
+  // Export/Import handlers
+  const importInputRef = useRef<HTMLInputElement>(null)
+  const [importError, setImportError] = useState<string | null>(null)
+
+  const handleExport = onExport ?? (ctx ? () => {
+    const data = ctx.registry.exportBindings()
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `keyboard-shortcuts-${new Date().toISOString().slice(0, 10)}.json`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  } : undefined)
+
+  const handleImport = onImport ?? (ctx ? async (file: File) => {
+    try {
+      const text = await file.text()
+      const data = JSON.parse(text)
+      ctx.registry.importBindings(data)
+      setImportError(null)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to import bindings'
+      setImportError(message)
+    }
+  } : undefined)
+
+  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file && handleImport) {
+      handleImport(file)
+    }
+    // Reset input so same file can be selected again
+    if (importInputRef.current) {
+      importInputRef.current.value = ''
+    }
+  }, [handleImport])
 
   const [internalIsOpen, setInternalIsOpen] = useState(false)
   // Use prop, then context, then internal state
@@ -1127,18 +1173,44 @@ export function ShortcutsModal({
           <div className="kbd-modal-header">
             <h2 className="kbd-modal-title">{title}</h2>
             <div className="kbd-modal-header-buttons">
+              {editable && handleExport && (
+                <button className="kbd-export-btn" onClick={handleExport}>
+                  Export
+                </button>
+              )}
+              {editable && handleImport && (
+                <>
+                  <button className="kbd-import-btn" onClick={() => importInputRef.current?.click()}>
+                    Import
+                  </button>
+                  <input
+                    type="file"
+                    accept=".json,application/json"
+                    ref={importInputRef}
+                    onChange={handleFileChange}
+                    style={{ display: 'none' }}
+                  />
+                </>
+              )}
               {editable && handleReset && (
                 <button className="kbd-reset-btn" onClick={reset}>
-                Reset
+                  Reset
                 </button>
               )}
               <button className="kbd-modal-close" onClick={close} aria-label="Close">
-              ×
+                ×
               </button>
             </div>
           </div>
 
           {hint && <p className="kbd-hint">{hint}</p>}
+
+          {importError && (
+            <div className="kbd-import-error">
+              <span>{importError}</span>
+              <button onClick={() => setImportError(null)} aria-label="Dismiss error">×</button>
+            </div>
+          )}
 
           {shortcutGroups.map((group) => (
             <div key={group.name} className="kbd-group">

@@ -1,7 +1,10 @@
 import { createContext, useCallback, useMemo, useRef, useState } from 'react'
-import type { ActionRegistry } from './types'
+import type { ActionRegistry, BindingsExport } from './types'
 import type { ActionConfig } from './useAction'
 import type { HotkeyMap } from './useHotkeys'
+
+/** Current version for export format */
+const EXPORT_VERSION = '0.8.0'
 
 export interface RegisteredAction {
   config: ActionConfig
@@ -29,12 +32,18 @@ export interface ActionsRegistryValue {
   getFirstBindingForAction: (id: string) => string | undefined
   /** User's binding overrides */
   overrides: Record<string, string | string[]>
+  /** Default bindings that have been removed (per action) */
+  removedDefaults: Record<string, string[]>
   /** Set a user override for a binding */
   setBinding: (actionId: string, key: string) => void
   /** Remove a binding for a specific action */
   removeBinding: (actionId: string, key: string) => void
   /** Reset all overrides */
   resetOverrides: () => void
+  /** Export current binding customizations as JSON */
+  exportBindings: () => BindingsExport
+  /** Import binding customizations from JSON (replaces current customizations) */
+  importBindings: (data: BindingsExport) => void
 }
 
 export const ActionsRegistryContext = createContext<ActionsRegistryValue | null>(null)
@@ -327,6 +336,50 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
     updateRemovedDefaults({})
   }, [updateOverrides, updateRemovedDefaults])
 
+  const exportBindings = useCallback((): BindingsExport => {
+    return {
+      version: EXPORT_VERSION,
+      exportedAt: new Date().toISOString(),
+      origin: typeof window !== 'undefined' ? window.location.origin : undefined,
+      overrides,
+      removedDefaults,
+    }
+  }, [overrides, removedDefaults])
+
+  const importBindings = useCallback((data: BindingsExport) => {
+    // Validate basic structure
+    if (!data || typeof data !== 'object') {
+      throw new Error('Invalid import data: expected an object')
+    }
+    if (typeof data.overrides !== 'object' || data.overrides === null) {
+      throw new Error('Invalid import data: missing or invalid overrides')
+    }
+    if (typeof data.removedDefaults !== 'object' || data.removedDefaults === null) {
+      throw new Error('Invalid import data: missing or invalid removedDefaults')
+    }
+
+    // Validate overrides values
+    for (const [key, value] of Object.entries(data.overrides)) {
+      if (typeof value !== 'string' && !Array.isArray(value)) {
+        throw new Error(`Invalid override for key "${key}": expected string or array`)
+      }
+      if (Array.isArray(value) && !value.every(v => typeof v === 'string')) {
+        throw new Error(`Invalid override for key "${key}": array must contain only strings`)
+      }
+    }
+
+    // Validate removedDefaults values
+    for (const [action, keys] of Object.entries(data.removedDefaults)) {
+      if (!Array.isArray(keys) || !keys.every(k => typeof k === 'string')) {
+        throw new Error(`Invalid removedDefaults for action "${action}": expected array of strings`)
+      }
+    }
+
+    // Apply the imported data (replace mode)
+    updateOverrides(data.overrides)
+    updateRemovedDefaults(data.removedDefaults)
+  }, [updateOverrides, updateRemovedDefaults])
+
   // Create a snapshot of the map for consumers
   const actions = useMemo(() => {
     return new Map(actionsRef.current)
@@ -345,9 +398,12 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
     getBindingsForAction,
     getFirstBindingForAction,
     overrides,
+    removedDefaults,
     setBinding,
     removeBinding,
     resetOverrides,
+    exportBindings,
+    importBindings,
   }), [
     register,
     unregister,
@@ -359,8 +415,11 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
     getBindingsForAction,
     getFirstBindingForAction,
     overrides,
+    removedDefaults,
     setBinding,
     removeBinding,
     resetOverrides,
+    exportBindings,
+    importBindings,
   ])
 }

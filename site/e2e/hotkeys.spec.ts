@@ -981,6 +981,170 @@ test.describe('Canvas Demo', () => {
   })
 })
 
+test.describe('Export/Import Bindings', () => {
+  test('can export and import binding customizations', async ({ page }) => {
+    // Clear any existing customizations
+    await page.addInitScript(() => {
+      localStorage.removeItem('use-kbd-demo')
+      localStorage.removeItem('use-kbd-demo-removed')
+    })
+    await page.goto('/table')
+
+    // Step 1: Change a binding (N -> X for sort by name)
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+    await page.keyboard.press('?')
+    await page.waitForSelector('.kbd-modal', { timeout: 5000 })
+
+    const kbdElement = page.locator('.kbd-kbd.editable', { hasText: 'N' }).first()
+    await expect(kbdElement).toBeVisible()
+    await kbdElement.click()
+    await page.waitForTimeout(100)
+
+    await expect(page.locator('.kbd-kbd.editing')).toBeVisible()
+    await page.keyboard.press('x')
+    await page.waitForTimeout(100)
+
+    // Press Enter to confirm the binding
+    await page.keyboard.press('Enter')
+    await page.waitForTimeout(200)
+
+    // Verify editing is complete
+    await expect(page.locator('.kbd-kbd.editing')).not.toBeVisible()
+
+    // Verify binding changed
+    await expect(page.locator('.kbd-kbd', { hasText: 'X' })).toBeVisible()
+
+    // Step 2: Export the bindings
+    const downloadPromise = page.waitForEvent('download')
+    await page.locator('.kbd-export-btn').click()
+    const download = await downloadPromise
+
+    // Save the download to a temp file
+    const downloadPath = await download.path()
+    expect(downloadPath).toBeTruthy()
+
+    // Read the exported content
+    const fs = await import('fs/promises')
+    const exportedContent = await fs.readFile(downloadPath!, 'utf-8')
+    const exportedData = JSON.parse(exportedContent)
+
+    // Verify export structure
+    expect(exportedData.version).toBe('0.8.0')
+    expect(exportedData.exportedAt).toBeTruthy()
+    expect(exportedData.overrides).toBeTruthy()
+    expect(exportedData.removedDefaults).toBeTruthy()
+
+    // The custom binding should be in overrides
+    expect(exportedData.overrides['x']).toBe('sort:name:asc')
+
+    // Close modal
+    await page.keyboard.press('Escape')
+
+    // Step 3: Clear localStorage to simulate fresh profile
+    await page.evaluate(() => {
+      localStorage.removeItem('use-kbd-demo')
+      localStorage.removeItem('use-kbd-demo-removed')
+    })
+    await page.reload()
+
+    // Step 4: Verify default binding (N) works
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    // Press N - should sort (default binding)
+    const firstCell = page.locator('.data-table tbody tr:first-child td:first-child')
+    await expect(firstCell).toHaveText('Alpha-1')
+
+    await page.keyboard.press('n')
+    await page.waitForTimeout(100)
+    await expect(firstCell).toHaveText('Alpha-1') // Already sorted asc
+
+    // Press X - should NOT sort (no binding yet)
+    await page.keyboard.press('Shift+n') // First sort desc
+    await page.waitForTimeout(100)
+    const textAfterShiftN = await firstCell.textContent()
+    expect(textAfterShiftN).toMatch(/^Zeta-/)
+
+    await page.keyboard.press('x') // X has no binding yet
+    await page.waitForTimeout(100)
+    // Should still be Zeta (X didn't do anything)
+    await expect(firstCell).toHaveText(textAfterShiftN!)
+
+    // Step 5: Import the exported bindings
+    await page.keyboard.press('?')
+    await page.waitForSelector('.kbd-modal', { timeout: 5000 })
+
+    // Get the file input and set the file
+    const fileInput = page.locator('input[type="file"]')
+    await fileInput.setInputFiles({
+      name: 'test-bindings.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(exportedContent),
+    })
+    await page.waitForTimeout(200)
+
+    // Step 6: Verify imported binding works
+    await page.keyboard.press('Escape') // Close modal
+
+    // Now X should sort by name ascending
+    await page.keyboard.press('x')
+    await page.waitForTimeout(100)
+    await expect(firstCell).toHaveText('Alpha-1')
+  })
+
+  test('import shows error for invalid JSON', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.removeItem('use-kbd-demo')
+      localStorage.removeItem('use-kbd-demo-removed')
+    })
+    await page.goto('/table')
+
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+    await page.keyboard.press('?')
+    await page.waitForSelector('.kbd-modal', { timeout: 5000 })
+
+    // Try to import invalid JSON
+    const fileInput = page.locator('input[type="file"]')
+    await fileInput.setInputFiles({
+      name: 'invalid.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from('not valid json'),
+    })
+    await page.waitForTimeout(200)
+
+    // Should show error message
+    await expect(page.locator('.kbd-import-error')).toBeVisible()
+
+    // Dismiss error
+    await page.locator('.kbd-import-error button').click()
+    await expect(page.locator('.kbd-import-error')).not.toBeVisible()
+  })
+
+  test('import shows error for missing fields', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.removeItem('use-kbd-demo')
+      localStorage.removeItem('use-kbd-demo-removed')
+    })
+    await page.goto('/table')
+
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+    await page.keyboard.press('?')
+    await page.waitForSelector('.kbd-modal', { timeout: 5000 })
+
+    // Try to import JSON missing required fields
+    const fileInput = page.locator('input[type="file"]')
+    await fileInput.setInputFiles({
+      name: 'incomplete.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(JSON.stringify({ version: '0.8.0' })),
+    })
+    await page.waitForTimeout(200)
+
+    // Should show error message about missing overrides
+    await expect(page.locator('.kbd-import-error')).toBeVisible()
+    await expect(page.locator('.kbd-import-error')).toContainText('overrides')
+  })
+})
+
 test.describe('Calendar Demo', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {

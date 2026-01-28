@@ -3,6 +3,7 @@ export type {
   ActionDefinition,
   ActionRegistry,
   ActionSearchResult,
+  BindingsExport,
   EndpointPagination,
   EndpointPaginationMode,
   EndpointResponse,

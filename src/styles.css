@@ -130,7 +130,9 @@
   gap: 8px;
 }
 
-.kbd-reset-btn {
+.kbd-reset-btn,
+.kbd-export-btn,
+.kbd-import-btn {
   background: none;
   border: 1px solid var(--kbd-border);
   border-radius: var(--kbd-radius-sm);
@@ -141,9 +143,41 @@
   transition: all var(--kbd-transition);
 }
 
-.kbd-reset-btn:hover {
+.kbd-reset-btn:hover,
+.kbd-export-btn:hover,
+.kbd-import-btn:hover {
   color: var(--kbd-text);
   border-color: var(--kbd-text-secondary);
+}
+
+.kbd-import-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  margin-bottom: var(--kbd-gap);
+  background-color: var(--kbd-conflict-bg);
+  border: 1px solid var(--kbd-conflict);
+  border-radius: var(--kbd-radius-sm);
+  color: var(--kbd-conflict);
+  font-size: 0.875rem;
+}
+
+.kbd-import-error button {
+  background: none;
+  border: none;
+  color: var(--kbd-conflict);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0 4px;
+  opacity: 0.7;
+  transition: opacity var(--kbd-transition);
+}
+
+.kbd-import-error button:hover {
+  opacity: 1;
 }
 
 .kbd-modal-close {
