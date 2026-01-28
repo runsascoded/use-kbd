@@ -25,10 +25,38 @@ export interface TooltipProps {
 export type TooltipComponent = ComponentType<TooltipProps>
 
 /**
- * Default tooltip renders children without any tooltip.
- * Pass a custom TooltipComponent (e.g., MUI Tooltip) to show tooltips.
+ * Default tooltip uses native title attribute.
+ * Pass a custom TooltipComponent (e.g., MUI Tooltip) for richer tooltips.
  */
-const DefaultTooltip: TooltipComponent = ({ children }) => <>{children}</>
+const DefaultTooltip: TooltipComponent = ({ title, children }) => (
+  <span title={title} style={{ display: 'contents' }}>{children}</span>
+)
+
+/** Download icon for export button */
+const DownloadIcon = () => (
+  <svg className="kbd-footer-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <polyline points="7 10 12 15 17 10" />
+    <line x1="12" y1="15" x2="12" y2="3" />
+  </svg>
+)
+
+/** Upload icon for import button */
+const UploadIcon = () => (
+  <svg className="kbd-footer-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <polyline points="17 8 12 3 7 8" />
+    <line x1="12" y1="3" x2="12" y2="15" />
+  </svg>
+)
+
+/** Reset icon (circular arrow) */
+const ResetIcon = () => (
+  <svg className="kbd-footer-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+    <path d="M3 3v5h5" />
+  </svg>
+)
 
 /**
  * Context for tooltip component (allows nested components to access it)
@@ -153,6 +181,17 @@ export interface ShortcutsModalProps {
    * Default uses native title attribute. Can be MUI Tooltip, etc.
    */
   TooltipComponent?: TooltipComponent
+  /**
+   * Custom footer content. Return `null` to hide the default footer.
+   * Receives default footer actions for composition.
+   */
+  footerContent?: (actions: {
+    exportBindings: (() => void) | undefined
+    importBindings: (() => void) | undefined
+    resetBindings: (() => void) | undefined
+    importInputRef: React.RefObject<HTMLInputElement>
+    handleFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void
+  }) => ReactNode
 }
 
 export interface ShortcutsModalRenderProps {
@@ -507,6 +546,7 @@ export function ShortcutsModal({
   hint,
   showUnbound,
   TooltipComponent: TooltipComponentProp = DefaultTooltip,
+  footerContent,
 }: ShortcutsModalProps) {
   // Try to get context (returns null if not within HotkeysProvider)
   const ctx = useMaybeHotkeysContext()
@@ -581,13 +621,21 @@ export function ShortcutsModal({
   const importInputRef = useRef<HTMLInputElement>(null)
   const [importError, setImportError] = useState<string | null>(null)
 
+  // Check if there are any customizations to export
+  const hasCustomizations = ctx ? (
+    Object.keys(ctx.registry.overrides).length > 0 ||
+    Object.keys(ctx.registry.removedDefaults).length > 0
+  ) : false
+
   const handleExport = onExport ?? (ctx ? () => {
     const data = ctx.registry.exportBindings()
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `keyboard-shortcuts-${new Date().toISOString().slice(0, 10)}.json`
+    // Use storageKey as app identifier in filename
+    const appName = ctx.storageKey.replace(/[^a-zA-Z0-9-_]/g, '-')
+    a.download = `${appName}-shortcuts-${new Date().toISOString().slice(0, 10)}.json`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
@@ -1172,35 +1220,9 @@ export function ShortcutsModal({
         <div className={modalClassName} role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" onClick={handleModalClick}>
           <div className="kbd-modal-header">
             <h2 className="kbd-modal-title">{title}</h2>
-            <div className="kbd-modal-header-buttons">
-              {editable && handleExport && (
-                <button className="kbd-export-btn" onClick={handleExport}>
-                  Export
-                </button>
-              )}
-              {editable && handleImport && (
-                <>
-                  <button className="kbd-import-btn" onClick={() => importInputRef.current?.click()}>
-                    Import
-                  </button>
-                  <input
-                    type="file"
-                    accept=".json,application/json"
-                    ref={importInputRef}
-                    onChange={handleFileChange}
-                    style={{ display: 'none' }}
-                  />
-                </>
-              )}
-              {editable && handleReset && (
-                <button className="kbd-reset-btn" onClick={reset}>
-                  Reset
-                </button>
-              )}
-              <button className="kbd-modal-close" onClick={close} aria-label="Close">
-                ×
-              </button>
-            </div>
+            <button className="kbd-modal-close" onClick={close} aria-label="Close">
+              ×
+            </button>
           </div>
 
           {hint && <p className="kbd-hint">{hint}</p>}
@@ -1218,6 +1240,67 @@ export function ShortcutsModal({
               {renderGroup(group)}
             </div>
           ))}
+
+          {/* Footer with Export/Import/Reset */}
+          {editable && (handleExport || handleImport || handleReset) && (
+            footerContent !== null && (
+              footerContent ? (
+                footerContent({
+                  exportBindings: hasCustomizations ? handleExport : undefined,
+                  importBindings: handleImport ? () => importInputRef.current?.click() : undefined,
+                  resetBindings: hasCustomizations ? reset : undefined,
+                  importInputRef,
+                  handleFileChange,
+                })
+              ) : (
+                <div className="kbd-modal-footer">
+                  {handleExport && (
+                    <TooltipComponentProp title={hasCustomizations ? "Export bindings" : "No customizations to export"}>
+                      <button
+                        className="kbd-footer-btn"
+                        onClick={handleExport}
+                        disabled={!hasCustomizations}
+                      >
+                        <DownloadIcon />
+                        <span>Export</span>
+                      </button>
+                    </TooltipComponentProp>
+                  )}
+                  {handleImport && (
+                    <TooltipComponentProp title="Import bindings">
+                      <button className="kbd-footer-btn" onClick={() => importInputRef.current?.click()}>
+                        <UploadIcon />
+                        <span>Import</span>
+                      </button>
+                    </TooltipComponentProp>
+                  )}
+                  {handleReset && (
+                    <TooltipComponentProp title={hasCustomizations ? "Reset to defaults" : "No customizations to reset"}>
+                      <button
+                        className="kbd-footer-btn"
+                        onClick={reset}
+                        disabled={!hasCustomizations}
+                      >
+                        <ResetIcon />
+                        <span>Reset</span>
+                      </button>
+                    </TooltipComponentProp>
+                  )}
+                </div>
+              )
+            )
+          )}
+
+          {/* Hidden file input for import */}
+          {handleImport && (
+            <input
+              type="file"
+              accept=".json,application/json"
+              ref={importInputRef}
+              onChange={handleFileChange}
+              style={{ display: 'none' }}
+            />
+          )}
 
           {/* Pending conflict warning */}
           {pendingConflict && (

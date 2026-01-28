@@ -1016,7 +1016,7 @@ test.describe('Export/Import Bindings', () => {
 
     // Step 2: Export the bindings
     const downloadPromise = page.waitForEvent('download')
-    await page.locator('.kbd-export-btn').click()
+    await page.locator('.kbd-footer-btn', { hasText: 'Export' }).click()
     const download = await downloadPromise
 
     // Save the download to a temp file

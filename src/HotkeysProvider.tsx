@@ -32,6 +32,8 @@ export interface HotkeysConfig {
  * Context value for hotkeys.
  */
 export interface HotkeysContextValue {
+  /** Storage key used for persisting bindings (useful for export filename) */
+  storageKey: string
   /** The actions registry */
   registry: ActionsRegistryValue
   /** The omnibar endpoints registry */
@@ -383,6 +385,7 @@ export function HotkeysProvider({
   }, [registry, trackRecentAction])
 
   const value = useMemo<HotkeysContextValue>(() => ({
+    storageKey: config.storageKey,
     registry,
     endpointsRegistry,
     isEnabled,
@@ -413,6 +416,7 @@ export function HotkeysProvider({
     searchActions: searchActionsHelper,
     getCompletions,
   }), [
+    config.storageKey,
     registry,
     endpointsRegistry,
     isEnabled,

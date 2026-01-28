@@ -124,30 +124,42 @@
   font-weight: 600;
 }
 
-.kbd-modal-header-buttons {
+/* Footer with Export/Import/Reset */
+.kbd-modal-footer {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-top: var(--kbd-gap);
+  padding-top: var(--kbd-gap);
+  border-top: 1px solid var(--kbd-border);
+}
+
+.kbd-footer-btn {
   display: flex;
   align-items: center;
-  gap: 8px;
-}
-
-.kbd-reset-btn,
-.kbd-export-btn,
-.kbd-import-btn {
+  gap: 6px;
   background: none;
-  border: 1px solid var(--kbd-border);
-  border-radius: var(--kbd-radius-sm);
-  padding: 4px 10px;
-  font-size: 0.875rem;
+  border: none;
+  padding: 6px 10px;
+  font-size: 0.8125rem;
   cursor: pointer;
   color: var(--kbd-text-secondary);
-  transition: all var(--kbd-transition);
+  transition: color var(--kbd-transition);
+  border-radius: var(--kbd-radius-sm);
 }
 
-.kbd-reset-btn:hover,
-.kbd-export-btn:hover,
-.kbd-import-btn:hover {
+.kbd-footer-btn:hover:not(:disabled) {
   color: var(--kbd-text);
-  border-color: var(--kbd-text-secondary);
+}
+
+.kbd-footer-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.kbd-footer-icon {
+  width: 16px;
+  height: 16px;
 }
 
 .kbd-import-error {

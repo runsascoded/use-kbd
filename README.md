@@ -137,6 +137,47 @@ useAction('nav:prev', {
 
 Users can edit bindings in the `ShortcutsModal`. Changes persist to localStorage using the `storageKey` you provide.
 
+#### Export/Import Bindings
+
+Users can export their customized bindings as JSON and import them in another browser or device:
+
+```tsx
+<ShortcutsModal editable />  // Shows Export/Import buttons
+```
+
+The exported JSON contains:
+- `version` – Library version for compatibility
+- `overrides` – Custom key→action bindings
+- `removedDefaults` – Default bindings the user removed
+
+Programmatic access via the registry:
+
+```tsx
+const { registry } = useHotkeysContext()
+
+// Export current customizations
+const data = registry.exportBindings()
+
+// Import (replaces current customizations)
+registry.importBindings(data)
+```
+
+Customize the footer with `footerContent`:
+
+```tsx
+<ShortcutsModal
+  editable
+  footerContent={({ exportBindings, importBindings, resetBindings }) => (
+    <div className="my-custom-footer">
+      <button onClick={exportBindings}>Download</button>
+      <button onClick={importBindings}>Upload</button>
+    </div>
+  )}
+/>
+```
+
+Pass `footerContent={null}` to hide the footer entirely.
+
 ## Components
 
 ### `<HotkeysProvider>`
@@ -161,10 +202,11 @@ Note: Modal/omnibar trigger bindings are configured via component props (`defaul
 Displays all registered actions grouped by category. Users can click bindings to edit them on desktop.
 
 ```tsx
-<ShortcutsModal groups={[
-  { id: 'nav', label: 'Navigation' },
-  { id: 'edit', label: 'Editing' },
-]} />
+<ShortcutsModal
+  editable                    // Enable editing, Export/Import buttons
+  groups={{ nav: 'Navigation', edit: 'Editing' }}
+  hint="Click any shortcut to customize"
+/>
 ```
 
 ### `<Omnibar>`
