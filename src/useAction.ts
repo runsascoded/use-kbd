@@ -22,6 +22,8 @@ export type ActionHandler = (e?: KeyboardEvent, captures?: number[]) => void
 export interface ActionConfig {
   /** Human-readable label for omnibar/modal */
   label: string
+  /** Longer description (shown in tooltips, omnibar) */
+  description?: string
   /** Group name for organizing in modal */
   group?: string
   /** Default key bindings (user can override) */
@@ -101,6 +103,7 @@ export function useAction(id: string, config: ActionConfig): void {
   }, [
     id,
     config.label,
+    config.description,
     config.group,
     // Compare bindings by value
     JSON.stringify(config.defaultBindings),

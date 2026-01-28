@@ -271,7 +271,7 @@ function organizeShortcuts(
     groupMap.get(groupName)!.shortcuts.push({
       actionId,
       label: labels?.[actionId] ?? actionRegistry?.[actionId]?.label ?? name,
-      description: descriptions?.[actionId],
+      description: descriptions?.[actionId] ?? actionRegistry?.[actionId]?.description,
       bindings,
     })
   }
@@ -293,7 +293,7 @@ function organizeShortcuts(
       groupMap.get(groupName)!.shortcuts.push({
         actionId,
         label: labels?.[actionId] ?? action.label ?? name,
-        description: descriptions?.[actionId],
+        description: descriptions?.[actionId] ?? action.description,
         bindings: [], // No bindings
       })
     }
@@ -1205,9 +1205,17 @@ export function ShortcutsModal({
     // Default single-column rendering
     return group.shortcuts.map(({ actionId, label, description, bindings }) => (
       <div key={actionId} className="kbd-action">
-        <span className="kbd-action-label" title={description}>
-          {label}
-        </span>
+        {description ? (
+          <TooltipComponentProp title={description}>
+            <span className="kbd-action-label">
+              {label}
+            </span>
+          </TooltipComponentProp>
+        ) : (
+          <span className="kbd-action-label">
+            {label}
+          </span>
+        )}
         {renderCell(actionId, bindings)}
       </div>
     ))

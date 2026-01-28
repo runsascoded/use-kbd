@@ -292,6 +292,7 @@ function DataTable() {
   // If no selection, initialize from mouse hover position
   useAction('nav:up', {
     label: 'Row up',
+    description: 'Move cursor up one row and select it',
     group: 'Table: Row Navigation',
     defaultBindings: ['k', 'arrowup'],
     handler: useCallback(() => {
@@ -313,6 +314,7 @@ function DataTable() {
 
   useAction('nav:down', {
     label: 'Row down',
+    description: 'Move cursor down one row and select it',
     group: 'Table: Row Navigation',
     defaultBindings: ['j', 'arrowdown'],
     handler: useCallback(() => {
@@ -378,6 +380,7 @@ function DataTable() {
   // If no cursor established, use mouse hover position as anchor
   useAction('nav:extend-up', {
     label: 'Extend up',
+    description: 'Extend selection upward (preserves pinned rows)',
     group: 'Table: Row Navigation',
     defaultBindings: ['shift+k', 'shift+arrowup'],
     handler: useCallback(() => {
@@ -571,6 +574,7 @@ function DataTable() {
   // Go to specific page (key prefix + digits pattern for testing)
   useAction('page:goto', {
     label: 'Go to page N',
+    description: 'Jump to a specific page (e.g., g5 for page 5)',
     group: 'Table: Page Navigation',
     defaultBindings: ['g \\d+'],
     handler: useCallback((_, captures) => {
@@ -633,6 +637,7 @@ function DataTable() {
   // Undo action
   useAction('undo', {
     label: 'Undo',
+    description: 'Revert last status change',
     group: 'Table: Edit',
     defaultBindings: ['z'],
     handler: useCallback(() => {
@@ -646,6 +651,7 @@ function DataTable() {
 
   useAction('status:active', {
     label: 'Set active',
+    description: 'Mark selected rows as active',
     group: 'Table: Status',
     defaultBindings: ['a'],
     handler: useCallback(() => setSelectedStatus('active'), [setSelectedStatus]),
@@ -668,6 +674,7 @@ function DataTable() {
   // Sort actions - paired asc/desc for each column (single keys for instant response)
   useAction('sort:name:asc', {
     label: 'Name ↑',
+    description: 'Sort by name A→Z',
     group: 'Table: Sort',
     defaultBindings: ['n'],
     handler: sortNameAsc,
@@ -710,6 +717,7 @@ function DataTable() {
 
   useAction('sort:clear', {
     label: 'Clear',
+    description: 'Clear sort and restore original order',
     group: 'Table: Sort',
     defaultBindings: ['c'],
     handler: sortClear,
