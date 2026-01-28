@@ -1,4 +1,4 @@
-import { jsx, Fragment, jsxs } from 'react/jsx-runtime';
+import { jsx, jsxs, Fragment } from 'react/jsx-runtime';
 import { createContext, forwardRef, useRef, useState, useCallback, useMemo, useEffect, useContext, Fragment as Fragment$1 } from 'react';
 
 // src/types.ts
@@ -40,6 +40,7 @@ function createTwoColumnRenderer(config) {
     ] });
   };
 }
+var EXPORT_VERSION = "0.8.0";
 var ActionsRegistryContext = createContext(null);
 function useActionsRegistry(options = {}) {
   const { storageKey } = options;
@@ -253,6 +254,41 @@ function useActionsRegistry(options = {}) {
     updateOverrides({});
     updateRemovedDefaults({});
   }, [updateOverrides, updateRemovedDefaults]);
+  const exportBindings = useCallback(() => {
+    return {
+      version: EXPORT_VERSION,
+      exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      origin: typeof window !== "undefined" ? window.location.origin : void 0,
+      overrides,
+      removedDefaults
+    };
+  }, [overrides, removedDefaults]);
+  const importBindings = useCallback((data) => {
+    if (!data || typeof data !== "object") {
+      throw new Error("Invalid import data: expected an object");
+    }
+    if (typeof data.overrides !== "object" || data.overrides === null) {
+      throw new Error("Invalid import data: missing or invalid overrides");
+    }
+    if (typeof data.removedDefaults !== "object" || data.removedDefaults === null) {
+      throw new Error("Invalid import data: missing or invalid removedDefaults");
+    }
+    for (const [key, value] of Object.entries(data.overrides)) {
+      if (typeof value !== "string" && !Array.isArray(value)) {
+        throw new Error(`Invalid override for key "${key}": expected string or array`);
+      }
+      if (Array.isArray(value) && !value.every((v) => typeof v === "string")) {
+        throw new Error(`Invalid override for key "${key}": array must contain only strings`);
+      }
+    }
+    for (const [action, keys] of Object.entries(data.removedDefaults)) {
+      if (!Array.isArray(keys) || !keys.every((k) => typeof k === "string")) {
+        throw new Error(`Invalid removedDefaults for action "${action}": expected array of strings`);
+      }
+    }
+    updateOverrides(data.overrides);
+    updateRemovedDefaults(data.removedDefaults);
+  }, [updateOverrides, updateRemovedDefaults]);
   const actions = useMemo(() => {
     return new Map(actionsRef.current);
   }, [actionsVersion]);
@@ -267,9 +303,12 @@ function useActionsRegistry(options = {}) {
     getBindingsForAction,
     getFirstBindingForAction,
     overrides,
+    removedDefaults,
     setBinding,
     removeBinding,
-    resetOverrides
+    resetOverrides,
+    exportBindings,
+    importBindings
   }), [
     register,
     unregister,
@@ -281,9 +320,12 @@ function useActionsRegistry(options = {}) {
     getBindingsForAction,
     getFirstBindingForAction,
     overrides,
+    removedDefaults,
     setBinding,
     removeBinding,
-    resetOverrides
+    resetOverrides,
+    exportBindings,
+    importBindings
   ]);
 }
 var OmnibarEndpointsRegistryContext = createContext(null);
@@ -1731,6 +1773,7 @@ function HotkeysProvider({
     trackRecentAction(id);
   }, [registry, trackRecentAction]);
   const value = useMemo(() => ({
+    storageKey: config.storageKey,
     registry,
     endpointsRegistry,
     isEnabled,
@@ -1761,6 +1804,7 @@ function HotkeysProvider({
     searchActions: searchActionsHelper,
     getCompletions
   }), [
+    config.storageKey,
     registry,
     endpointsRegistry,
     isEnabled,
@@ -4186,7 +4230,21 @@ function SequenceModal() {
     flatCompletions.length === 0 && /* @__PURE__ */ jsx("div", { className: "kbd-sequence-empty", children: "No matching shortcuts" })
   ] }) });
 }
-var DefaultTooltip = ({ children }) => /* @__PURE__ */ jsx(Fragment, { children });
+var DefaultTooltip = ({ title, children }) => /* @__PURE__ */ jsx("span", { title, style: { display: "contents" }, children });
+var DownloadIcon = () => /* @__PURE__ */ jsxs("svg", { className: "kbd-footer-icon", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round", children: [
+  /* @__PURE__ */ jsx("path", { d: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" }),
+  /* @__PURE__ */ jsx("polyline", { points: "7 10 12 15 17 10" }),
+  /* @__PURE__ */ jsx("line", { x1: "12", y1: "15", x2: "12", y2: "3" })
+] });
+var UploadIcon = () => /* @__PURE__ */ jsxs("svg", { className: "kbd-footer-icon", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round", children: [
+  /* @__PURE__ */ jsx("path", { d: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" }),
+  /* @__PURE__ */ jsx("polyline", { points: "17 8 12 3 7 8" }),
+  /* @__PURE__ */ jsx("line", { x1: "12", y1: "3", x2: "12", y2: "15" })
+] });
+var ResetIcon = () => /* @__PURE__ */ jsxs("svg", { className: "kbd-footer-icon", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round", children: [
+  /* @__PURE__ */ jsx("path", { d: "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" }),
+  /* @__PURE__ */ jsx("path", { d: "M3 3v5h5" })
+] });
 var TooltipContext = createContext(DefaultTooltip);
 function parseActionId(actionId) {
   const colonIndex = actionId.indexOf(":");
@@ -4384,6 +4442,8 @@ function ShortcutsModal({
   onBindingAdd,
   onBindingRemove,
   onReset,
+  onExport,
+  onImport,
   multipleBindings = true,
   children,
   backdropClassName = "kbd-backdrop",
@@ -4391,7 +4451,8 @@ function ShortcutsModal({
   title = "Keyboard Shortcuts",
   hint,
   showUnbound,
-  TooltipComponent: TooltipComponentProp = DefaultTooltip
+  TooltipComponent: TooltipComponentProp = DefaultTooltip,
+  footerContent
 }) {
   const ctx = useMaybeHotkeysContext();
   const [isTouchDevice, setIsTouchDevice] = useState(false);
@@ -4449,6 +4510,42 @@ function ShortcutsModal({
   const handleReset = onReset ?? (ctx ? () => {
     ctx.registry.resetOverrides();
   } : void 0);
+  const importInputRef = useRef(null);
+  const [importError, setImportError] = useState(null);
+  const hasCustomizations = ctx ? Object.keys(ctx.registry.overrides).length > 0 || Object.keys(ctx.registry.removedDefaults).length > 0 : false;
+  const handleExport = onExport ?? (ctx ? () => {
+    const data = ctx.registry.exportBindings();
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const appName = ctx.storageKey.replace(/[^a-zA-Z0-9-_]/g, "-");
+    a.download = `${appName}-shortcuts-${(/* @__PURE__ */ new Date()).toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } : void 0);
+  const handleImport = onImport ?? (ctx ? async (file) => {
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      ctx.registry.importBindings(data);
+      setImportError(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to import bindings";
+      setImportError(message);
+    }
+  } : void 0);
+  const handleFileChange = useCallback((e) => {
+    const file = e.target.files?.[0];
+    if (file && handleImport) {
+      handleImport(file);
+    }
+    if (importInputRef.current) {
+      importInputRef.current.value = "";
+    }
+  }, [handleImport]);
   const [internalIsOpen, setInternalIsOpen] = useState(false);
   const isOpen = isOpenProp ?? ctx?.isModalOpen ?? internalIsOpen;
   const [editingAction, setEditingAction] = useState(null);
@@ -4866,16 +4963,63 @@ function ShortcutsModal({
   return /* @__PURE__ */ jsx(TooltipContext.Provider, { value: TooltipComponentProp, children: /* @__PURE__ */ jsx("div", { className: backdropClassName, onClick: handleBackdropClick, children: /* @__PURE__ */ jsxs("div", { className: modalClassName, role: "dialog", "aria-modal": "true", "aria-label": "Keyboard shortcuts", onClick: handleModalClick, children: [
     /* @__PURE__ */ jsxs("div", { className: "kbd-modal-header", children: [
       /* @__PURE__ */ jsx("h2", { className: "kbd-modal-title", children: title }),
-      /* @__PURE__ */ jsxs("div", { className: "kbd-modal-header-buttons", children: [
-        editable && handleReset && /* @__PURE__ */ jsx("button", { className: "kbd-reset-btn", onClick: reset, children: "Reset" }),
-        /* @__PURE__ */ jsx("button", { className: "kbd-modal-close", onClick: close, "aria-label": "Close", children: "\xD7" })
-      ] })
+      /* @__PURE__ */ jsx("button", { className: "kbd-modal-close", onClick: close, "aria-label": "Close", children: "\xD7" })
     ] }),
     hint && /* @__PURE__ */ jsx("p", { className: "kbd-hint", children: hint }),
+    importError && /* @__PURE__ */ jsxs("div", { className: "kbd-import-error", children: [
+      /* @__PURE__ */ jsx("span", { children: importError }),
+      /* @__PURE__ */ jsx("button", { onClick: () => setImportError(null), "aria-label": "Dismiss error", children: "\xD7" })
+    ] }),
     shortcutGroups.map((group) => /* @__PURE__ */ jsxs("div", { className: "kbd-group", children: [
       /* @__PURE__ */ jsx("h3", { className: "kbd-group-title", children: group.name }),
       renderGroup(group)
     ] }, group.name)),
+    editable && (handleExport || handleImport || handleReset) && (footerContent !== null && (footerContent ? footerContent({
+      exportBindings: hasCustomizations ? handleExport : void 0,
+      importBindings: handleImport ? () => importInputRef.current?.click() : void 0,
+      resetBindings: hasCustomizations ? reset : void 0,
+      importInputRef,
+      handleFileChange
+    }) : /* @__PURE__ */ jsxs("div", { className: "kbd-modal-footer", children: [
+      handleExport && /* @__PURE__ */ jsx(TooltipComponentProp, { title: hasCustomizations ? "Export bindings" : "No customizations to export", children: /* @__PURE__ */ jsxs(
+        "button",
+        {
+          className: "kbd-footer-btn",
+          onClick: handleExport,
+          disabled: !hasCustomizations,
+          children: [
+            /* @__PURE__ */ jsx(DownloadIcon, {}),
+            /* @__PURE__ */ jsx("span", { children: "Export" })
+          ]
+        }
+      ) }),
+      handleImport && /* @__PURE__ */ jsx(TooltipComponentProp, { title: "Import bindings", children: /* @__PURE__ */ jsxs("button", { className: "kbd-footer-btn", onClick: () => importInputRef.current?.click(), children: [
+        /* @__PURE__ */ jsx(UploadIcon, {}),
+        /* @__PURE__ */ jsx("span", { children: "Import" })
+      ] }) }),
+      handleReset && /* @__PURE__ */ jsx(TooltipComponentProp, { title: hasCustomizations ? "Reset to defaults" : "No customizations to reset", children: /* @__PURE__ */ jsxs(
+        "button",
+        {
+          className: "kbd-footer-btn",
+          onClick: reset,
+          disabled: !hasCustomizations,
+          children: [
+            /* @__PURE__ */ jsx(ResetIcon, {}),
+            /* @__PURE__ */ jsx("span", { children: "Reset" })
+          ]
+        }
+      ) })
+    ] }))),
+    handleImport && /* @__PURE__ */ jsx(
+      "input",
+      {
+        type: "file",
+        accept: ".json,application/json",
+        ref: importInputRef,
+        onChange: handleFileChange,
+        style: { display: "none" }
+      }
+    ),
     pendingConflict && /* @__PURE__ */ jsxs("div", { className: "kbd-conflict-warning", style: {
       padding: "12px",
       marginTop: "16px",

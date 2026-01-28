@@ -306,6 +306,22 @@ interface OmnibarEndpointSyncConfig extends OmnibarEndpointConfigBase {
  * Configuration for an omnibar endpoint (async or sync)
  */
 type OmnibarEndpointConfig = OmnibarEndpointAsyncConfig | OmnibarEndpointSyncConfig;
+/**
+ * Exported bindings format for import/export functionality.
+ * Contains user customizations (overrides and removed defaults).
+ */
+interface BindingsExport {
+    /** Version of the export format / library */
+    version: string;
+    /** ISO timestamp of when the export was created */
+    exportedAt: string;
+    /** Origin URL where the export was created (for reference) */
+    origin?: string;
+    /** User binding overrides: key → action (e.g., "ctrl+s" → "doc:save") */
+    overrides: Record<string, string | string[]>;
+    /** Default bindings that were removed: action → keys (e.g., "nav:goto" → ["g"]) */
+    removedDefaults: Record<string, string[]>;
+}
 
 /**
  * Hotkey definition - maps key combinations/sequences to action names
@@ -775,6 +791,10 @@ interface ShortcutsModalProps {
     onBindingRemove?: (action: string, key: string) => void;
     /** Called when reset is requested */
     onReset?: () => void;
+    /** Called when bindings are exported */
+    onExport?: () => void;
+    /** Called when bindings are imported (with import data) */
+    onImport?: (file: File) => Promise<void>;
     /** Whether to allow multiple bindings per action (default: true) */
     multipleBindings?: boolean;
     /** Custom render function for the modal content */
@@ -795,6 +815,17 @@ interface ShortcutsModalProps {
      * Default uses native title attribute. Can be MUI Tooltip, etc.
      */
     TooltipComponent?: TooltipComponent;
+    /**
+     * Custom footer content. Return `null` to hide the default footer.
+     * Receives default footer actions for composition.
+     */
+    footerContent?: (actions: {
+        exportBindings: (() => void) | undefined;
+        importBindings: (() => void) | undefined;
+        resetBindings: (() => void) | undefined;
+        importInputRef: React.RefObject<HTMLInputElement>;
+        handleFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    }) => ReactNode;
 }
 interface ShortcutsModalRenderProps {
     groups: ShortcutGroup[];
@@ -846,7 +877,7 @@ interface ShortcutsModalRenderProps {
  * />
  * ```
  */
-declare function ShortcutsModal({ keymap: keymapProp, defaults: defaultsProp, labels: labelsProp, descriptions: descriptionsProp, groups: groupNamesProp, groupOrder, groupRenderers, isOpen: isOpenProp, onClose: onCloseProp, defaultBinding, editable: editableProp, onBindingChange, onBindingAdd, onBindingRemove, onReset, multipleBindings, children, backdropClassName, modalClassName, title, hint, showUnbound, TooltipComponent: TooltipComponentProp, }: ShortcutsModalProps): react_jsx_runtime.JSX.Element | null;
+declare function ShortcutsModal({ keymap: keymapProp, defaults: defaultsProp, labels: labelsProp, descriptions: descriptionsProp, groups: groupNamesProp, groupOrder, groupRenderers, isOpen: isOpenProp, onClose: onCloseProp, defaultBinding, editable: editableProp, onBindingChange, onBindingAdd, onBindingRemove, onReset, onExport, onImport, multipleBindings, children, backdropClassName, modalClassName, title, hint, showUnbound, TooltipComponent: TooltipComponentProp, footerContent, }: ShortcutsModalProps): react_jsx_runtime.JSX.Element | null;
 
 /**
  * Configuration for a row in a two-column table
@@ -1322,12 +1353,18 @@ interface ActionsRegistryValue {
     getFirstBindingForAction: (id: string) => string | undefined;
     /** User's binding overrides */
     overrides: Record<string, string | string[]>;
+    /** Default bindings that have been removed (per action) */
+    removedDefaults: Record<string, string[]>;
     /** Set a user override for a binding */
     setBinding: (actionId: string, key: string) => void;
     /** Remove a binding for a specific action */
     removeBinding: (actionId: string, key: string) => void;
     /** Reset all overrides */
     resetOverrides: () => void;
+    /** Export current binding customizations as JSON */
+    exportBindings: () => BindingsExport;
+    /** Import binding customizations from JSON (replaces current customizations) */
+    importBindings: (data: BindingsExport) => void;
 }
 declare const ActionsRegistryContext: react.Context<ActionsRegistryValue | null>;
 interface UseActionsRegistryOptions {
@@ -1359,6 +1396,8 @@ interface HotkeysConfig {
  * Context value for hotkeys.
  */
 interface HotkeysContextValue {
+    /** Storage key used for persisting bindings (useful for export filename) */
+    storageKey: string;
     /** The actions registry */
     registry: ActionsRegistryValue;
     /** The omnibar endpoints registry */
@@ -1819,4 +1858,4 @@ declare const ACTION_MODAL = "__hotkeys:modal";
 declare const ACTION_OMNIBAR = "__hotkeys:omnibar";
 declare const ACTION_LOOKUP = "__hotkeys:lookup";
 
-export { ACTION_LOOKUP, ACTION_MODAL, ACTION_OMNIBAR, type ActionConfig, type ActionDefinition, type ActionHandler, type ActionRegistry, type ActionSearchResult, ActionsRegistryContext, type ActionsRegistryValue, Alt, Backspace, type BindingInfo, Command, Ctrl, DEFAULT_SEQUENCE_TIMEOUT, DIGITS_PLACEHOLDER, DIGIT_PLACEHOLDER, Down, type EndpointPagination, type EndpointPaginationInfo, type EndpointPaginationMode, type EndpointQueryResult, type EndpointResponse, Enter, type FuzzyMatchResult, type GroupRenderer, type GroupRendererProps, type HandlerMap, type HotkeyHandler, type HotkeyMap, type HotkeySequence, type HotkeysConfig, type HotkeysContextValue, HotkeysProvider, type HotkeysProviderProps, Kbd, KbdLookup, KbdModal, KbdOmnibar, type KbdProps, Kbds, Key, type KeyCombination, type KeyCombinationDisplay, type KeyConflict, type KeyIconProps, type KeyIconType, type KeySeq, KeybindingEditor, type KeybindingEditorProps, type KeybindingEditorRenderProps, Left, LookupModal, MobileFAB, type MobileFABProps, ModifierIcon, type ModifierIconProps, type ModifierType, type Modifiers, Omnibar, type OmnibarActionEntry, type OmnibarEndpointAsyncConfig, type OmnibarEndpointConfig, type OmnibarEndpointConfigBase, type OmnibarEndpointSyncConfig, OmnibarEndpointsRegistryContext, type OmnibarEndpointsRegistryValue, type OmnibarEntry, type OmnibarEntryBase, type OmnibarLinkEntry, type OmnibarProps, type OmnibarRenderProps, Option, type RecordHotkeyOptions, type RecordHotkeyResult, type RegisteredAction, type RegisteredEndpoint, type RemoteOmnibarResult, Right, SearchIcon, SearchTrigger, type SearchTriggerProps, type SeqElem, type SeqElemState, type SeqMatchState, type SequenceCompletion, SequenceModal, Shift, type ShortcutGroup, ShortcutsModal, type ShortcutsModalProps, type ShortcutsModalRenderProps, type TooltipComponent, type TooltipProps, type TwoColumnConfig, type TwoColumnRow, Up, type UseEditableHotkeysOptions, type UseEditableHotkeysResult, type UseHotkeysOptions, type UseHotkeysResult, type UseOmnibarOptions, type UseOmnibarResult, bindingHasPlaceholders, countPlaceholders, createTwoColumnRenderer, extractCaptures, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, formatKeySeq, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasAnyPlaceholderBindings, hasConflicts, hasDigitPlaceholders, hotkeySequenceToKeySeq, isDigitPlaceholder, isMac, isModifierKey, isPlaceholderSentinel, isSequence, isShiftedSymbol, keySeqToHotkeySequence, normalizeKey, parseHotkeyString, parseKeySeq, parseQueryNumbers, searchActions, useAction, useActions, useActionsRegistry, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useOmnibar, useOmnibarEndpoint, useOmnibarEndpointsRegistry, useRecordHotkey };
+export { ACTION_LOOKUP, ACTION_MODAL, ACTION_OMNIBAR, type ActionConfig, type ActionDefinition, type ActionHandler, type ActionRegistry, type ActionSearchResult, ActionsRegistryContext, type ActionsRegistryValue, Alt, Backspace, type BindingInfo, type BindingsExport, Command, Ctrl, DEFAULT_SEQUENCE_TIMEOUT, DIGITS_PLACEHOLDER, DIGIT_PLACEHOLDER, Down, type EndpointPagination, type EndpointPaginationInfo, type EndpointPaginationMode, type EndpointQueryResult, type EndpointResponse, Enter, type FuzzyMatchResult, type GroupRenderer, type GroupRendererProps, type HandlerMap, type HotkeyHandler, type HotkeyMap, type HotkeySequence, type HotkeysConfig, type HotkeysContextValue, HotkeysProvider, type HotkeysProviderProps, Kbd, KbdLookup, KbdModal, KbdOmnibar, type KbdProps, Kbds, Key, type KeyCombination, type KeyCombinationDisplay, type KeyConflict, type KeyIconProps, type KeyIconType, type KeySeq, KeybindingEditor, type KeybindingEditorProps, type KeybindingEditorRenderProps, Left, LookupModal, MobileFAB, type MobileFABProps, ModifierIcon, type ModifierIconProps, type ModifierType, type Modifiers, Omnibar, type OmnibarActionEntry, type OmnibarEndpointAsyncConfig, type OmnibarEndpointConfig, type OmnibarEndpointConfigBase, type OmnibarEndpointSyncConfig, OmnibarEndpointsRegistryContext, type OmnibarEndpointsRegistryValue, type OmnibarEntry, type OmnibarEntryBase, type OmnibarLinkEntry, type OmnibarProps, type OmnibarRenderProps, Option, type RecordHotkeyOptions, type RecordHotkeyResult, type RegisteredAction, type RegisteredEndpoint, type RemoteOmnibarResult, Right, SearchIcon, SearchTrigger, type SearchTriggerProps, type SeqElem, type SeqElemState, type SeqMatchState, type SequenceCompletion, SequenceModal, Shift, type ShortcutGroup, ShortcutsModal, type ShortcutsModalProps, type ShortcutsModalRenderProps, type TooltipComponent, type TooltipProps, type TwoColumnConfig, type TwoColumnRow, Up, type UseEditableHotkeysOptions, type UseEditableHotkeysResult, type UseHotkeysOptions, type UseHotkeysResult, type UseOmnibarOptions, type UseOmnibarResult, bindingHasPlaceholders, countPlaceholders, createTwoColumnRenderer, extractCaptures, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, formatKeySeq, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasAnyPlaceholderBindings, hasConflicts, hasDigitPlaceholders, hotkeySequenceToKeySeq, isDigitPlaceholder, isMac, isModifierKey, isPlaceholderSentinel, isSequence, isShiftedSymbol, keySeqToHotkeySequence, normalizeKey, parseHotkeyString, parseKeySeq, parseQueryNumbers, searchActions, useAction, useActions, useActionsRegistry, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useOmnibar, useOmnibarEndpoint, useOmnibarEndpointsRegistry, useRecordHotkey };
