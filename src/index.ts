@@ -64,6 +64,8 @@ export { useHotkeys } from './useHotkeys'
 export { useRecordHotkey } from './useRecordHotkey'
 export { useEditableHotkeys } from './useEditableHotkeys'
 export { useOmnibar } from './useOmnibar'
+export { useParamEntry } from './useParamEntry'
+export type { PendingAction, UseParamEntryOptions, UseParamEntryReturn } from './useParamEntry'
 
 // Components
 export { Kbd, Kbds, Key, KbdModal, KbdOmnibar, KbdLookup } from './Kbd'

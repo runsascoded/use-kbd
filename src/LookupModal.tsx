@@ -3,8 +3,9 @@ import { ACTION_LOOKUP } from './constants'
 import { useHotkeysContext } from './HotkeysProvider'
 import { renderKeySeq, renderSeqElem } from './KeyElements'
 import { useAction } from './useAction'
+import { useParamEntry } from './useParamEntry'
 import type { HotkeySequence, KeyCombination, KeySeq } from './types'
-import { formatCombination, formatKeySeq, parseHotkeyString, parseKeySeq, normalizeKey, isModifierKey } from './utils'
+import { formatCombination, formatKeySeq, hasDigitPlaceholders, parseHotkeyString, parseKeySeq, normalizeKey, isModifierKey } from './utils'
 
 interface LookupResult {
   binding: string
@@ -59,15 +60,23 @@ export function LookupModal({ defaultBinding = 'meta+shift+k' }: LookupModalProp
   const [selectedIndex, setSelectedIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement | null>(null)
 
-  // Parameter entry state (for actions with digit placeholders)
-  const [pendingParamAction, setPendingParamAction] = useState<{ actionId: string; label: string } | null>(null)
-  const [paramValue, setParamValue] = useState('')
-  const paramInputRef = useRef<HTMLInputElement | null>(null)
+  // Parameter entry for actions with digit placeholders
+  const handleParamSubmit = useCallback((actionId: string, captures: number[]) => {
+    closeLookup()
+    executeAction(actionId, captures)
+  }, [closeLookup, executeAction])
 
-  // Check if a keySeq has digit placeholders
-  const hasDigitPlaceholder = useCallback((keySeq: KeySeq): boolean => {
-    return keySeq.some(elem => elem.type === 'digit' || elem.type === 'digits')
+  const handleParamCancel = useCallback(() => {
+    // Return focus to main input
+    requestAnimationFrame(() => {
+      inputRef.current?.focus()
+    })
   }, [])
+
+  const paramEntry = useParamEntry({
+    onSubmit: handleParamSubmit,
+    onCancel: handleParamCancel,
+  })
 
   // Note: Browser back button handling is centralized in HotkeysProvider
 
@@ -209,7 +218,7 @@ export function LookupModal({ defaultBinding = 'meta+shift+k' }: LookupModalProp
     const label = result.labels[0]
 
     // Check if action needs parameter entry
-    if (hasDigitPlaceholder(result.keySeq)) {
+    if (hasDigitPlaceholders(result.keySeq)) {
       // Check if user already typed digits in the filter
       const capturedDigit = extractDigitsFromPending()
       if (capturedDigit !== null) {
@@ -218,53 +227,27 @@ export function LookupModal({ defaultBinding = 'meta+shift+k' }: LookupModalProp
         executeAction(actionId, [capturedDigit])
       } else {
         // Need to prompt for parameter
-        setPendingParamAction({ actionId, label })
-        setParamValue('')
-        requestAnimationFrame(() => {
-          paramInputRef.current?.focus()
-        })
+        paramEntry.startParamEntry({ id: actionId, label })
       }
     } else {
       // Execute directly
       closeLookup()
       executeAction(actionId)
     }
-  }, [hasDigitPlaceholder, extractDigitsFromPending, closeLookup, executeAction])
-
-  // Submit parameter and execute action
-  const submitParam = useCallback(() => {
-    if (!pendingParamAction || !paramValue) return
-    const num = parseInt(paramValue, 10)
-    if (isNaN(num)) return
-
-    closeLookup()
-    executeAction(pendingParamAction.actionId, [num])
-    setPendingParamAction(null)
-    setParamValue('')
-  }, [pendingParamAction, paramValue, closeLookup, executeAction])
-
-  // Cancel parameter entry
-  const cancelParam = useCallback(() => {
-    setPendingParamAction(null)
-    setParamValue('')
-    // Return focus to main input
-    requestAnimationFrame(() => {
-      inputRef.current?.focus()
-    })
-  }, [])
+  }, [extractDigitsFromPending, closeLookup, executeAction, paramEntry])
 
   // Reset state when modal opens/closes, using initial keys if provided
   useEffect(() => {
     if (isLookupOpen) {
       setPendingKeys(lookupInitialKeys)
       setSelectedIndex(0)
-      setPendingParamAction(null)
-      setParamValue('')
+      paramEntry.cancelParam() // Reset param entry state
       // Focus input for mobile keyboard
       requestAnimationFrame(() => {
         inputRef.current?.focus()
       })
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLookupOpen, lookupInitialKeys])
 
   // Reset selection when filtered results change
@@ -360,19 +343,6 @@ export function LookupModal({ defaultBinding = 'meta+shift+k' }: LookupModalProp
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isLookupOpen, pendingKeys, filteredBindings, selectedIndex, closeLookup, attemptExecute])
 
-  // Handle parameter input keydown
-  const handleParamKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      if (paramValue) {
-        submitParam()
-      }
-    } else if (e.key === 'Escape') {
-      e.preventDefault()
-      cancelParam()
-    }
-  }, [paramValue, submitParam, cancelParam])
-
   // Handle backdrop click
   const handleBackdropClick = useCallback(() => {
     closeLookup()
@@ -407,16 +377,16 @@ export function LookupModal({ defaultBinding = 'meta+shift+k' }: LookupModalProp
         </div>
 
         {/* Parameter entry mode */}
-        {pendingParamAction ? (
+        {paramEntry.isEnteringParam ? (
           <div className="kbd-lookup-param">
-            <div className="kbd-lookup-param-label">{pendingParamAction.label}</div>
+            <div className="kbd-lookup-param-label">{paramEntry.pendingAction?.label}</div>
             <input
-              ref={paramInputRef}
+              ref={paramEntry.paramInputRef}
               type="number"
               className="kbd-lookup-param-input"
-              value={paramValue}
-              onChange={e => setParamValue(e.target.value)}
-              onKeyDown={handleParamKeyDown}
+              value={paramEntry.paramValue}
+              onChange={e => paramEntry.setParamValue(e.target.value)}
+              onKeyDown={paramEntry.handleParamKeyDown}
               placeholder="Enter number..."
               autoComplete="off"
             />
