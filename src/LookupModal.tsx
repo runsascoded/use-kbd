@@ -184,7 +184,24 @@ export function LookupModal({ defaultBinding = 'meta+shift+k' }: LookupModalProp
     )
   }, [pendingKeys])
 
-  // Attempt to execute an action - enters param mode if digits needed
+  // Extract leading digits from pending keys (e.g., user typed "3" to filter)
+  const extractDigitsFromPending = useCallback((): number | null => {
+    let digitStr = ''
+    for (const combo of pendingKeys) {
+      if (/^[0-9]$/.test(combo.key) && !combo.modifiers.ctrl && !combo.modifiers.alt && !combo.modifiers.meta) {
+        digitStr += combo.key
+      } else {
+        break // Stop at first non-digit
+      }
+    }
+    if (digitStr) {
+      const num = parseInt(digitStr, 10)
+      return isNaN(num) ? null : num
+    }
+    return null
+  }, [pendingKeys])
+
+  // Attempt to execute an action - uses pending digits or enters param mode
   const attemptExecute = useCallback((result: LookupResult) => {
     if (result.actions.length === 0) return
 
@@ -193,18 +210,26 @@ export function LookupModal({ defaultBinding = 'meta+shift+k' }: LookupModalProp
 
     // Check if action needs parameter entry
     if (hasDigitPlaceholder(result.keySeq)) {
-      setPendingParamAction({ actionId, label })
-      setParamValue('')
-      // Focus param input after state update
-      requestAnimationFrame(() => {
-        paramInputRef.current?.focus()
-      })
+      // Check if user already typed digits in the filter
+      const capturedDigit = extractDigitsFromPending()
+      if (capturedDigit !== null) {
+        // Use the digits they already typed
+        closeLookup()
+        executeAction(actionId, [capturedDigit])
+      } else {
+        // Need to prompt for parameter
+        setPendingParamAction({ actionId, label })
+        setParamValue('')
+        requestAnimationFrame(() => {
+          paramInputRef.current?.focus()
+        })
+      }
     } else {
       // Execute directly
       closeLookup()
       executeAction(actionId)
     }
-  }, [hasDigitPlaceholder, closeLookup, executeAction])
+  }, [hasDigitPlaceholder, extractDigitsFromPending, closeLookup, executeAction])
 
   // Submit parameter and execute action
   const submitParam = useCallback(() => {
