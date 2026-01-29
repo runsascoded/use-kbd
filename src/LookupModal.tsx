@@ -59,6 +59,16 @@ export function LookupModal({ defaultBinding = 'meta+shift+k' }: LookupModalProp
   const [selectedIndex, setSelectedIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement | null>(null)
 
+  // Parameter entry state (for actions with digit placeholders)
+  const [pendingParamAction, setPendingParamAction] = useState<{ actionId: string; label: string } | null>(null)
+  const [paramValue, setParamValue] = useState('')
+  const paramInputRef = useRef<HTMLInputElement | null>(null)
+
+  // Check if a keySeq has digit placeholders
+  const hasDigitPlaceholder = useCallback((keySeq: KeySeq): boolean => {
+    return keySeq.some(elem => elem.type === 'digit' || elem.type === 'digits')
+  }, [])
+
   // Note: Browser back button handling is centralized in HotkeysProvider
 
   // Get all bindings from keymap
@@ -174,11 +184,57 @@ export function LookupModal({ defaultBinding = 'meta+shift+k' }: LookupModalProp
     )
   }, [pendingKeys])
 
+  // Attempt to execute an action - enters param mode if digits needed
+  const attemptExecute = useCallback((result: LookupResult) => {
+    if (result.actions.length === 0) return
+
+    const actionId = result.actions[0]
+    const label = result.labels[0]
+
+    // Check if action needs parameter entry
+    if (hasDigitPlaceholder(result.keySeq)) {
+      setPendingParamAction({ actionId, label })
+      setParamValue('')
+      // Focus param input after state update
+      requestAnimationFrame(() => {
+        paramInputRef.current?.focus()
+      })
+    } else {
+      // Execute directly
+      closeLookup()
+      executeAction(actionId)
+    }
+  }, [hasDigitPlaceholder, closeLookup, executeAction])
+
+  // Submit parameter and execute action
+  const submitParam = useCallback(() => {
+    if (!pendingParamAction || !paramValue) return
+    const num = parseInt(paramValue, 10)
+    if (isNaN(num)) return
+
+    closeLookup()
+    executeAction(pendingParamAction.actionId, [num])
+    setPendingParamAction(null)
+    setParamValue('')
+  }, [pendingParamAction, paramValue, closeLookup, executeAction])
+
+  // Cancel parameter entry
+  const cancelParam = useCallback(() => {
+    setPendingParamAction(null)
+    setParamValue('')
+    // Return focus to main input
+    requestAnimationFrame(() => {
+      inputRef.current?.focus()
+    })
+  }, [])
+
   // Reset state when modal opens/closes, using initial keys if provided
   useEffect(() => {
     if (isLookupOpen) {
       setPendingKeys(lookupInitialKeys)
       setSelectedIndex(0)
+      setPendingParamAction(null)
+      setParamValue('')
       // Focus input for mobile keyboard
       requestAnimationFrame(() => {
         inputRef.current?.focus()
@@ -247,10 +303,8 @@ export function LookupModal({ defaultBinding = 'meta+shift+k' }: LookupModalProp
       if (e.key === 'Enter') {
         e.preventDefault()
         const selected = filteredBindings[selectedIndex]
-        if (selected && selected.actions.length > 0) {
-          closeLookup()
-          // Execute first action
-          executeAction(selected.actions[0])
+        if (selected) {
+          attemptExecute(selected)
         }
         return
       }
@@ -279,7 +333,20 @@ export function LookupModal({ defaultBinding = 'meta+shift+k' }: LookupModalProp
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isLookupOpen, pendingKeys, filteredBindings, selectedIndex, closeLookup, executeAction])
+  }, [isLookupOpen, pendingKeys, filteredBindings, selectedIndex, closeLookup, attemptExecute])
+
+  // Handle parameter input keydown
+  const handleParamKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      if (paramValue) {
+        submitParam()
+      }
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      cancelParam()
+    }
+  }, [paramValue, submitParam, cancelParam])
 
   // Handle backdrop click
   const handleBackdropClick = useCallback(() => {
@@ -314,31 +381,44 @@ export function LookupModal({ defaultBinding = 'meta+shift+k' }: LookupModalProp
           </span>
         </div>
 
-        {/* Results list */}
-        <div className="kbd-lookup-results">
-          {filteredBindings.length === 0 ? (
-            <div className="kbd-lookup-empty">No matching shortcuts</div>
-          ) : (
-            filteredBindings.map((result, index) => (
-              <div
-                key={result.binding}
-                className={`kbd-lookup-result ${index === selectedIndex ? 'selected' : ''}`}
-                onClick={() => {
-                  closeLookup()
-                  if (result.actions.length > 0) {
-                    executeAction(result.actions[0])
-                  }
-                }}
-                onMouseEnter={() => setSelectedIndex(index)}
-              >
-                <span className="kbd-lookup-binding">{renderKeySeq(result.keySeq)}</span>
-                <span className="kbd-lookup-labels">
-                  {result.labels.join(', ')}
-                </span>
-              </div>
-            ))
-          )}
-        </div>
+        {/* Parameter entry mode */}
+        {pendingParamAction ? (
+          <div className="kbd-lookup-param">
+            <div className="kbd-lookup-param-label">{pendingParamAction.label}</div>
+            <input
+              ref={paramInputRef}
+              type="number"
+              className="kbd-lookup-param-input"
+              value={paramValue}
+              onChange={e => setParamValue(e.target.value)}
+              onKeyDown={handleParamKeyDown}
+              placeholder="Enter number..."
+              autoComplete="off"
+            />
+            <div className="kbd-lookup-param-hint">↵ confirm · Esc cancel</div>
+          </div>
+        ) : (
+          /* Results list */
+          <div className="kbd-lookup-results">
+            {filteredBindings.length === 0 ? (
+              <div className="kbd-lookup-empty">No matching shortcuts</div>
+            ) : (
+              filteredBindings.map((result, index) => (
+                <div
+                  key={result.binding}
+                  className={`kbd-lookup-result ${index === selectedIndex ? 'selected' : ''}`}
+                  onClick={() => attemptExecute(result)}
+                  onMouseEnter={() => setSelectedIndex(index)}
+                >
+                  <span className="kbd-lookup-binding">{renderKeySeq(result.keySeq)}</span>
+                  <span className="kbd-lookup-labels">
+                    {result.labels.join(', ')}
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+        )}
 
         {/* Available next keys hint */}
         {pendingKeys.length > 0 && groupedByNextKey.size > 1 && (
