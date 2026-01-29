@@ -182,6 +182,7 @@ function useActionsRegistry(options = {}) {
     for (const [id, { config }] of actionsRef.current) {
       registry[id] = {
         label: config.label,
+        description: config.description,
         group: config.group,
         keywords: config.keywords,
         hideFromModal: config.hideFromModal,
@@ -1874,6 +1875,7 @@ function useAction(id, config) {
   }, [
     id,
     config.label,
+    config.description,
     config.group,
     // Compare bindings by value
     JSON.stringify(config.defaultBindings),
@@ -2802,6 +2804,56 @@ function useOmnibar(options) {
     cancelParam
   };
 }
+function useParamEntry({
+  onSubmit,
+  onCancel
+}) {
+  const [pendingAction, setPendingAction] = react.useState(null);
+  const [paramValue, setParamValue] = react.useState("");
+  const paramInputRef = react.useRef(null);
+  const startParamEntry = react.useCallback((action) => {
+    setPendingAction(action);
+    setParamValue("");
+    requestAnimationFrame(() => {
+      paramInputRef.current?.focus();
+    });
+  }, []);
+  const submitParam = react.useCallback(() => {
+    if (!pendingAction || !paramValue) return;
+    const num = parseInt(paramValue, 10);
+    if (isNaN(num)) return;
+    onSubmit(pendingAction.id, [num]);
+    setPendingAction(null);
+    setParamValue("");
+  }, [pendingAction, paramValue, onSubmit]);
+  const cancelParam = react.useCallback(() => {
+    setPendingAction(null);
+    setParamValue("");
+    onCancel?.();
+  }, [onCancel]);
+  const handleParamKeyDown = react.useCallback((e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (paramValue) {
+        submitParam();
+      }
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      cancelParam();
+    }
+  }, [paramValue, submitParam, cancelParam]);
+  return {
+    pendingAction,
+    paramValue,
+    setParamValue,
+    paramInputRef,
+    startParamEntry,
+    submitParam,
+    cancelParam,
+    handleParamKeyDown,
+    isEnteringParam: pendingAction !== null
+  };
+}
 var baseStyle = {
   width: "1em",
   height: "1em",
@@ -3401,6 +3453,19 @@ function LookupModal({ defaultBinding = "meta+shift+k" } = {}) {
   const [pendingKeys, setPendingKeys] = react.useState([]);
   const [selectedIndex, setSelectedIndex] = react.useState(0);
   const inputRef = react.useRef(null);
+  const handleParamSubmit = react.useCallback((actionId, captures) => {
+    closeLookup();
+    executeAction(actionId, captures);
+  }, [closeLookup, executeAction]);
+  const handleParamCancel = react.useCallback(() => {
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+    });
+  }, []);
+  const paramEntry = useParamEntry({
+    onSubmit: handleParamSubmit,
+    onCancel: handleParamCancel
+  });
   const allBindings = react.useMemo(() => {
     const results = [];
     const keymap = registry.keymap;
@@ -3469,14 +3534,49 @@ function LookupModal({ defaultBinding = "meta+shift+k" } = {}) {
     }
     return groups;
   }, [filteredBindings, pendingKeys]);
-  const formattedPendingKeys = react.useMemo(() => {
-    if (pendingKeys.length === 0) return "";
-    return formatCombination(pendingKeys).display;
+  const renderedPendingKeys = react.useMemo(() => {
+    if (pendingKeys.length === 0) return null;
+    return pendingKeys.map(
+      (combo, i) => renderSeqElem({ type: "key", key: combo.key, modifiers: combo.modifiers }, i)
+    );
   }, [pendingKeys]);
+  const extractDigitsFromPending = react.useCallback(() => {
+    let digitStr = "";
+    for (const combo of pendingKeys) {
+      if (/^[0-9]$/.test(combo.key) && !combo.modifiers.ctrl && !combo.modifiers.alt && !combo.modifiers.meta) {
+        digitStr += combo.key;
+      } else {
+        break;
+      }
+    }
+    if (digitStr) {
+      const num = parseInt(digitStr, 10);
+      return isNaN(num) ? null : num;
+    }
+    return null;
+  }, [pendingKeys]);
+  const attemptExecute = react.useCallback((result) => {
+    if (result.actions.length === 0) return;
+    const actionId = result.actions[0];
+    const label = result.labels[0];
+    if (hasDigitPlaceholders(result.keySeq)) {
+      const capturedDigit = extractDigitsFromPending();
+      if (capturedDigit !== null) {
+        closeLookup();
+        executeAction(actionId, [capturedDigit]);
+      } else {
+        paramEntry.startParamEntry({ id: actionId, label });
+      }
+    } else {
+      closeLookup();
+      executeAction(actionId);
+    }
+  }, [extractDigitsFromPending, closeLookup, executeAction, paramEntry]);
   react.useEffect(() => {
     if (isLookupOpen) {
       setPendingKeys(lookupInitialKeys);
       setSelectedIndex(0);
+      paramEntry.cancelParam();
       requestAnimationFrame(() => {
         inputRef.current?.focus();
       });
@@ -3527,14 +3627,14 @@ function LookupModal({ defaultBinding = "meta+shift+k" } = {}) {
       if (e.key === "Enter") {
         e.preventDefault();
         const selected = filteredBindings[selectedIndex];
-        if (selected && selected.actions.length > 0) {
-          closeLookup();
-          executeAction(selected.actions[0]);
+        if (selected) {
+          attemptExecute(selected);
         }
         return;
       }
       if (isModifierKey(e.key)) return;
-      if (e.ctrlKey || e.altKey || e.metaKey) {
+      const hasModifier = e.ctrlKey || e.altKey || e.metaKey || e.shiftKey;
+      if (hasModifier) {
         e.preventDefault();
         const newCombo = {
           key: normalizeKey(e.key),
@@ -3550,7 +3650,7 @@ function LookupModal({ defaultBinding = "meta+shift+k" } = {}) {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isLookupOpen, pendingKeys, filteredBindings, selectedIndex, closeLookup, executeAction]);
+  }, [isLookupOpen, pendingKeys, filteredBindings, selectedIndex, closeLookup, attemptExecute]);
   const handleBackdropClick = react.useCallback(() => {
     closeLookup();
   }, [closeLookup]);
@@ -3558,7 +3658,7 @@ function LookupModal({ defaultBinding = "meta+shift+k" } = {}) {
   return /* @__PURE__ */ jsxRuntime.jsx("div", { className: "kbd-lookup-backdrop", onClick: handleBackdropClick, children: /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "kbd-lookup", onClick: (e) => e.stopPropagation(), children: [
     /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "kbd-lookup-header", children: [
       /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "kbd-lookup-search", children: [
-        formattedPendingKeys && /* @__PURE__ */ jsxRuntime.jsx("kbd", { className: "kbd-sequence-keys", children: formattedPendingKeys }),
+        renderedPendingKeys && /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-lookup-pending", children: renderedPendingKeys }),
         /* @__PURE__ */ jsxRuntime.jsx(
           "input",
           {
@@ -3580,24 +3680,38 @@ function LookupModal({ defaultBinding = "meta+shift+k" } = {}) {
         " \xB7 \u232B back"
       ] })
     ] }),
-    /* @__PURE__ */ jsxRuntime.jsx("div", { className: "kbd-lookup-results", children: filteredBindings.length === 0 ? /* @__PURE__ */ jsxRuntime.jsx("div", { className: "kbd-lookup-empty", children: "No matching shortcuts" }) : filteredBindings.map((result, index) => /* @__PURE__ */ jsxRuntime.jsxs(
-      "div",
-      {
-        className: `kbd-lookup-result ${index === selectedIndex ? "selected" : ""}`,
-        onClick: () => {
-          closeLookup();
-          if (result.actions.length > 0) {
-            executeAction(result.actions[0]);
-          }
+    paramEntry.isEnteringParam ? /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "kbd-lookup-param", children: [
+      /* @__PURE__ */ jsxRuntime.jsx("div", { className: "kbd-lookup-param-label", children: paramEntry.pendingAction?.label }),
+      /* @__PURE__ */ jsxRuntime.jsx(
+        "input",
+        {
+          ref: paramEntry.paramInputRef,
+          type: "number",
+          className: "kbd-lookup-param-input",
+          value: paramEntry.paramValue,
+          onChange: (e) => paramEntry.setParamValue(e.target.value),
+          onKeyDown: paramEntry.handleParamKeyDown,
+          placeholder: "Enter number...",
+          autoComplete: "off"
+        }
+      ),
+      /* @__PURE__ */ jsxRuntime.jsx("div", { className: "kbd-lookup-param-hint", children: "\u21B5 confirm \xB7 Esc cancel" })
+    ] }) : (
+      /* Results list */
+      /* @__PURE__ */ jsxRuntime.jsx("div", { className: "kbd-lookup-results", children: filteredBindings.length === 0 ? /* @__PURE__ */ jsxRuntime.jsx("div", { className: "kbd-lookup-empty", children: "No matching shortcuts" }) : filteredBindings.map((result, index) => /* @__PURE__ */ jsxRuntime.jsxs(
+        "div",
+        {
+          className: `kbd-lookup-result ${index === selectedIndex ? "selected" : ""}`,
+          onClick: () => attemptExecute(result),
+          onMouseEnter: () => setSelectedIndex(index),
+          children: [
+            /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-lookup-binding", children: renderKeySeq(result.keySeq) }),
+            /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-lookup-labels", children: result.labels.join(", ") })
+          ]
         },
-        onMouseEnter: () => setSelectedIndex(index),
-        children: [
-          /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-lookup-binding", children: renderKeySeq(result.keySeq) }),
-          /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-lookup-labels", children: result.labels.join(", ") })
-        ]
-      },
-      result.binding
-    )) }),
+        result.binding
+      )) })
+    ),
     pendingKeys.length > 0 && groupedByNextKey.size > 1 && /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "kbd-lookup-continuations", children: [
       /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-lookup-continuations-label", children: "Continue with:" }),
       Array.from(groupedByNextKey.keys()).filter((k) => k !== "").slice(0, 8).map((nextKey) => /* @__PURE__ */ jsxRuntime.jsx("kbd", { className: "kbd-kbd kbd-small", children: nextKey }, nextKey)),
@@ -3768,8 +3882,6 @@ function Omnibar({
   omnibarClassName = "kbd-omnibar"
 }) {
   const inputRef = react.useRef(null);
-  const paramInputRef = react.useRef(null);
-  const [paramValue, setParamValue] = react.useState("");
   const ctx = useMaybeHotkeysContext();
   const actions = actionsProp ?? ctx?.registry.actionRegistry ?? {};
   const keymap = keymapProp ?? ctx?.registry.keymap ?? {};
@@ -3862,42 +3974,23 @@ function Omnibar({
       });
     }
   }, [isOpen]);
+  const handleParamSubmit = react.useCallback((actionId, captures) => {
+    submitParam(captures[0]);
+  }, [submitParam]);
+  const handleParamCancel = react.useCallback(() => {
+    cancelParam();
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }, [cancelParam]);
+  const paramEntry = useParamEntry({
+    onSubmit: handleParamSubmit,
+    onCancel: handleParamCancel
+  });
   react.useEffect(() => {
     if (pendingParamAction) {
-      setParamValue("");
-      requestAnimationFrame(() => {
-        paramInputRef.current?.focus();
-      });
+      const label = results.find((r) => r.id === pendingParamAction)?.action.label ?? pendingParamAction;
+      paramEntry.startParamEntry({ id: pendingParamAction, label });
     }
   }, [pendingParamAction]);
-  const handleParamKeyDown = react.useCallback(
-    (e) => {
-      switch (e.key) {
-        case "Escape":
-          e.preventDefault();
-          cancelParam();
-          requestAnimationFrame(() => inputRef.current?.focus());
-          break;
-        case "Enter":
-          e.preventDefault();
-          if (paramValue) {
-            const num = parseInt(paramValue, 10);
-            if (!isNaN(num)) {
-              submitParam(num);
-            }
-          }
-          break;
-        case "Backspace":
-          if (!paramValue) {
-            e.preventDefault();
-            cancelParam();
-            requestAnimationFrame(() => inputRef.current?.focus());
-          }
-          break;
-      }
-    },
-    [paramValue, cancelParam, submitParam]
-  );
   react.useEffect(() => {
     if (!isOpen) return;
     const container = resultsContainerRef.current;
@@ -3998,24 +4091,23 @@ function Omnibar({
       cancelParam
     }) });
   }
-  const pendingActionLabel = pendingParamAction ? results.find((r) => r.id === pendingParamAction)?.action.label ?? pendingParamAction : null;
   return /* @__PURE__ */ jsxRuntime.jsx("div", { className: backdropClassName, onClick: handleBackdropClick, children: /* @__PURE__ */ jsxRuntime.jsxs("div", { className: omnibarClassName, role: "dialog", "aria-modal": "true", "aria-label": "Command palette", children: [
     /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "kbd-omnibar-header", children: [
       pendingParamAction ? (
         // Parameter entry mode
         /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "kbd-omnibar-param-entry", children: [
-          /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-omnibar-param-label", children: pendingActionLabel }),
+          /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-omnibar-param-label", children: paramEntry.pendingAction?.label ?? results.find((r) => r.id === pendingParamAction)?.action.label ?? pendingParamAction }),
           /* @__PURE__ */ jsxRuntime.jsx(
             "input",
             {
-              ref: paramInputRef,
+              ref: paramEntry.paramInputRef,
               type: "text",
               inputMode: "numeric",
               pattern: "[0-9]*",
               className: "kbd-omnibar-param-input",
-              value: paramValue,
-              onChange: (e) => setParamValue(e.target.value),
-              onKeyDown: handleParamKeyDown,
+              value: paramEntry.paramValue,
+              onChange: (e) => paramEntry.setParamValue(e.target.value),
+              onKeyDown: paramEntry.handleParamKeyDown,
               placeholder: "Enter value...",
               autoComplete: "off",
               autoCorrect: "off",
@@ -4280,7 +4372,7 @@ function organizeShortcuts(keymap, labels, descriptions, groupNames, groupOrder,
     groupMap.get(groupName).shortcuts.push({
       actionId,
       label: labels?.[actionId] ?? actionRegistry?.[actionId]?.label ?? name,
-      description: descriptions?.[actionId],
+      description: descriptions?.[actionId] ?? actionRegistry?.[actionId]?.description,
       bindings
     });
   }
@@ -4296,7 +4388,7 @@ function organizeShortcuts(keymap, labels, descriptions, groupNames, groupOrder,
       groupMap.get(groupName).shortcuts.push({
         actionId,
         label: labels?.[actionId] ?? action.label ?? name,
-        description: descriptions?.[actionId],
+        description: descriptions?.[actionId] ?? action.description,
         bindings: []
         // No bindings
       });
@@ -4958,7 +5050,7 @@ function ShortcutsModal({
       return customRenderer({ group, ...groupRendererProps });
     }
     return group.shortcuts.map(({ actionId, label, description, bindings }) => /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "kbd-action", children: [
-      /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-action-label", title: description, children: label }),
+      description ? /* @__PURE__ */ jsxRuntime.jsx(TooltipComponentProp, { title: description, children: /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-action-label", children: label }) }) : /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-action-label", children: label }),
       renderCell(actionId, bindings)
     ] }, actionId));
   };
@@ -5157,6 +5249,7 @@ exports.useMaybeHotkeysContext = useMaybeHotkeysContext;
 exports.useOmnibar = useOmnibar;
 exports.useOmnibarEndpoint = useOmnibarEndpoint;
 exports.useOmnibarEndpointsRegistry = useOmnibarEndpointsRegistry;
+exports.useParamEntry = useParamEntry;
 exports.useRecordHotkey = useRecordHotkey;
 //# sourceMappingURL=index.cjs.map
 //# sourceMappingURL=index.cjs.map

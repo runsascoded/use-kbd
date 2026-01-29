@@ -1,5 +1,5 @@
 import * as react from 'react';
-import { ReactNode, ComponentType, RefObject, SVGProps, CSSProperties } from 'react';
+import { ReactNode, ComponentType, RefObject, KeyboardEvent as KeyboardEvent$1, SVGProps, CSSProperties } from 'react';
 import * as react_jsx_runtime from 'react/jsx-runtime';
 
 /**
@@ -1269,6 +1269,8 @@ type ActionHandler = (e?: KeyboardEvent, captures?: number[]) => void;
 interface ActionConfig {
     /** Human-readable label for omnibar/modal */
     label: string;
+    /** Longer description (shown in tooltips, omnibar) */
+    description?: string;
     /** Group name for organizing in modal */
     group?: string;
     /** Default key bindings (user can override) */
@@ -1587,6 +1589,64 @@ declare function useOmnibarEndpoint(id: string, config: OmnibarEndpointConfig): 
  */
 declare function useRecordHotkey(options?: RecordHotkeyOptions): RecordHotkeyResult;
 
+interface PendingAction {
+    id: string;
+    label: string;
+}
+interface UseParamEntryOptions {
+    /** Called when parameter is submitted */
+    onSubmit: (actionId: string, captures: number[]) => void;
+    /** Called when parameter entry is cancelled */
+    onCancel?: () => void;
+}
+interface UseParamEntryReturn {
+    /** Currently pending action awaiting parameter, or null */
+    pendingAction: PendingAction | null;
+    /** Current parameter value */
+    paramValue: string;
+    /** Set the parameter value */
+    setParamValue: (value: string) => void;
+    /** Ref for the parameter input element */
+    paramInputRef: React.RefObject<HTMLInputElement>;
+    /** Start parameter entry for an action */
+    startParamEntry: (action: PendingAction) => void;
+    /** Submit the current parameter value */
+    submitParam: () => void;
+    /** Cancel parameter entry */
+    cancelParam: () => void;
+    /** Keyboard handler for the parameter input */
+    handleParamKeyDown: (e: KeyboardEvent$1<HTMLInputElement>) => void;
+    /** Whether currently in parameter entry mode */
+    isEnteringParam: boolean;
+}
+/**
+ * Hook for managing parameter entry state for actions with digit placeholders.
+ *
+ * @example
+ * ```tsx
+ * const paramEntry = useParamEntry({
+ *   onSubmit: (actionId, captures) => executeAction(actionId, captures),
+ *   onCancel: () => inputRef.current?.focus(),
+ * })
+ *
+ * // Start param entry when selecting an action with digit placeholder
+ * if (hasDigitPlaceholder(keySeq)) {
+ *   paramEntry.startParamEntry({ id: 'nav:down-n', label: 'Down N rows' })
+ * }
+ *
+ * // Render param input
+ * {paramEntry.isEnteringParam && (
+ *   <input
+ *     ref={paramEntry.paramInputRef}
+ *     value={paramEntry.paramValue}
+ *     onChange={e => paramEntry.setParamValue(e.target.value)}
+ *     onKeyDown={paramEntry.handleParamKeyDown}
+ *   />
+ * )}
+ * ```
+ */
+declare function useParamEntry({ onSubmit, onCancel, }: UseParamEntryOptions): UseParamEntryReturn;
+
 interface KbdProps {
     /** Action ID to display binding(s) for */
     action: string;
@@ -1858,4 +1918,4 @@ declare const ACTION_MODAL = "__hotkeys:modal";
 declare const ACTION_OMNIBAR = "__hotkeys:omnibar";
 declare const ACTION_LOOKUP = "__hotkeys:lookup";
 
-export { ACTION_LOOKUP, ACTION_MODAL, ACTION_OMNIBAR, type ActionConfig, type ActionDefinition, type ActionHandler, type ActionRegistry, type ActionSearchResult, ActionsRegistryContext, type ActionsRegistryValue, Alt, Backspace, type BindingInfo, type BindingsExport, Command, Ctrl, DEFAULT_SEQUENCE_TIMEOUT, DIGITS_PLACEHOLDER, DIGIT_PLACEHOLDER, Down, type EndpointPagination, type EndpointPaginationInfo, type EndpointPaginationMode, type EndpointQueryResult, type EndpointResponse, Enter, type FuzzyMatchResult, type GroupRenderer, type GroupRendererProps, type HandlerMap, type HotkeyHandler, type HotkeyMap, type HotkeySequence, type HotkeysConfig, type HotkeysContextValue, HotkeysProvider, type HotkeysProviderProps, Kbd, KbdLookup, KbdModal, KbdOmnibar, type KbdProps, Kbds, Key, type KeyCombination, type KeyCombinationDisplay, type KeyConflict, type KeyIconProps, type KeyIconType, type KeySeq, KeybindingEditor, type KeybindingEditorProps, type KeybindingEditorRenderProps, Left, LookupModal, MobileFAB, type MobileFABProps, ModifierIcon, type ModifierIconProps, type ModifierType, type Modifiers, Omnibar, type OmnibarActionEntry, type OmnibarEndpointAsyncConfig, type OmnibarEndpointConfig, type OmnibarEndpointConfigBase, type OmnibarEndpointSyncConfig, OmnibarEndpointsRegistryContext, type OmnibarEndpointsRegistryValue, type OmnibarEntry, type OmnibarEntryBase, type OmnibarLinkEntry, type OmnibarProps, type OmnibarRenderProps, Option, type RecordHotkeyOptions, type RecordHotkeyResult, type RegisteredAction, type RegisteredEndpoint, type RemoteOmnibarResult, Right, SearchIcon, SearchTrigger, type SearchTriggerProps, type SeqElem, type SeqElemState, type SeqMatchState, type SequenceCompletion, SequenceModal, Shift, type ShortcutGroup, ShortcutsModal, type ShortcutsModalProps, type ShortcutsModalRenderProps, type TooltipComponent, type TooltipProps, type TwoColumnConfig, type TwoColumnRow, Up, type UseEditableHotkeysOptions, type UseEditableHotkeysResult, type UseHotkeysOptions, type UseHotkeysResult, type UseOmnibarOptions, type UseOmnibarResult, bindingHasPlaceholders, countPlaceholders, createTwoColumnRenderer, extractCaptures, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, formatKeySeq, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasAnyPlaceholderBindings, hasConflicts, hasDigitPlaceholders, hotkeySequenceToKeySeq, isDigitPlaceholder, isMac, isModifierKey, isPlaceholderSentinel, isSequence, isShiftedSymbol, keySeqToHotkeySequence, normalizeKey, parseHotkeyString, parseKeySeq, parseQueryNumbers, searchActions, useAction, useActions, useActionsRegistry, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useOmnibar, useOmnibarEndpoint, useOmnibarEndpointsRegistry, useRecordHotkey };
+export { ACTION_LOOKUP, ACTION_MODAL, ACTION_OMNIBAR, type ActionConfig, type ActionDefinition, type ActionHandler, type ActionRegistry, type ActionSearchResult, ActionsRegistryContext, type ActionsRegistryValue, Alt, Backspace, type BindingInfo, type BindingsExport, Command, Ctrl, DEFAULT_SEQUENCE_TIMEOUT, DIGITS_PLACEHOLDER, DIGIT_PLACEHOLDER, Down, type EndpointPagination, type EndpointPaginationInfo, type EndpointPaginationMode, type EndpointQueryResult, type EndpointResponse, Enter, type FuzzyMatchResult, type GroupRenderer, type GroupRendererProps, type HandlerMap, type HotkeyHandler, type HotkeyMap, type HotkeySequence, type HotkeysConfig, type HotkeysContextValue, HotkeysProvider, type HotkeysProviderProps, Kbd, KbdLookup, KbdModal, KbdOmnibar, type KbdProps, Kbds, Key, type KeyCombination, type KeyCombinationDisplay, type KeyConflict, type KeyIconProps, type KeyIconType, type KeySeq, KeybindingEditor, type KeybindingEditorProps, type KeybindingEditorRenderProps, Left, LookupModal, MobileFAB, type MobileFABProps, ModifierIcon, type ModifierIconProps, type ModifierType, type Modifiers, Omnibar, type OmnibarActionEntry, type OmnibarEndpointAsyncConfig, type OmnibarEndpointConfig, type OmnibarEndpointConfigBase, type OmnibarEndpointSyncConfig, OmnibarEndpointsRegistryContext, type OmnibarEndpointsRegistryValue, type OmnibarEntry, type OmnibarEntryBase, type OmnibarLinkEntry, type OmnibarProps, type OmnibarRenderProps, Option, type PendingAction, type RecordHotkeyOptions, type RecordHotkeyResult, type RegisteredAction, type RegisteredEndpoint, type RemoteOmnibarResult, Right, SearchIcon, SearchTrigger, type SearchTriggerProps, type SeqElem, type SeqElemState, type SeqMatchState, type SequenceCompletion, SequenceModal, Shift, type ShortcutGroup, ShortcutsModal, type ShortcutsModalProps, type ShortcutsModalRenderProps, type TooltipComponent, type TooltipProps, type TwoColumnConfig, type TwoColumnRow, Up, type UseEditableHotkeysOptions, type UseEditableHotkeysResult, type UseHotkeysOptions, type UseHotkeysResult, type UseOmnibarOptions, type UseOmnibarResult, type UseParamEntryOptions, type UseParamEntryReturn, bindingHasPlaceholders, countPlaceholders, createTwoColumnRenderer, extractCaptures, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, formatKeySeq, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasAnyPlaceholderBindings, hasConflicts, hasDigitPlaceholders, hotkeySequenceToKeySeq, isDigitPlaceholder, isMac, isModifierKey, isPlaceholderSentinel, isSequence, isShiftedSymbol, keySeqToHotkeySequence, normalizeKey, parseHotkeyString, parseKeySeq, parseQueryNumbers, searchActions, useAction, useActions, useActionsRegistry, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useOmnibar, useOmnibarEndpoint, useOmnibarEndpointsRegistry, useParamEntry, useRecordHotkey };

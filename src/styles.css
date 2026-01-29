@@ -525,9 +525,9 @@
 .kbd-omnibar-input {
   flex: 1;
   min-width: 0;
-  padding: 12px var(--kbd-padding);
+  padding: 16px var(--kbd-padding);
   border: none;
-  font-size: 1rem;
+  font-size: 1.125rem;
   background-color: var(--kbd-bg);
   color: var(--kbd-text);
   outline: none;
@@ -883,6 +883,12 @@
   position: relative;
 }
 
+.kbd-lookup-pending {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
 .kbd-lookup-input {
   flex: 1;
   min-width: 20px;
@@ -967,6 +973,41 @@
 }
 
 .kbd-lookup-continuations-label {
+  font-size: 0.75rem;
+  color: var(--kbd-text-secondary);
+}
+
+.kbd-lookup-param {
+  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.kbd-lookup-param-label {
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--kbd-text);
+}
+
+.kbd-lookup-param-input {
+  width: 120px;
+  padding: 8px 12px;
+  font-size: 1.25rem;
+  text-align: center;
+  background: var(--kbd-bg-secondary);
+  border: 2px solid var(--kbd-primary);
+  border-radius: 6px;
+  color: var(--kbd-text);
+  outline: none;
+}
+
+.kbd-lookup-param-input:focus {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--kbd-primary) 25%, transparent);
+}
+
+.kbd-lookup-param-hint {
   font-size: 0.75rem;
   color: var(--kbd-text-secondary);
 }
