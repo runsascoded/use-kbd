@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ACTION_LOOKUP } from './constants'
 import { useHotkeysContext } from './HotkeysProvider'
-import { renderKeySeq } from './KeyElements'
+import { renderKeySeq, renderSeqElem } from './KeyElements'
 import { useAction } from './useAction'
 import type { HotkeySequence, KeyCombination, KeySeq } from './types'
 import { formatCombination, formatKeySeq, parseHotkeyString, parseKeySeq, normalizeKey, isModifierKey } from './utils'
@@ -166,10 +166,12 @@ export function LookupModal({ defaultBinding = 'meta+shift+k' }: LookupModalProp
     return groups
   }, [filteredBindings, pendingKeys])
 
-  // Format pending keys for display
-  const formattedPendingKeys = useMemo(() => {
-    if (pendingKeys.length === 0) return ''
-    return formatCombination(pendingKeys).display
+  // Render pending keys with nice icons (same style as results)
+  const renderedPendingKeys = useMemo(() => {
+    if (pendingKeys.length === 0) return null
+    return pendingKeys.map((combo, i) =>
+      renderSeqElem({ type: 'key', key: combo.key, modifiers: combo.modifiers }, i)
+    )
   }, [pendingKeys])
 
   // Reset state when modal opens/closes, using initial keys if provided
@@ -292,8 +294,8 @@ export function LookupModal({ defaultBinding = 'meta+shift+k' }: LookupModalProp
         {/* Search/filter display */}
         <div className="kbd-lookup-header">
           <div className="kbd-lookup-search">
-            {formattedPendingKeys && (
-              <kbd className="kbd-sequence-keys">{formattedPendingKeys}</kbd>
+            {renderedPendingKeys && (
+              <span className="kbd-lookup-pending">{renderedPendingKeys}</span>
             )}
             <input
               ref={inputRef}

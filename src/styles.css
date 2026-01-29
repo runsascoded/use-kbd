@@ -883,6 +883,12 @@
   position: relative;
 }
 
+.kbd-lookup-pending {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
 .kbd-lookup-input {
   flex: 1;
   min-width: 20px;
