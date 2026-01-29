@@ -1,9 +1,10 @@
-import { Fragment, KeyboardEvent, MouseEvent, ReactNode, RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, KeyboardEvent, MouseEvent, ReactNode, RefObject, useCallback, useEffect, useMemo, useRef } from 'react'
 import { ACTION_OMNIBAR } from './constants'
 import { useMaybeHotkeysContext } from './HotkeysProvider'
 import { ModifierIcon } from './ModifierIcons'
 import { useAction } from './useAction'
 import { useOmnibar, RemoteOmnibarResult, EndpointPaginationInfo } from './useOmnibar'
+import { useParamEntry } from './useParamEntry'
 import { parseKeySeq, formatKeyForDisplay } from './utils'
 import type { SeqElem, OmnibarEntry } from './types'
 import type { ActionRegistry, ActionSearchResult, HotkeySequence, SequenceCompletion } from './types'
@@ -189,8 +190,6 @@ export function Omnibar({
   omnibarClassName = 'kbd-omnibar',
 }: OmnibarProps) {
   const inputRef = useRef<HTMLInputElement | null>(null)
-  const paramInputRef = useRef<HTMLInputElement | null>(null)
-  const [paramValue, setParamValue] = useState('')
 
   // Try to get context (returns null if not within HotkeysProvider)
   const ctx = useMaybeHotkeysContext()
@@ -312,46 +311,29 @@ export function Omnibar({
     }
   }, [isOpen])
 
-  // Focus parameter input when entering param mode
+  // Parameter entry for actions with digit placeholders
+  const handleParamSubmit = useCallback((actionId: string, captures: number[]) => {
+    submitParam(captures[0])
+  }, [submitParam])
+
+  const handleParamCancel = useCallback(() => {
+    cancelParam()
+    requestAnimationFrame(() => inputRef.current?.focus())
+  }, [cancelParam])
+
+  const paramEntry = useParamEntry({
+    onSubmit: handleParamSubmit,
+    onCancel: handleParamCancel,
+  })
+
+  // Start param entry when useOmnibar sets pendingParamAction
   useEffect(() => {
     if (pendingParamAction) {
-      setParamValue('')
-      requestAnimationFrame(() => {
-        paramInputRef.current?.focus()
-      })
+      const label = results.find(r => r.id === pendingParamAction)?.action.label ?? pendingParamAction
+      paramEntry.startParamEntry({ id: pendingParamAction, label })
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingParamAction])
-
-  // Handle parameter input keydown
-  const handleParamKeyDown = useCallback(
-    (e: KeyboardEvent) => {
-      switch (e.key) {
-        case 'Escape':
-          e.preventDefault()
-          cancelParam()
-          // Return focus to main input
-          requestAnimationFrame(() => inputRef.current?.focus())
-          break
-        case 'Enter':
-          e.preventDefault()
-          if (paramValue) {
-            const num = parseInt(paramValue, 10)
-            if (!isNaN(num)) {
-              submitParam(num)
-            }
-          }
-          break
-        case 'Backspace':
-          if (!paramValue) {
-            e.preventDefault()
-            cancelParam()
-            requestAnimationFrame(() => inputRef.current?.focus())
-          }
-          break
-      }
-    },
-    [paramValue, cancelParam, submitParam],
-  )
 
   // IntersectionObserver for scroll-based pagination
   useEffect(() => {
@@ -481,11 +463,6 @@ export function Omnibar({
     )
   }
 
-  // Get pending action label for parameter input
-  const pendingActionLabel = pendingParamAction
-    ? results.find(r => r.id === pendingParamAction)?.action.label ?? pendingParamAction
-    : null
-
   // Default render
   return (
     <div className={backdropClassName} onClick={handleBackdropClick}>
@@ -494,16 +471,18 @@ export function Omnibar({
           {pendingParamAction ? (
             // Parameter entry mode
             <div className="kbd-omnibar-param-entry">
-              <span className="kbd-omnibar-param-label">{pendingActionLabel}</span>
+              <span className="kbd-omnibar-param-label">
+                {paramEntry.pendingAction?.label ?? results.find(r => r.id === pendingParamAction)?.action.label ?? pendingParamAction}
+              </span>
               <input
-                ref={paramInputRef}
+                ref={paramEntry.paramInputRef}
                 type="text"
                 inputMode="numeric"
                 pattern="[0-9]*"
                 className="kbd-omnibar-param-input"
-                value={paramValue}
-                onChange={(e) => setParamValue(e.target.value)}
-                onKeyDown={handleParamKeyDown}
+                value={paramEntry.paramValue}
+                onChange={(e) => paramEntry.setParamValue(e.target.value)}
+                onKeyDown={paramEntry.handleParamKeyDown}
                 placeholder="Enter value..."
                 autoComplete="off"
                 autoCorrect="off"
