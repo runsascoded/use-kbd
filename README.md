@@ -68,6 +68,7 @@ Register any function with `useAction`:
 ```tsx
 useAction('view:toggle-sidebar', {
   label: 'Toggle sidebar',
+  description: 'Show or hide the sidebar panel',  // Tooltip in ShortcutsModal
   group: 'View',
   defaultBindings: ['meta+b', 'meta+\\'],
   keywords: ['panel', 'navigation'],
@@ -112,6 +113,23 @@ useAction('nav:top', {
 ```
 
 The `SequenceModal` shows available completions while typing a sequence.
+
+### Digit Placeholders
+
+Bindings can include digit placeholders for numeric arguments. Use `\d+` for one or more digits:
+
+```tsx
+useAction('nav:down-n', {
+  label: 'Down N rows',
+  defaultBindings: ['\\d+ j'],  // e.g., "5 j" moves down 5 rows
+  handler: (e, captures) => {
+    const n = captures?.[0] ?? 1
+    moveDown(n)
+  },
+})
+```
+
+When a user selects a placeholder action from the Omnibar or LookupModal without providing a number, a parameter entry prompt appears to collect the value.
 
 ### Key Aliases
 
@@ -222,7 +240,7 @@ Command palette for searching and executing actions:
 
 ### `<LookupModal>`
 
-Browse and filter shortcuts by typing key sequences. Press `⌘⇧K` (default) to open.
+Browse and filter shortcuts by typing key sequences. Press `⌘⇧K` (default) to open. Supports parameter entry for actions with [digit placeholders](#digit-placeholders)—type digits before selecting an action to use them as the value.
 
 ```tsx
 <LookupModal defaultBinding="meta+shift+k" />
@@ -385,6 +403,23 @@ Capture key combinations from user input:
 const { isRecording, startRecording, display } = useRecordHotkey({
   onCapture: (sequence, display) => saveBinding(display.id),
 })
+```
+
+### `useParamEntry(options)`
+
+Manage parameter entry state for actions with [digit placeholders](#digit-placeholders). Used internally by `Omnibar` and `LookupModal`; useful for custom UIs:
+
+```tsx
+const paramEntry = useParamEntry({
+  onSubmit: (actionId, captures) => executeAction(actionId, captures),
+  onCancel: () => inputRef.current?.focus(),
+})
+
+// Start entry when user selects an action with placeholders
+paramEntry.startParamEntry({ id: 'nav:down-n', label: 'Down N rows' })
+
+// Render: paramEntry.isEnteringParam, paramEntry.paramInputRef,
+//         paramEntry.paramValue, paramEntry.handleParamKeyDown
 ```
 
 ### `useEditableHotkeys(defaults, handlers, options?)`
