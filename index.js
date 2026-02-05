@@ -1665,14 +1665,16 @@ function HotkeysProvider({
   const activeModal = isModalOpen ? "shortcuts" : isOmnibarOpen ? "omnibar" : isLookupOpen ? "lookup" : null;
   const closedByPopstateRef = useRef(false);
   const prevActiveModalRef = useRef(null);
+  const isTouchDevice = typeof window !== "undefined" && window.matchMedia("(hover: none)").matches;
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || !isTouchDevice) return;
     const stateKey = "kbdActiveModal";
     const prevModal = prevActiveModalRef.current;
     prevActiveModalRef.current = activeModal;
     if (!activeModal) {
       if (prevModal && !closedByPopstateRef.current && window.history.state?.[stateKey]) {
-        window.history.back();
+        const { [stateKey]: _, ...cleanState } = window.history.state;
+        window.history.replaceState(cleanState, "");
       }
       closedByPopstateRef.current = false;
       return;
