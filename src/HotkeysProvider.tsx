@@ -228,27 +228,34 @@ export function HotkeysProvider({
   // Track the previous activeModal to detect transitions
   const prevActiveModalRef = useRef<ActiveModal>(null)
 
+  // Only manage history state on touch/mobile devices where swipe-back
+  // is the natural gesture for dismissing modals. On desktop, users use
+  // Escape and don't expect back button to close modals.
+  const isTouchDevice = typeof window !== 'undefined' && window.matchMedia('(hover: none)').matches
+
   useEffect(() => {
-    if (typeof window === 'undefined') return
+    if (typeof window === 'undefined' || !isTouchDevice) return
 
     const stateKey = 'kbdActiveModal'
     const prevModal = prevActiveModalRef.current
     prevActiveModalRef.current = activeModal
 
     if (!activeModal) {
-      // No modal open
-      // If we had a modal open before and it wasn't closed via back button, clean up history
+      // Modal closed programmatically (not via back button/swipe).
+      // Remove our modal marker from the current state.
+      // This leaves one extra history entry, but preserves the URL
+      // and scroll position. Swipe-back still works naturally.
       if (prevModal && !closedByPopstateRef.current && window.history.state?.[stateKey]) {
-        window.history.back()
+        const { [stateKey]: _, ...cleanState } = window.history.state
+        window.history.replaceState(cleanState, '')
       }
       closedByPopstateRef.current = false
       return
     }
 
-    // A modal is open - manage history state
+    // A modal is open - push history state so swipe-back can close it
     const currentState = window.history.state
     if (!currentState?.[stateKey]) {
-      // No modal state in history - push new state
       window.history.pushState({ ...currentState, [stateKey]: activeModal }, '')
     } else if (currentState[stateKey] !== activeModal) {
       // Switching between modals - replace state (no push/pop needed)
@@ -261,7 +268,7 @@ export function HotkeysProvider({
         return
       }
 
-      // User pressed back button - close the active modal
+      // User swiped back / pressed back button - close the active modal
       closedByPopstateRef.current = true
 
       // Blur any focused element
