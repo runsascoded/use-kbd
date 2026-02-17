@@ -133,8 +133,17 @@ export function LookupModal({ defaultBinding = 'meta+shift+k' }: LookupModalProp
         const pending = pendingKeys[i]
         const elem = keySeq[keySeqIdx]
         const isDigit = /^[0-9]$/.test(pending.key)
+        const isFloatCh = /^[0-9.]$/.test(pending.key)
 
-        if (elem.type === 'digits') {
+        if (elem.type === 'float') {
+          // \f matches digits and dots
+          if (!isFloatCh) return false
+          // Check if next pending key is also a float char (still accumulating)
+          if (i + 1 < pendingKeys.length && /^[0-9.]$/.test(pendingKeys[i + 1].key)) {
+            continue // Stay on this keySeq element
+          }
+          keySeqIdx++
+        } else if (elem.type === 'digits') {
           // \d+ matches one or more digits
           if (!isDigit) return false
           // Check if next pending key is also a digit (still accumulating)
@@ -382,7 +391,8 @@ export function LookupModal({ defaultBinding = 'meta+shift+k' }: LookupModalProp
             <div className="kbd-lookup-param-label">{paramEntry.pendingAction?.label}</div>
             <input
               ref={paramEntry.paramInputRef}
-              type="number"
+              type="text"
+              inputMode="decimal"
               className="kbd-lookup-param-input"
               value={paramEntry.paramValue}
               onChange={e => paramEntry.setParamValue(e.target.value)}

@@ -39,6 +39,7 @@ export type SeqElem =
   | { type: 'key'; key: string; modifiers: Modifiers }
   | { type: 'digit' }
   | { type: 'digits' }
+  | { type: 'float' }
 
 /**
  * A key sequence pattern (array of sequence elements)
@@ -55,6 +56,7 @@ export type SeqElemState =
   | { type: 'key'; key: string; modifiers: Modifiers; matched?: true }
   | { type: 'digit'; value?: number }
   | { type: 'digits'; value?: number; partial?: string }
+  | { type: 'float'; value?: number; partial?: string }
 
 /**
  * Sequence match state - tracks progress through a sequence with captures
@@ -66,8 +68,8 @@ export type SeqMatchState = SeqElemState[]
  */
 export function extractCaptures(state: SeqMatchState): number[] {
   return state
-    .filter((e): e is { type: 'digit'; value: number } | { type: 'digits'; value: number } =>
-      (e.type === 'digit' || e.type === 'digits') && e.value !== undefined
+    .filter((e): e is { type: 'digit'; value: number } | { type: 'digits'; value: number } | { type: 'float'; value: number } =>
+      (e.type === 'digit' || e.type === 'digits' || e.type === 'float') && e.value !== undefined
     )
     .map(e => e.value)
 }
@@ -75,8 +77,8 @@ export function extractCaptures(state: SeqMatchState): number[] {
 /**
  * Check if a SeqElem is a digit placeholder
  */
-export function isDigitPlaceholder(elem: SeqElem): elem is { type: 'digit' } | { type: 'digits' } {
-  return elem.type === 'digit' || elem.type === 'digits'
+export function isDigitPlaceholder(elem: SeqElem): elem is { type: 'digit' } | { type: 'digits' } | { type: 'float' } {
+  return elem.type === 'digit' || elem.type === 'digits' || elem.type === 'float'
 }
 
 /**

@@ -78,7 +78,7 @@ export function useParamEntry({
 
   const submitParam = useCallback(() => {
     if (!pendingAction || !paramValue) return
-    const num = parseInt(paramValue, 10)
+    const num = parseFloat(paramValue)
     if (isNaN(num)) return
 
     onSubmit(pendingAction.id, [num])

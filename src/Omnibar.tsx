@@ -109,6 +109,9 @@ function SeqElemBadge({ elem }: { elem: SeqElem }) {
   if (elem.type === 'digits') {
     return <span className="kbd-placeholder" title="One or more digits (0-9)">##</span>
   }
+  if (elem.type === 'float') {
+    return <span className="kbd-placeholder" title="A number (integer or decimal)">#.#</span>
+  }
   // Regular key with modifiers
   return (
     <>
@@ -477,8 +480,8 @@ export function Omnibar({
               <input
                 ref={paramEntry.paramInputRef}
                 type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
+                inputMode="decimal"
+                pattern="[0-9.]*"
                 className="kbd-omnibar-param-input"
                 value={paramEntry.paramValue}
                 onChange={(e) => paramEntry.setParamValue(e.target.value)}

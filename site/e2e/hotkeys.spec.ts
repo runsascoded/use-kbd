@@ -351,8 +351,8 @@ test.describe('Data Table Demo', () => {
     await page.keyboard.press('x')
     await page.waitForTimeout(1200)
 
-    // Should show new key
-    await expect(page.locator('.kbd-kbd', { hasText: 'X' })).toBeVisible()
+    // Should show new key (use .first() to avoid matching the '\f x' binding which also contains 'X')
+    await expect(page.locator('.kbd-kbd', { hasText: 'X' }).first()).toBeVisible()
   })
 
   test('shortcuts disabled while editing binding', async ({ page }) => {
@@ -817,6 +817,305 @@ test.describe('Data Table Demo', () => {
   })
 })
 
+test.describe('Float Placeholder', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.removeItem('use-kbd-demo')
+      localStorage.removeItem('use-kbd-demo-removed')
+    })
+    await page.goto('/table')
+  })
+
+  test('key+float sequence: o then float then Enter executes scale', async ({ page }) => {
+    // Select first row and note its value
+    const rows = page.locator('.data-table tbody tr')
+    await rows.first().click()
+    await expect(rows.first()).toHaveClass(/selected/)
+
+    const valueCell = page.locator('.data-table tbody tr:first-child td:nth-child(3)')
+    const originalValue = parseInt(await valueCell.textContent() ?? '0', 10)
+
+    // Type "o 2 Enter" to scale by 2 (integer, simpler case)
+    await page.keyboard.press('o')
+    await page.waitForTimeout(50)
+    await page.keyboard.press('2')
+    await page.waitForTimeout(50)
+
+    // SequenceModal should be visible with the partial sequence
+    const seqModal = page.locator('.kbd-sequence')
+    await expect(seqModal).toBeVisible()
+
+    // Press Enter to finalize and execute
+    await page.keyboard.press('Enter')
+    await page.waitForTimeout(200)
+
+    // Value should be doubled
+    const newValue = parseInt(await valueCell.textContent() ?? '0', 10)
+    expect(newValue).toBe(Math.round(originalValue * 2))
+  })
+
+  test('key+float sequence: o then decimal then Enter executes scale', async ({ page }) => {
+    // Select first row and note its value
+    const rows = page.locator('.data-table tbody tr')
+    await rows.first().click()
+    await expect(rows.first()).toHaveClass(/selected/)
+
+    const valueCell = page.locator('.data-table tbody tr:first-child td:nth-child(3)')
+    const originalValue = parseInt(await valueCell.textContent() ?? '0', 10)
+
+    // Type "o 0 . 5 Enter" to scale by 0.5
+    await page.keyboard.press('o')
+    await page.waitForTimeout(50)
+    await page.keyboard.press('0')
+    await page.waitForTimeout(50)
+    await page.keyboard.press('.')
+    await page.waitForTimeout(50)
+    await page.keyboard.press('5')
+    await page.waitForTimeout(50)
+
+    // SequenceModal should show the sequence
+    const seqModal = page.locator('.kbd-sequence')
+    await expect(seqModal).toBeVisible()
+
+    // Press Enter to finalize and execute
+    await page.keyboard.press('Enter')
+    await page.waitForTimeout(200)
+
+    // Value should be halved
+    const newValue = parseInt(await valueCell.textContent() ?? '0', 10)
+    expect(newValue).toBe(Math.round(originalValue * 0.5))
+  })
+
+  test('float-first sequence: decimal then x sets value', async ({ page }) => {
+    // Select first row
+    const rows = page.locator('.data-table tbody tr')
+    await rows.first().click()
+    await expect(rows.first()).toHaveClass(/selected/)
+
+    // Type "99.5 x" to set value to 100 (rounded)
+    await page.keyboard.press('9')
+    await page.waitForTimeout(50)
+    await page.keyboard.press('9')
+    await page.waitForTimeout(50)
+    await page.keyboard.press('.')
+    await page.waitForTimeout(50)
+    await page.keyboard.press('5')
+    await page.waitForTimeout(50)
+
+    // SequenceModal should be visible
+    const seqModal = page.locator('.kbd-sequence')
+    await expect(seqModal).toBeVisible()
+
+    // Press x to finalize float and complete the sequence
+    await page.keyboard.press('x')
+    await page.waitForTimeout(200)
+
+    // Sequence modal should close (sequence completed)
+    await expect(seqModal).not.toBeVisible()
+
+    // Value should now be 100 (Math.round(99.5))
+    const valueCell = page.locator('.data-table tbody tr:first-child td:nth-child(3)')
+    expect(await valueCell.textContent()).toBe('100')
+  })
+
+  test('float-first sequence: integer then x also works', async ({ page }) => {
+    // Select first row
+    const rows = page.locator('.data-table tbody tr')
+    await rows.first().click()
+    await expect(rows.first()).toHaveClass(/selected/)
+
+    // Type "42 x" (integer, no dot)
+    await page.keyboard.press('4')
+    await page.waitForTimeout(50)
+    await page.keyboard.press('2')
+    await page.waitForTimeout(50)
+    await page.keyboard.press('x')
+    await page.waitForTimeout(200)
+
+    const valueCell = page.locator('.data-table tbody tr:first-child td:nth-child(3)')
+    expect(await valueCell.textContent()).toBe('42')
+  })
+
+  test('SequenceModal shows float placeholder completions', async ({ page }) => {
+    // Type 'o' to start the "o \f" sequence
+    await page.keyboard.press('o')
+    await page.waitForTimeout(50)
+
+    const seqModal = page.locator('.kbd-sequence')
+    await expect(seqModal).toBeVisible()
+
+    // Should show completions including "Scale values by N"
+    await expect(seqModal.locator('.kbd-sequence-actions', { hasText: 'Scale values by N' })).toBeVisible()
+
+    await page.keyboard.press('Escape')
+  })
+
+  test('LookupModal shows float placeholder bindings', async ({ page }) => {
+    // Open lookup modal
+    await page.keyboard.press('Meta+Shift+k')
+    await page.waitForSelector('.kbd-lookup', { timeout: 5000 })
+
+    // Should show bindings that include float placeholders
+    // Look for the ⟨#.#⟩ display in the results
+    await expect(page.locator('.kbd-lookup-result .kbd-kbd', { hasText: '⟨#.#⟩' }).first()).toBeVisible()
+
+    // Type 'o' to filter to the o \f binding
+    await page.keyboard.press('o')
+    await page.waitForTimeout(100)
+
+    // Should show "Scale values by N" in filtered results
+    await expect(page.locator('.kbd-lookup-labels', { hasText: 'Scale values by N' })).toBeVisible()
+
+    await page.keyboard.press('Escape')
+    await page.keyboard.press('Escape')
+  })
+
+  test('LookupModal filters float bindings when typing dot', async ({ page }) => {
+    // Open lookup modal
+    await page.keyboard.press('Meta+Shift+k')
+    await page.waitForSelector('.kbd-lookup', { timeout: 5000 })
+
+    // Type a digit then dot to filter to float-only patterns
+    await page.keyboard.press('1')
+    await page.waitForTimeout(50)
+    await page.keyboard.press('.')
+    await page.waitForTimeout(100)
+
+    // \d+ patterns should be filtered out (dot is not a digit)
+    // Only \f patterns should remain
+    const results = page.locator('.kbd-lookup-result')
+    const count = await results.count()
+    expect(count).toBeGreaterThan(0)
+
+    // All remaining results should have float placeholders
+    for (let i = 0; i < count; i++) {
+      const binding = results.nth(i).locator('.kbd-lookup-binding')
+      await expect(binding.locator('.kbd-kbd', { hasText: '⟨#.#⟩' })).toBeVisible()
+    }
+
+    await page.keyboard.press('Escape')
+    await page.keyboard.press('Escape')
+  })
+
+  test('omnibar param entry accepts decimal values for float actions', async ({ page }) => {
+    // Select first row
+    const rows = page.locator('.data-table tbody tr')
+    await rows.first().click()
+    await expect(rows.first()).toHaveClass(/selected/)
+
+    const valueCell = page.locator('.data-table tbody tr:first-child td:nth-child(3)')
+    const originalValue = parseInt(await valueCell.textContent() ?? '0', 10)
+
+    // Open omnibar and search for "scale"
+    await page.keyboard.press('Meta+k')
+    await page.waitForSelector('.kbd-omnibar', { timeout: 5000 })
+
+    await page.keyboard.type('scale')
+    await page.waitForTimeout(200)
+
+    // Click on "Scale values by N" to trigger param entry
+    const scaleResult = page.locator('.kbd-omnibar-result-label', { hasText: 'Scale values by N' })
+    await expect(scaleResult).toBeVisible()
+    await scaleResult.click()
+    await page.waitForTimeout(100)
+
+    // Should show parameter entry
+    await expect(page.locator('.kbd-omnibar-param-entry')).toBeVisible()
+
+    // Enter a decimal value
+    await page.keyboard.type('1.5')
+    await page.keyboard.press('Enter')
+    await page.waitForTimeout(200)
+
+    // Value should be scaled by 1.5
+    const newValue = parseInt(await valueCell.textContent() ?? '0', 10)
+    expect(newValue).toBe(Math.round(originalValue * 1.5))
+  })
+
+  test('omnibar number-aware search works with float query', async ({ page }) => {
+    // Select first row
+    const rows = page.locator('.data-table tbody tr')
+    await rows.first().click()
+    await expect(rows.first()).toHaveClass(/selected/)
+
+    const valueCell = page.locator('.data-table tbody tr:first-child td:nth-child(3)')
+    const originalValue = parseInt(await valueCell.textContent() ?? '0', 10)
+
+    // Open omnibar and search "scale 2.5"
+    await page.keyboard.press('Meta+k')
+    await page.waitForSelector('.kbd-omnibar', { timeout: 5000 })
+
+    await page.keyboard.type('scale 2.5')
+    await page.waitForTimeout(200)
+
+    // Should show "Scale values by N" as top result
+    const firstResult = page.locator('.kbd-omnibar-result-label').first()
+    await expect(firstResult).toHaveText('Scale values by N')
+
+    // Execute it (number 2.5 captured from query)
+    await page.keyboard.press('Enter')
+    await page.waitForTimeout(200)
+
+    // Value should be scaled by 2.5
+    const newValue = parseInt(await valueCell.textContent() ?? '0', 10)
+    expect(newValue).toBe(Math.round(originalValue * 2.5))
+  })
+
+  test('backspace during float sequence edits instead of executing', async ({ page }) => {
+    // Type "o 1 . 5" to start an o \f sequence
+    await page.keyboard.press('o')
+    await page.waitForTimeout(50)
+    await page.keyboard.press('1')
+    await page.waitForTimeout(50)
+    await page.keyboard.press('.')
+    await page.waitForTimeout(50)
+    await page.keyboard.press('5')
+    await page.waitForTimeout(50)
+
+    const seqModal = page.locator('.kbd-sequence')
+    await expect(seqModal).toBeVisible()
+    const seqKeys = page.locator('.kbd-sequence-keys')
+    await expect(seqKeys).toContainText('5')
+
+    // Backspace should remove the '5', not execute
+    await page.keyboard.press('Backspace')
+    await page.waitForTimeout(100)
+
+    // Modal should still be open
+    await expect(seqModal).toBeVisible()
+
+    // The '5' should be gone from the sequence display
+    const keysText = await seqKeys.textContent()
+    // Should still have 'O', '1', '.' but not '5'
+    expect(keysText).toContain('O')
+    expect(keysText).toContain('1')
+
+    await page.keyboard.press('Escape')
+  })
+
+  test('shortcuts modal shows float placeholder in bindings', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    await page.keyboard.press('?')
+    await page.waitForSelector('.kbd-modal', { timeout: 5000 })
+
+    // Find the "Scale values by N" action row
+    const scaleAction = page.locator('.kbd-action', { hasText: 'Scale values by N' })
+    await expect(scaleAction).toBeVisible()
+
+    // Its binding should contain a #.# placeholder
+    const floatPlaceholder = scaleAction.locator('.kbd-placeholder', { hasText: '#.#' })
+    await expect(floatPlaceholder).toBeVisible()
+
+    // Also check the float-first binding "Set values to N"
+    const setAction = page.locator('.kbd-action', { hasText: 'Set values to N' })
+    await expect(setAction).toBeVisible()
+    await expect(setAction.locator('.kbd-placeholder', { hasText: '#.#' })).toBeVisible()
+
+    await page.keyboard.press('Escape')
+  })
+})
+
 test.describe('Canvas Demo', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
@@ -1011,8 +1310,8 @@ test.describe('Export/Import Bindings', () => {
     // Verify editing is complete
     await expect(page.locator('.kbd-kbd.editing')).not.toBeVisible()
 
-    // Verify binding changed
-    await expect(page.locator('.kbd-kbd', { hasText: 'X' })).toBeVisible()
+    // Verify binding changed (use .first() to avoid matching the '\f x' binding which also contains 'X')
+    await expect(page.locator('.kbd-kbd', { hasText: 'X' }).first()).toBeVisible()
 
     // Step 2: Export the bindings
     const downloadPromise = page.waitForEvent('download')

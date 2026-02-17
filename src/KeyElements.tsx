@@ -46,6 +46,9 @@ export function renderSeqElem(elem: SeqElem, index: number, kbdClassName = 'kbd-
   if (elem.type === 'digits') {
     return <kbd key={index} className={kbdClassName}>⟨##⟩</kbd>
   }
+  if (elem.type === 'float') {
+    return <kbd key={index} className={kbdClassName}>⟨#.#⟩</kbd>
+  }
   // It's a key with modifiers
   return (
     <kbd key={index} className={kbdClassName}>

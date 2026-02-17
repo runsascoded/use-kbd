@@ -131,12 +131,20 @@ function isDigit(key: string): boolean {
 }
 
 /**
+ * Check if a key is a float character (digit or dot)
+ */
+function isFloatChar(key: string): boolean {
+  return /^[0-9.]$/.test(key)
+}
+
+/**
  * Initialize match state from a KeySeq pattern
  */
 function initMatchState(seq: KeySeq): SeqMatchState {
   return seq.map((elem): SeqElemState => {
     if (elem.type === 'digit') return { type: 'digit' }
     if (elem.type === 'digits') return { type: 'digits' }
+    if (elem.type === 'float') return { type: 'float' }
     return { type: 'key', key: elem.key, modifiers: elem.modifiers }
   })
 }
@@ -209,6 +217,46 @@ function advanceMatchState(
         break
       }
     }
+    if (elem.type === 'float' && elem.value === undefined) {
+      // float can still be in-progress (partial)
+      if (!elem.partial) break
+      // Check if current key is a float char (continue) or not (finalize)
+      if (isFloatChar(combo.key)) {
+        const newPartial = (elem.partial || '') + combo.key
+        // Reject double dots
+        if (combo.key === '.' && elem.partial.includes('.')) {
+          // Second dot: finalize current float, try to match next element
+          const floatVal = parseFloat(elem.partial)
+          if (isNaN(floatVal) || elem.partial.endsWith('.')) {
+            return { status: 'failed' }
+          }
+          newState[i] = { type: 'float', value: floatVal }
+          pos = i + 1
+          if (pos >= pattern.length) {
+            return { status: 'failed' }
+          }
+          break
+        }
+        newState[i] = { type: 'float', partial: newPartial }
+        return { status: 'partial', state: newState }
+      } else {
+        // Non-float key: finalize the float value and try to match next element
+        // Reject trailing dot
+        if (elem.partial.endsWith('.')) {
+          return { status: 'failed' }
+        }
+        const floatVal = parseFloat(elem.partial)
+        if (isNaN(floatVal)) {
+          return { status: 'failed' }
+        }
+        newState[i] = { type: 'float', value: floatVal }
+        pos = i + 1
+        if (pos >= pattern.length) {
+          return { status: 'failed' }
+        }
+        break
+      }
+    }
     pos++
   }
 
@@ -231,6 +279,12 @@ function advanceMatchState(
       return { status: 'failed' }
     }
     newState[pos] = { type: 'digits', partial: combo.key }
+  } else if (currentPattern.type === 'float') {
+    // Start float match (must start with a digit or dot)
+    if (!isFloatChar(combo.key) || combo.modifiers.ctrl || combo.modifiers.alt || combo.modifiers.meta) {
+      return { status: 'failed' }
+    }
+    newState[pos] = { type: 'float', partial: combo.key }
   } else {
     // Match key
     if (!matchesKeyElem(combo, currentPattern)) {
@@ -244,13 +298,14 @@ function advanceMatchState(
     if (elem.type === 'key') return elem.matched === true
     if (elem.type === 'digit') return elem.value !== undefined
     if (elem.type === 'digits') return elem.value !== undefined
+    if (elem.type === 'float') return elem.value !== undefined
     return false
   })
 
   if (isComplete) {
     const captures = newState
-      .filter((e): e is { type: 'digit'; value: number } | { type: 'digits'; value: number } =>
-        (e.type === 'digit' || e.type === 'digits') && e.value !== undefined
+      .filter((e): e is { type: 'digit'; value: number } | { type: 'digits'; value: number } | { type: 'float'; value: number } =>
+        (e.type === 'digit' || e.type === 'digits' || e.type === 'float') && e.value !== undefined
       )
       .map(e => e.value)
     return { status: 'matched', state: newState, captures }
@@ -263,7 +318,10 @@ function advanceMatchState(
  * Check if a SeqMatchState is in the middle of collecting digits
  */
 function isCollectingDigits(state: SeqMatchState): boolean {
-  return state.some(elem => elem.type === 'digits' && elem.partial !== undefined && elem.value === undefined)
+  return state.some(elem =>
+    (elem.type === 'digits' && elem.partial !== undefined && elem.value === undefined) ||
+    (elem.type === 'float' && elem.partial !== undefined && elem.value === undefined)
+  )
 }
 
 /**
@@ -274,6 +332,15 @@ function finalizeDigits(state: SeqMatchState): SeqMatchState {
     if (elem.type === 'digits' && elem.partial !== undefined && elem.value === undefined) {
       return { type: 'digits', value: parseInt(elem.partial, 10) }
     }
+    if (elem.type === 'float' && elem.partial !== undefined && elem.value === undefined) {
+      // Normalize: leading dot becomes "0.", reject trailing dot
+      let partial = elem.partial
+      if (partial.startsWith('.')) partial = '0' + partial
+      if (partial.endsWith('.')) partial = partial.slice(0, -1)
+      const val = parseFloat(partial)
+      if (isNaN(val)) return elem
+      return { type: 'float', value: val }
+    }
     return elem
   })
 }
@@ -283,8 +350,8 @@ function finalizeDigits(state: SeqMatchState): SeqMatchState {
  */
 function extractMatchCaptures(state: SeqMatchState): number[] {
   return state
-    .filter((e): e is { type: 'digit'; value: number } | { type: 'digits'; value: number } =>
-      (e.type === 'digit' || e.type === 'digits') && e.value !== undefined
+    .filter((e): e is { type: 'digit'; value: number } | { type: 'digits'; value: number } | { type: 'float'; value: number } =>
+      (e.type === 'digit' || e.type === 'digits' || e.type === 'float') && e.value !== undefined
     )
     .map(e => e.value)
 }
@@ -499,6 +566,7 @@ export function useHotkeys(
             if (elem.type === 'key') return elem.matched === true
             if (elem.type === 'digit') return elem.value !== undefined
             if (elem.type === 'digits') return elem.value !== undefined
+            if (elem.type === 'float') return elem.value !== undefined
             return false
           })
 
@@ -675,6 +743,7 @@ export function useHotkeys(
                     if (elem.type === 'key') return elem.matched === true
                     if (elem.type === 'digit') return elem.value !== undefined
                     if (elem.type === 'digits') return elem.value !== undefined
+                    if (elem.type === 'float') return elem.value !== undefined
                     return false
                   })
                   if (isComplete) {

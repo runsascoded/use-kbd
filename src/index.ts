@@ -123,6 +123,7 @@ export {
   isShiftedSymbol,
   DIGIT_PLACEHOLDER,
   DIGITS_PLACEHOLDER,
+  FLOAT_PLACEHOLDER,
   keySeqToHotkeySequence,
   normalizeKey,
   parseHotkeyString,

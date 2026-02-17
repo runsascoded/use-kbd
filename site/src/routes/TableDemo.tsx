@@ -724,6 +724,38 @@ function DataTable() {
   })
 
 
+  // Scale values by a float multiplier (key then float: requires Enter to submit)
+  useAction('edit:scale', {
+    label: 'Scale values by N',
+    description: 'Multiply selected row values by a decimal factor (e.g., o 1.5 Enter)',
+    group: 'Table: Edit',
+    defaultBindings: ['o \\f'],
+    handler: useCallback((_e, captures) => {
+      const factor = captures?.[0]
+      if (factor === undefined) return
+      saveHistory()
+      setData(prev => prev.map(row =>
+        selectedIds.has(row.id) ? { ...row, value: Math.round(row.value * factor) } : row
+      ))
+    }, [selectedIds, saveHistory]),
+  })
+
+  // Set selected values directly (float-first: float terminates on key press)
+  useAction('edit:set-value', {
+    label: 'Set values to N',
+    description: 'Set selected row values to a number (e.g., 42.5 x)',
+    group: 'Table: Edit',
+    defaultBindings: ['\\f x'],
+    handler: useCallback((_e, captures) => {
+      const val = captures?.[0]
+      if (val === undefined) return
+      saveHistory()
+      setData(prev => prev.map(row =>
+        selectedIds.has(row.id) ? { ...row, value: Math.round(val) } : row
+      ))
+    }, [selectedIds, saveHistory]),
+  })
+
   // Two-column renderer for Sort group
   const SortRenderer = useMemo(() => createTwoColumnRenderer({
     headers: ['', 'Asc', 'Desc'],

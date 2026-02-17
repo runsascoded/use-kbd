@@ -367,6 +367,13 @@ function SeqElemDisplay({ elem, className }: { elem: SeqElem; className?: string
       </Tooltip>
     )
   }
+  if (elem.type === 'float') {
+    return (
+      <Tooltip title="A number (integer or decimal)">
+        <span className={`kbd-placeholder ${className || ''}`}>#.#</span>
+      </Tooltip>
+    )
+  }
   // Regular key - use KeyDisplay
   return <KeyDisplay combo={{ key: elem.key, modifiers: elem.modifiers }} className={className} />
 }

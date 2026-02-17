@@ -42,6 +42,9 @@ function SeqElemDisplay({ elem }: { elem: SeqElem }) {
   if (elem.type === 'digits') {
     return <span className="kbd-placeholder" title="One or more digits (0-9)">##</span>
   }
+  if (elem.type === 'float') {
+    return <span className="kbd-placeholder" title="A number (integer or decimal)">#.#</span>
+  }
   // Regular key
   return <KeyCombo combo={{ key: elem.key, modifiers: elem.modifiers }} />
 }

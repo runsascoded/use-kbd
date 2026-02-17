@@ -144,13 +144,14 @@ export function formatKeyForDisplay(key: string): string {
  */
 export const DIGIT_PLACEHOLDER = '__DIGIT__'
 export const DIGITS_PLACEHOLDER = '__DIGITS__'
+export const FLOAT_PLACEHOLDER = '__FLOAT__'
 
 /**
  * Check if a key string is a digit placeholder sentinel value.
  * Used during recording to identify placeholder keys.
  */
 export function isPlaceholderSentinel(key: string): boolean {
-  return key === DIGIT_PLACEHOLDER || key === DIGITS_PLACEHOLDER
+  return key === DIGIT_PLACEHOLDER || key === DIGITS_PLACEHOLDER || key === FLOAT_PLACEHOLDER
 }
 
 /**
@@ -163,6 +164,9 @@ function formatSingleCombination(combo: KeyCombination): { display: string; id: 
   }
   if (combo.key === DIGITS_PLACEHOLDER) {
     return { display: '##', id: '\\d+' }
+  }
+  if (combo.key === FLOAT_PLACEHOLDER) {
+    return { display: '#.#', id: '\\f' }
   }
 
   const mac = isMac()
@@ -333,6 +337,9 @@ function parseSeqElem(str: string): SeqElem {
   if (str === '\\d+') {
     return { type: 'digits' }
   }
+  if (str === '\\f') {
+    return { type: 'float' }
+  }
 
   // Single uppercase letter (A-Z) is shorthand for shift+<lowercase>
   if (str.length === 1 && /^[A-Z]$/.test(str)) {
@@ -385,6 +392,9 @@ function formatSeqElem(elem: SeqElem): { display: string; id: string } {
   }
   if (elem.type === 'digits') {
     return { display: '⟨##⟩', id: '\\d+' }
+  }
+  if (elem.type === 'float') {
+    return { display: '⟨#.#⟩', id: '\\f' }
   }
 
   // Regular key
@@ -443,7 +453,7 @@ export function formatKeySeq(seq: KeySeq): KeyCombinationDisplay {
  * Check if a KeySeq contains any digit placeholders
  */
 export function hasDigitPlaceholders(seq: KeySeq): boolean {
-  return seq.some(elem => elem.type === 'digit' || elem.type === 'digits')
+  return seq.some(elem => elem.type === 'digit' || elem.type === 'digits' || elem.type === 'float')
 }
 
 /**
@@ -458,6 +468,9 @@ export function keySeqToHotkeySequence(seq: KeySeq): HotkeySequence {
     }
     if (elem.type === 'digits') {
       return { key: '\\d+', modifiers: NO_MODIFIERS }
+    }
+    if (elem.type === 'float') {
+      return { key: '\\f', modifiers: NO_MODIFIERS }
     }
     return { key: elem.key, modifiers: elem.modifiers }
   })
@@ -475,6 +488,9 @@ export function hotkeySequenceToKeySeq(seq: HotkeySequence): KeySeq {
     }
     if (combo.key === '\\d+' && !combo.modifiers.ctrl && !combo.modifiers.alt && !combo.modifiers.shift && !combo.modifiers.meta) {
       return { type: 'digits' }
+    }
+    if (combo.key === '\\f' && !combo.modifiers.ctrl && !combo.modifiers.alt && !combo.modifiers.shift && !combo.modifiers.meta) {
+      return { type: 'float' }
     }
     return { type: 'key', key: combo.key, modifiers: combo.modifiers }
   })
@@ -534,7 +550,14 @@ function keyMatchesPattern(pending: KeyCombination, pattern: KeyCombination): bo
   if (pending.key === pattern.key) return true
 
   // Check if pending is a digit and pattern expects a digit placeholder
-  return /^[0-9]$/.test(pending.key) && (pattern.key === DIGIT_PLACEHOLDER || pattern.key === DIGITS_PLACEHOLDER);
+  if (/^[0-9]$/.test(pending.key) && (pattern.key === DIGIT_PLACEHOLDER || pattern.key === DIGITS_PLACEHOLDER || pattern.key === FLOAT_PLACEHOLDER)) {
+    return true
+  }
+  // Check if pending is a dot and pattern expects a float placeholder
+  if (pending.key === '.' && pattern.key === FLOAT_PLACEHOLDER) {
+    return true
+  }
+  return false
 }
 
 // ============================================================================
@@ -546,6 +569,13 @@ function keyMatchesPattern(pending: KeyCombination, pattern: KeyCombination): bo
  */
 function isDigitKey(key: string): boolean {
   return /^[0-9]$/.test(key)
+}
+
+/**
+ * Check if a key is a float character (digit or dot)
+ */
+function isFloatKey(key: string): boolean {
+  return /^[0-9.]$/.test(key)
 }
 
 /**
@@ -566,6 +596,15 @@ function seqElemsCouldConflict(a: SeqElem, b: SeqElem): boolean {
   if (a.type === 'digit' && b.type === 'digits') return true
   if (a.type === 'digits' && b.type === 'key' && isDigitKey(b.key)) return true
   if (a.type === 'key' && isDigitKey(a.key) && b.type === 'digits') return true
+
+  // float matches digits, digit, other floats, and digit/float keys
+  if (a.type === 'float' && b.type === 'float') return true
+  if (a.type === 'float' && b.type === 'digits') return true
+  if (a.type === 'digits' && b.type === 'float') return true
+  if (a.type === 'float' && b.type === 'digit') return true
+  if (a.type === 'digit' && b.type === 'float') return true
+  if (a.type === 'float' && b.type === 'key' && isFloatKey(b.key)) return true
+  if (a.type === 'key' && isFloatKey(a.key) && b.type === 'float') return true
 
   // key vs key - exact match
   if (a.type === 'key' && b.type === 'key') {
@@ -757,9 +796,9 @@ export function getSequenceCompletions(
   for (const [hotkeyStr, actionOrActions] of Object.entries(keymap)) {
     const keySeq = parseKeySeq(hotkeyStr)
 
-    // Skip if pattern is clearly too short (but \d+ can consume multiple keys)
-    const hasDigitsPlaceholder = keySeq.some(e => e.type === 'digits')
-    if (!hasDigitsPlaceholder && keySeq.length < pendingKeys.length) continue
+    // Skip if pattern is clearly too short (but \d+ and \f can consume multiple keys)
+    const hasMultiCharPlaceholder = keySeq.some(e => e.type === 'digits' || e.type === 'float')
+    if (!hasMultiCharPlaceholder && keySeq.length < pendingKeys.length) continue
 
     // Track how many keySeq elements we've matched and how many pending keys consumed
     let keySeqIdx = 0
@@ -767,11 +806,32 @@ export function getSequenceCompletions(
     let isMatch = true
     const captures: number[] = []
     let currentDigits = '' // For accumulating \d+ digits
+    let currentFloat = '' // For accumulating \f chars
 
     for (; pendingIdx < pendingKeys.length && keySeqIdx < keySeq.length; pendingIdx++) {
       const elem = keySeq[keySeqIdx]
 
-      if (elem.type === 'digits') {
+      if (elem.type === 'float') {
+        // \f can consume multiple pending digit/dot keys
+        if (!/^[0-9.]$/.test(pendingKeys[pendingIdx].key)) {
+          isMatch = false
+          break
+        }
+        currentFloat += pendingKeys[pendingIdx].key
+        // Check if next pending key is also a float char (still accumulating)
+        if (pendingIdx + 1 < pendingKeys.length && /^[0-9.]$/.test(pendingKeys[pendingIdx + 1].key)) {
+          continue
+        }
+        // Validate and finalize
+        const floatVal = parseFloat(currentFloat)
+        if (isNaN(floatVal) || currentFloat.endsWith('.')) {
+          isMatch = false
+          break
+        }
+        captures.push(floatVal)
+        currentFloat = ''
+        keySeqIdx++
+      } else if (elem.type === 'digits') {
         // \d+ can consume multiple pending digit keys
         if (!/^[0-9]$/.test(pendingKeys[pendingIdx].key)) {
           isMatch = false
@@ -991,7 +1051,7 @@ export function fuzzyMatch(pattern: string, text: string): FuzzyMatchResult {
  * Check if a binding string contains digit placeholders (\d or \d+)
  */
 export function bindingHasPlaceholders(binding: string): boolean {
-  return binding.includes('\\d')
+  return binding.includes('\\d') || binding.includes('\\f')
 }
 
 /**
@@ -1012,29 +1072,29 @@ export function hasAnyPlaceholderBindings(bindings: string[]): boolean {
 export function parseQueryNumbers(query: string): { text: string; numbers: number[] } {
   const trimmed = query.trim()
 
-  // Check if query is just a number
-  if (/^\d+$/.test(trimmed)) {
+  // Check if query is just a number (integer or decimal)
+  if (/^\d*\.?\d+$/.test(trimmed)) {
     return {
       text: '',
-      numbers: [parseInt(trimmed, 10)],
+      numbers: [parseFloat(trimmed)],
     }
   }
 
-  // Match number at the start followed by text: "5 smooth" or "5smooth"
-  const startMatch = trimmed.match(/^(\d+)\s*(.+)$/)
+  // Match number at the start followed by text: "5 smooth" or "0.5 smooth"
+  const startMatch = trimmed.match(/^(\d*\.?\d+)\s*(.+)$/)
   if (startMatch) {
     return {
       text: startMatch[2].trim(),
-      numbers: [parseInt(startMatch[1], 10)],
+      numbers: [parseFloat(startMatch[1])],
     }
   }
 
-  // Match trailing number: "smooth 3"
-  const endMatch = trimmed.match(/^(.+?)\s+(\d+)$/)
+  // Match trailing number: "smooth 3" or "smooth 0.5"
+  const endMatch = trimmed.match(/^(.+?)\s+(\d*\.?\d+)$/)
   if (endMatch) {
     return {
       text: endMatch[1].trim(),
-      numbers: [parseInt(endMatch[2], 10)],
+      numbers: [parseFloat(endMatch[2])],
     }
   }
 
