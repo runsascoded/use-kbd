@@ -41,7 +41,7 @@ export function SearchIcon({ className }: { className?: string }) {
  * A simple button to trigger the omnibar or lookup modal.
  *
  * Use this to integrate search into your existing UI (FABs, menus, toolbars).
- * For a standalone floating action button, use `MobileFAB` instead.
+ * For a standalone floating action button, use `SpeedDial` instead.
  *
  * @example
  * ```tsx

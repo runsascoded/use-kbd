@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useMaybeHotkeysContext } from './HotkeysProvider'
 
+/**
+ * @deprecated Use {@link SpeedDialProps} from `SpeedDial` instead.
+ */
 export interface MobileFABProps {
   /**
    * Which modal to open when tapped.
@@ -52,6 +55,9 @@ function SearchIcon({ className }: { className?: string }) {
 }
 
 /**
+ * @deprecated Use `SpeedDial` instead, which supports expandable secondary actions,
+ * hover-peek + click-to-pin, and cross-device support.
+ *
  * Floating Action Button for triggering omnibar/lookup on mobile devices.
  *
  * On mobile, keyboard shortcuts aren't available, but users can still benefit
