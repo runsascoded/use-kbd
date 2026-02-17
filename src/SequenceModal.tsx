@@ -103,6 +103,8 @@ export function SequenceModal() {
     if (!isAwaitingSequence || pendingKeys.length === 0) return
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't intercept modified arrow keys (e.g. Shift+Arrow for selection)
+      if (e.shiftKey || e.ctrlKey || e.altKey || e.metaKey) return
       switch (e.key) {
         case 'ArrowDown':
           e.preventDefault()
