@@ -7,6 +7,8 @@ test.describe('Global Features', () => {
       localStorage.removeItem('use-kbd-demo-removed')
     })
     await page.goto('/')
+    // Wait for React effects to register keyboard listeners
+    await expect(page.locator('.kbd-speed-dial-primary')).toBeVisible()
   })
 
   test('can open shortcuts modal with ? key', async ({ page }) => {
@@ -239,6 +241,8 @@ test.describe('Data Table Demo', () => {
       localStorage.removeItem('use-kbd-demo-removed')
     })
     await page.goto('/table')
+    // Wait for React effects to register keyboard listeners
+    await expect(page.locator('.kbd-speed-dial-primary')).toBeVisible()
   })
 
   test('keyboard navigation works with j/k', async ({ page }) => {
@@ -815,6 +819,8 @@ test.describe('Float Placeholder', () => {
       localStorage.removeItem('use-kbd-demo-removed')
     })
     await page.goto('/table')
+    // Wait for React effects to register keyboard listeners
+    await expect(page.locator('.kbd-speed-dial-primary')).toBeVisible()
   })
 
   test('key+float sequence: o then float then Enter executes scale', async ({ page }) => {
@@ -1181,6 +1187,8 @@ test.describe('Canvas Demo', () => {
       localStorage.removeItem('use-kbd-demo-recents')
     })
     await page.goto('/canvas')
+    // Wait for React effects to register keyboard listeners
+    await expect(page.locator('.kbd-speed-dial-primary')).toBeVisible()
   })
 
   test('omnibar only shows canvas actions, not table actions', async ({ page }) => {
@@ -1508,6 +1516,8 @@ test.describe('Calendar Demo', () => {
       localStorage.removeItem('use-kbd-demo-removed')
     })
     await page.goto('/calendar')
+    // Wait for React effects to register keyboard listeners
+    await expect(page.locator('.kbd-speed-dial-primary')).toBeVisible()
   })
 
   test('can navigate with vim keys', async ({ page }) => {

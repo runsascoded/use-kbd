@@ -1,4 +1,4 @@
-import {ComponentType, type CSSProperties} from 'react'
+import { ComponentType, type CSSProperties } from 'react'
 
 export interface KeyIconProps {
   className?: string

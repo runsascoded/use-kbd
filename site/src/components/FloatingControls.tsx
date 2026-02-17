@@ -1,4 +1,3 @@
-import { useMemo } from 'react'
 import { useLocation } from 'react-router-dom'
 import { FaGithub } from 'react-icons/fa'
 import { MdBrightnessAuto, MdLightMode, MdDarkMode } from 'react-icons/md'
@@ -38,7 +37,7 @@ export function FloatingControls() {
 
   const themeLabel = theme === 'system' ? `System (${resolvedTheme})` : theme === 'light' ? 'Light' : 'Dark'
 
-  const actions: SpeedDialAction[] = useMemo(() => [
+  const actions: SpeedDialAction[] = [
     {
       key: 'github',
       label: 'View source on GitHub',
@@ -51,7 +50,7 @@ export function FloatingControls() {
       icon: <ThemeIcon theme={theme} />,
       onClick: cycleTheme,
     },
-  ], [githubUrl, theme, themeLabel])
+  ]
 
   return <SpeedDial actions={actions} />
 }

@@ -111,7 +111,7 @@ export function SpeedDial({
     let timer: ReturnType<typeof setTimeout> | null = null
     let longPressFired = false
 
-    const onTouchStart = (e: TouchEvent) => {
+    const onTouchStart = (_e: TouchEvent) => {
       longPressFired = false
       timer = setTimeout(() => {
         longPressFired = true

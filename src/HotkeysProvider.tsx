@@ -220,8 +220,8 @@ export function HotkeysProvider({
   type ActiveModal = 'shortcuts' | 'omnibar' | 'lookup' | null
   const activeModal: ActiveModal = isModalOpen ? 'shortcuts'
     : isOmnibarOpen ? 'omnibar'
-    : isLookupOpen ? 'lookup'
-    : null
+      : isLookupOpen ? 'lookup'
+        : null
 
   // Track whether close was triggered by popstate (to avoid double history.back())
   const closedByPopstateRef = useRef(false)
