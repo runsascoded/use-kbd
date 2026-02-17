@@ -1227,3 +1227,136 @@
 .kbd-mobile .kbd-lookup-hint {
   display: none;
 }
+
+/* === SpeedDial FAB === */
+:root {
+  --kbd-speed-dial-size: 48px;
+  --kbd-speed-dial-size-sm: 40px;
+  --kbd-speed-dial-font: 22px;
+  --kbd-speed-dial-font-sm: 18px;
+  --kbd-speed-dial-gap: 8px;
+  --kbd-speed-dial-primary-bg: var(--kbd-bg);
+  --kbd-speed-dial-primary-color: var(--kbd-text);
+}
+
+@media (max-width: 768px) {
+  :root {
+    --kbd-speed-dial-size: 44px;
+    --kbd-speed-dial-size-sm: 38px;
+    --kbd-speed-dial-font: 20px;
+    --kbd-speed-dial-font-sm: 17px;
+  }
+}
+
+.kbd-speed-dial {
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  gap: var(--kbd-speed-dial-gap);
+  z-index: 9990;
+}
+
+.kbd-speed-dial-primary {
+  width: var(--kbd-speed-dial-size);
+  height: var(--kbd-speed-dial-size);
+  border-radius: 50%;
+  background-color: var(--kbd-speed-dial-primary-bg);
+  color: var(--kbd-speed-dial-primary-color);
+  border: 1px solid var(--kbd-border);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--kbd-speed-dial-font);
+  transition:
+    transform 200ms ease,
+    box-shadow 200ms ease,
+    opacity 200ms ease;
+  opacity: 0.85;
+}
+
+.kbd-speed-dial-primary:hover,
+.kbd-speed-dial-primary:focus {
+  opacity: 1;
+  transform: scale(1.08);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+.kbd-speed-dial-primary:active {
+  transform: scale(0.95);
+  opacity: 1;
+}
+
+.kbd-speed-dial-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.kbd-speed-dial-chevron {
+  width: var(--kbd-speed-dial-size-sm);
+  height: var(--kbd-speed-dial-size-sm);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--kbd-text-secondary);
+  border: 1px solid var(--kbd-border);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--kbd-speed-dial-font-sm);
+  opacity: 0.7;
+  transition:
+    background-color 200ms ease,
+    color 200ms ease,
+    opacity 200ms ease,
+    border-color 200ms ease;
+}
+
+.kbd-speed-dial-chevron:hover {
+  opacity: 1;
+}
+
+.kbd-speed-dial-chevron.kbd-speed-dial-sticky {
+  background-color: var(--kbd-accent);
+  color: white;
+  border-color: var(--kbd-accent);
+  opacity: 1;
+}
+
+.kbd-speed-dial-action {
+  width: var(--kbd-speed-dial-size-sm);
+  height: var(--kbd-speed-dial-size-sm);
+  border-radius: 50%;
+  background-color: var(--kbd-bg);
+  color: var(--kbd-text);
+  border: 1px solid var(--kbd-border);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--kbd-speed-dial-font-sm);
+  text-decoration: none;
+  transition:
+    background-color 200ms ease,
+    color 200ms ease,
+    transform 200ms ease;
+  animation: kbd-speed-dial-pop-in 150ms ease both;
+}
+
+.kbd-speed-dial-action:hover {
+  background-color: var(--kbd-bg-secondary);
+  transform: scale(1.08);
+}
+
+@keyframes kbd-speed-dial-pop-in {
+  from {
+    transform: scale(0.5);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}

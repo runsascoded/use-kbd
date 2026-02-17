@@ -3969,6 +3969,202 @@ function SearchTrigger({
     }
   );
 }
+function ChevronIcon({ direction }) {
+  const d = direction === "up" ? "M18 15l-6-6-6 6" : "M6 9l6 6 6-6";
+  return /* @__PURE__ */ jsx(
+    "svg",
+    {
+      viewBox: "0 0 24 24",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: "2.5",
+      strokeLinecap: "round",
+      strokeLinejoin: "round",
+      style: { width: "1em", height: "1em" },
+      children: /* @__PURE__ */ jsx("path", { d })
+    }
+  );
+}
+function KeyboardIcon() {
+  return /* @__PURE__ */ jsxs(
+    "svg",
+    {
+      viewBox: "0 0 24 24",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: "2",
+      strokeLinecap: "round",
+      strokeLinejoin: "round",
+      style: { width: "1em", height: "1em" },
+      children: [
+        /* @__PURE__ */ jsx("rect", { x: "2", y: "4", width: "20", height: "16", rx: "2" }),
+        /* @__PURE__ */ jsx("path", { d: "M6 8h.01M10 8h.01M14 8h.01M18 8h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M8 16h8" })
+      ]
+    }
+  );
+}
+function SpeedDial({
+  actions,
+  showShortcuts = true,
+  position,
+  longPressDuration = 400,
+  primaryIcon,
+  ariaLabel = "Open command palette",
+  className
+}) {
+  const ctx = useMaybeHotkeysContext();
+  const [isSticky, setIsSticky] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+  const containerRef = useRef(null);
+  const primaryBtnRef = useRef(null);
+  const isExpanded = isSticky || isHovered;
+  useEffect(() => {
+    if (!isSticky) return;
+    const handler = (e) => {
+      const target = e.target;
+      if (!document.contains(target)) return;
+      if (containerRef.current && !containerRef.current.contains(target)) {
+        setIsSticky(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    document.addEventListener("touchstart", handler);
+    return () => {
+      document.removeEventListener("mousedown", handler);
+      document.removeEventListener("touchstart", handler);
+    };
+  }, [isSticky]);
+  useEffect(() => {
+    const btn = primaryBtnRef.current;
+    if (!btn) return;
+    let timer = null;
+    let longPressFired = false;
+    const onTouchStart = (_e) => {
+      longPressFired = false;
+      timer = setTimeout(() => {
+        longPressFired = true;
+        setIsSticky((s) => !s);
+      }, longPressDuration);
+    };
+    const onTouchEnd = (e) => {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      if (longPressFired) {
+        e.preventDefault();
+      }
+    };
+    const onTouchMove = () => {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+    };
+    btn.addEventListener("touchstart", onTouchStart, { passive: false });
+    btn.addEventListener("touchend", onTouchEnd, { passive: false });
+    btn.addEventListener("touchmove", onTouchMove, { passive: true });
+    return () => {
+      btn.removeEventListener("touchstart", onTouchStart);
+      btn.removeEventListener("touchend", onTouchEnd);
+      btn.removeEventListener("touchmove", onTouchMove);
+      if (timer) clearTimeout(timer);
+    };
+  }, [longPressDuration]);
+  const handlePrimaryClick = useCallback(() => {
+    if (!ctx) return;
+    ctx.openOmnibar();
+  }, [ctx]);
+  const handleChevronClick = useCallback(() => {
+    setIsSticky((s) => !s);
+  }, []);
+  if (!ctx) return null;
+  const bottom = position?.bottom ?? 20;
+  const right = position?.right ?? 20;
+  const containerClasses = ["kbd-speed-dial"];
+  if (isExpanded) containerClasses.push("kbd-speed-dial-expanded");
+  if (className) containerClasses.push(className);
+  const chevronClasses = ["kbd-speed-dial-chevron"];
+  if (isSticky) chevronClasses.push("kbd-speed-dial-sticky");
+  const builtinActions = [];
+  if (showShortcuts) {
+    builtinActions.push({
+      key: "_kbd_shortcuts",
+      label: "Shortcuts",
+      icon: /* @__PURE__ */ jsx(KeyboardIcon, {}),
+      onClick: () => ctx.openModal()
+    });
+  }
+  const allSecondaryActions = [...builtinActions, ...actions ?? []];
+  return /* @__PURE__ */ jsxs(
+    "div",
+    {
+      ref: containerRef,
+      className: containerClasses.join(" "),
+      style: {
+        position: "fixed",
+        bottom: `calc(${bottom}px + env(safe-area-inset-bottom, 0px))`,
+        right: `${right}px`
+      },
+      onMouseEnter: () => setIsHovered(true),
+      onMouseLeave: () => setIsHovered(false),
+      children: [
+        /* @__PURE__ */ jsx(
+          "button",
+          {
+            ref: primaryBtnRef,
+            type: "button",
+            className: "kbd-speed-dial-primary",
+            onClick: handlePrimaryClick,
+            "aria-label": ariaLabel,
+            children: primaryIcon ?? /* @__PURE__ */ jsx(SearchIcon2, { className: "kbd-speed-dial-icon" })
+          }
+        ),
+        /* @__PURE__ */ jsx(
+          "button",
+          {
+            type: "button",
+            className: chevronClasses.join(" "),
+            onClick: handleChevronClick,
+            "aria-label": isExpanded ? "Collapse actions" : "Expand actions",
+            "aria-expanded": isExpanded,
+            children: /* @__PURE__ */ jsx(ChevronIcon, { direction: isExpanded ? "down" : "up" })
+          }
+        ),
+        isExpanded && allSecondaryActions.map((action) => {
+          const cls = "kbd-speed-dial-action";
+          if (action.href) {
+            const external = action.external ?? true;
+            return /* @__PURE__ */ jsx(
+              "a",
+              {
+                className: cls,
+                href: action.href,
+                "aria-label": action.label,
+                title: action.label,
+                ...external ? { target: "_blank", rel: "noopener noreferrer" } : {},
+                children: action.icon
+              },
+              action.key
+            );
+          }
+          return /* @__PURE__ */ jsx(
+            "button",
+            {
+              type: "button",
+              className: cls,
+              onClick: action.onClick,
+              "aria-label": action.label,
+              title: action.label,
+              children: action.icon
+            },
+            action.key
+          );
+        })
+      ]
+    }
+  );
+}
 function SeqElemBadge({ elem }) {
   if (elem.type === "digit") {
     return /* @__PURE__ */ jsx("span", { className: "kbd-placeholder", title: "Any single digit (0-9)", children: "#" });
@@ -5306,6 +5502,6 @@ function ShortcutsModal({
   ] }) }) });
 }
 
-export { ACTION_LOOKUP, ACTION_MODAL, ACTION_OMNIBAR, ActionsRegistryContext, Alt, Backspace, Command, Ctrl, DEFAULT_SEQUENCE_TIMEOUT, DIGITS_PLACEHOLDER, DIGIT_PLACEHOLDER, Down, Enter, FLOAT_PLACEHOLDER, HotkeysProvider, Kbd, KbdLookup, KbdModal, KbdOmnibar, Kbds, Key, KeybindingEditor, Left, LookupModal, MobileFAB, ModifierIcon, Omnibar, OmnibarEndpointsRegistryContext, Option, Right, SearchIcon2 as SearchIcon, SearchTrigger, SequenceModal, Shift, ShortcutsModal, Up, bindingHasPlaceholders, countPlaceholders, createTwoColumnRenderer, extractCaptures, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, formatKeySeq, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasAnyPlaceholderBindings, hasConflicts, hasDigitPlaceholders, hotkeySequenceToKeySeq, isDigitPlaceholder, isMac, isModifierKey, isPlaceholderSentinel, isSequence, isShiftedSymbol, keySeqToHotkeySequence, normalizeKey, parseHotkeyString, parseKeySeq, parseQueryNumbers, searchActions, useAction, useActions, useActionsRegistry, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useOmnibar, useOmnibarEndpoint, useOmnibarEndpointsRegistry, useParamEntry, useRecordHotkey };
+export { ACTION_LOOKUP, ACTION_MODAL, ACTION_OMNIBAR, ActionsRegistryContext, Alt, Backspace, Command, Ctrl, DEFAULT_SEQUENCE_TIMEOUT, DIGITS_PLACEHOLDER, DIGIT_PLACEHOLDER, Down, Enter, FLOAT_PLACEHOLDER, HotkeysProvider, Kbd, KbdLookup, KbdModal, KbdOmnibar, Kbds, Key, KeybindingEditor, Left, LookupModal, MobileFAB, ModifierIcon, Omnibar, OmnibarEndpointsRegistryContext, Option, Right, SearchIcon2 as SearchIcon, SearchTrigger, SequenceModal, Shift, ShortcutsModal, SpeedDial, Up, bindingHasPlaceholders, countPlaceholders, createTwoColumnRenderer, extractCaptures, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, formatKeySeq, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasAnyPlaceholderBindings, hasConflicts, hasDigitPlaceholders, hotkeySequenceToKeySeq, isDigitPlaceholder, isMac, isModifierKey, isPlaceholderSentinel, isSequence, isShiftedSymbol, keySeqToHotkeySequence, normalizeKey, parseHotkeyString, parseKeySeq, parseQueryNumbers, searchActions, useAction, useActions, useActionsRegistry, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useOmnibar, useOmnibarEndpoint, useOmnibarEndpointsRegistry, useParamEntry, useRecordHotkey };
 //# sourceMappingURL=index.js.map
 //# sourceMappingURL=index.js.map
