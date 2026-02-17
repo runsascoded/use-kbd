@@ -1093,6 +1093,72 @@ test.describe('Float Placeholder', () => {
     await page.keyboard.press('Escape')
   })
 
+  test('SequenceModal shows completions for partial float with trailing dot', async ({ page }) => {
+    // Type "4." — a partial float (trailing dot, mid-accumulation)
+    await page.keyboard.press('4')
+    await page.waitForTimeout(50)
+    await page.keyboard.press('.')
+    await page.waitForTimeout(50)
+
+    const seqModal = page.locator('.kbd-sequence')
+    await expect(seqModal).toBeVisible()
+
+    // Should show completions; "4." parses as 4, so N is substituted with 4
+    await expect(seqModal.locator('.kbd-sequence-actions', { hasText: 'Set values to 4' })).toBeVisible()
+
+    await page.keyboard.press('Escape')
+  })
+
+  test('SequenceModal shows completions for leading dot (start of float)', async ({ page }) => {
+    // Type "." — leading dot, valid start of a float like .5
+    await page.keyboard.press('.')
+    await page.waitForTimeout(50)
+
+    const seqModal = page.locator('.kbd-sequence')
+    await expect(seqModal).toBeVisible()
+
+    // Should show float-first completions
+    await expect(seqModal.locator('.kbd-sequence-actions', { hasText: 'Set values to N' })).toBeVisible()
+
+    await page.keyboard.press('Escape')
+  })
+
+  test('SequenceModal shows completions for leading dot with digit', async ({ page }) => {
+    // Type ".9" — leading dot followed by digit
+    await page.keyboard.press('.')
+    await page.waitForTimeout(50)
+    await page.keyboard.press('9')
+    await page.waitForTimeout(50)
+
+    const seqModal = page.locator('.kbd-sequence')
+    await expect(seqModal).toBeVisible()
+
+    // ".9" parses as 0.9, so N is substituted
+    await expect(seqModal.locator('.kbd-sequence-actions', { hasText: 'Set values to 0.9' })).toBeVisible()
+
+    await page.keyboard.press('Escape')
+  })
+
+  test('trailing dot float finalizes when followed by non-float key', async ({ page }) => {
+    // Select first row
+    const rows = page.locator('.data-table tbody tr')
+    await rows.first().click()
+    await expect(rows.first()).toHaveClass(/selected/)
+
+    const valueCell = page.locator('.data-table tbody tr:first-child td:nth-child(3)')
+
+    // Type "4. x" — trailing dot should finalize as 4
+    await page.keyboard.press('4')
+    await page.waitForTimeout(50)
+    await page.keyboard.press('.')
+    await page.waitForTimeout(50)
+    await page.keyboard.press('x')
+    await page.waitForTimeout(200)
+
+    // Value should now be 4 (parseFloat("4.") === 4)
+    expect(await valueCell.textContent()).toBe('4')
+  })
+
   test('shortcuts modal shows float placeholder in bindings', async ({ page }) => {
     await page.locator('body').click({ position: { x: 10, y: 10 } })
 

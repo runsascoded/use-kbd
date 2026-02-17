@@ -822,9 +822,20 @@ export function getSequenceCompletions(
         if (pendingIdx + 1 < pendingKeys.length && /^[0-9.]$/.test(pendingKeys[pendingIdx + 1].key)) {
           continue
         }
-        // Validate and finalize
+        // No more pending keys — partial float, don't require strict finalization
+        if (pendingIdx + 1 >= pendingKeys.length) {
+          const partialVal = parseFloat(currentFloat)
+          if (!isNaN(partialVal)) {
+            captures.push(partialVal)
+            currentFloat = ''
+            keySeqIdx++
+          }
+          // If NaN (e.g. just "."), leave keySeqIdx on float element — still partial
+          continue
+        }
+        // Next pending key is not a float char — finalize
         const floatVal = parseFloat(currentFloat)
-        if (isNaN(floatVal) || currentFloat.endsWith('.')) {
+        if (isNaN(floatVal)) {
           isMatch = false
           break
         }

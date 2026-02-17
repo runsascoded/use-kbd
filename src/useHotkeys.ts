@@ -227,7 +227,7 @@ function advanceMatchState(
         if (combo.key === '.' && elem.partial.includes('.')) {
           // Second dot: finalize current float, try to match next element
           const floatVal = parseFloat(elem.partial)
-          if (isNaN(floatVal) || elem.partial.endsWith('.')) {
+          if (isNaN(floatVal)) {
             return { status: 'failed' }
           }
           newState[i] = { type: 'float', value: floatVal }
@@ -241,10 +241,6 @@ function advanceMatchState(
         return { status: 'partial', state: newState }
       } else {
         // Non-float key: finalize the float value and try to match next element
-        // Reject trailing dot
-        if (elem.partial.endsWith('.')) {
-          return { status: 'failed' }
-        }
         const floatVal = parseFloat(elem.partial)
         if (isNaN(floatVal)) {
           return { status: 'failed' }
