@@ -745,7 +745,7 @@ test.describe('Data Table Demo', () => {
     await expect(rows.nth(3)).not.toHaveClass(/selected/)
   })
 
-  test('clicking FAB to open omnibar does not reset table selection', async ({ page }) => {
+  test('clicking SpeedDial to open omnibar does not reset table selection', async ({ page }) => {
     // Bug: clicking the floating search button triggered document click handler
     // which reset hoveredIndex to -1, causing off-by-one errors
     const rows = page.locator('.data-table tbody tr')
@@ -754,19 +754,10 @@ test.describe('Data Table Demo', () => {
     await rows.nth(2).click()
     await expect(rows.nth(2)).toHaveClass(/selected/)
 
-    // Make controls visible first (they might be hidden)
-    await page.evaluate(() => {
-      const controls = document.querySelector('.floating-controls')
-      if (controls) controls.classList.add('visible')
-    })
+    // Click the SpeedDial primary button (always visible)
+    const primaryBtn = page.locator('.kbd-speed-dial-primary')
+    await primaryBtn.click()
     await page.waitForTimeout(100)
-
-    // Click any button in floating controls
-    const anyFloatingBtn = page.locator('.floating-controls .floating-btn').first()
-    if (await anyFloatingBtn.isVisible()) {
-      await anyFloatingBtn.click()
-      await page.waitForTimeout(100)
-    }
 
     // Selection should still be on row 2 (not reset to -1)
     await expect(rows.nth(2)).toHaveClass(/selected/)

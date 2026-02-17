@@ -100,8 +100,7 @@ function DataTable() {
         target.closest('.kbd-backdrop') ||
         target.closest('.kbd-omnibar') ||
         target.closest('.kbd-omnibar-backdrop') ||
-        target.closest('.floating-controls-container') ||
-        target.closest('.floating-controls')
+        target.closest('.kbd-speed-dial')
       ) {
         return
       }

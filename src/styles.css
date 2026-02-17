@@ -1235,6 +1235,8 @@
   --kbd-speed-dial-font: 22px;
   --kbd-speed-dial-font-sm: 18px;
   --kbd-speed-dial-gap: 8px;
+  --kbd-speed-dial-primary-bg: var(--kbd-bg);
+  --kbd-speed-dial-primary-color: var(--kbd-text);
 }
 
 @media (max-width: 768px) {
@@ -1258,9 +1260,9 @@
   width: var(--kbd-speed-dial-size);
   height: var(--kbd-speed-dial-size);
   border-radius: 50%;
-  background-color: var(--kbd-accent);
-  color: white;
-  border: none;
+  background-color: var(--kbd-speed-dial-primary-bg);
+  color: var(--kbd-speed-dial-primary-color);
+  border: 1px solid var(--kbd-border);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   cursor: pointer;
   display: flex;

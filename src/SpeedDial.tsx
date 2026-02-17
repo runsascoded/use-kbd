@@ -173,7 +173,7 @@ export function SpeedDial({
       key: '_kbd_shortcuts',
       label: 'Shortcuts',
       icon: <KeyboardIcon />,
-      onClick: () => ctx.openOmnibar(),
+      onClick: () => ctx.openModal(),
     })
   }
 
