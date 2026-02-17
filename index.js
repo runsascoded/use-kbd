@@ -4,11 +4,11 @@ import { createContext, forwardRef, useRef, useState, useCallback, useMemo, useE
 // src/types.ts
 function extractCaptures(state) {
   return state.filter(
-    (e) => (e.type === "digit" || e.type === "digits") && e.value !== void 0
+    (e) => (e.type === "digit" || e.type === "digits" || e.type === "float") && e.value !== void 0
   ).map((e) => e.value);
 }
 function isDigitPlaceholder(elem) {
-  return elem.type === "digit" || elem.type === "digits";
+  return elem.type === "digit" || elem.type === "digits" || elem.type === "float";
 }
 function countPlaceholders(seq) {
   return seq.filter(isDigitPlaceholder).length;
@@ -515,8 +515,9 @@ function formatKeyForDisplay(key) {
 }
 var DIGIT_PLACEHOLDER = "__DIGIT__";
 var DIGITS_PLACEHOLDER = "__DIGITS__";
+var FLOAT_PLACEHOLDER = "__FLOAT__";
 function isPlaceholderSentinel(key) {
-  return key === DIGIT_PLACEHOLDER || key === DIGITS_PLACEHOLDER;
+  return key === DIGIT_PLACEHOLDER || key === DIGITS_PLACEHOLDER || key === FLOAT_PLACEHOLDER;
 }
 function formatSingleCombination(combo) {
   if (combo.key === DIGIT_PLACEHOLDER) {
@@ -524,6 +525,9 @@ function formatSingleCombination(combo) {
   }
   if (combo.key === DIGITS_PLACEHOLDER) {
     return { display: "##", id: "\\d+" };
+  }
+  if (combo.key === FLOAT_PLACEHOLDER) {
+    return { display: "#.#", id: "\\f" };
   }
   const mac = isMac();
   const parts = [];
@@ -639,6 +643,9 @@ function parseSeqElem(str) {
   if (str === "\\d+") {
     return { type: "digits" };
   }
+  if (str === "\\f") {
+    return { type: "float" };
+  }
   if (str.length === 1 && /^[A-Z]$/.test(str)) {
     return {
       type: "key",
@@ -671,6 +678,9 @@ function formatSeqElem(elem) {
   }
   if (elem.type === "digits") {
     return { display: "\u27E8##\u27E9", id: "\\d+" };
+  }
+  if (elem.type === "float") {
+    return { display: "\u27E8#.#\u27E9", id: "\\f" };
   }
   const mac = isMac();
   const parts = [];
@@ -713,7 +723,7 @@ function formatKeySeq(seq) {
   };
 }
 function hasDigitPlaceholders(seq) {
-  return seq.some((elem) => elem.type === "digit" || elem.type === "digits");
+  return seq.some((elem) => elem.type === "digit" || elem.type === "digits" || elem.type === "float");
 }
 function keySeqToHotkeySequence(seq) {
   return seq.map((elem) => {
@@ -722,6 +732,9 @@ function keySeqToHotkeySequence(seq) {
     }
     if (elem.type === "digits") {
       return { key: "\\d+", modifiers: NO_MODIFIERS };
+    }
+    if (elem.type === "float") {
+      return { key: "\\f", modifiers: NO_MODIFIERS };
     }
     return { key: elem.key, modifiers: elem.modifiers };
   });
@@ -733,6 +746,9 @@ function hotkeySequenceToKeySeq(seq) {
     }
     if (combo.key === "\\d+" && !combo.modifiers.ctrl && !combo.modifiers.alt && !combo.modifiers.shift && !combo.modifiers.meta) {
       return { type: "digits" };
+    }
+    if (combo.key === "\\f" && !combo.modifiers.ctrl && !combo.modifiers.alt && !combo.modifiers.shift && !combo.modifiers.meta) {
+      return { type: "float" };
     }
     return { type: "key", key: combo.key, modifiers: combo.modifiers };
   });
@@ -752,10 +768,19 @@ function keyMatchesPattern(pending, pattern) {
     return false;
   }
   if (pending.key === pattern.key) return true;
-  return /^[0-9]$/.test(pending.key) && (pattern.key === DIGIT_PLACEHOLDER || pattern.key === DIGITS_PLACEHOLDER);
+  if (/^[0-9]$/.test(pending.key) && (pattern.key === DIGIT_PLACEHOLDER || pattern.key === DIGITS_PLACEHOLDER || pattern.key === FLOAT_PLACEHOLDER)) {
+    return true;
+  }
+  if (pending.key === "." && pattern.key === FLOAT_PLACEHOLDER) {
+    return true;
+  }
+  return false;
 }
 function isDigitKey(key) {
   return /^[0-9]$/.test(key);
+}
+function isFloatKey(key) {
+  return /^[0-9.]$/.test(key);
 }
 function seqElemsCouldConflict(a, b) {
   if (a.type === "digit" && b.type === "digit") return true;
@@ -766,6 +791,13 @@ function seqElemsCouldConflict(a, b) {
   if (a.type === "digit" && b.type === "digits") return true;
   if (a.type === "digits" && b.type === "key" && isDigitKey(b.key)) return true;
   if (a.type === "key" && isDigitKey(a.key) && b.type === "digits") return true;
+  if (a.type === "float" && b.type === "float") return true;
+  if (a.type === "float" && b.type === "digits") return true;
+  if (a.type === "digits" && b.type === "float") return true;
+  if (a.type === "float" && b.type === "digit") return true;
+  if (a.type === "digit" && b.type === "float") return true;
+  if (a.type === "float" && b.type === "key" && isFloatKey(b.key)) return true;
+  if (a.type === "key" && isFloatKey(a.key) && b.type === "float") return true;
   if (a.type === "key" && b.type === "key") {
     return a.key === b.key && a.modifiers.ctrl === b.modifiers.ctrl && a.modifiers.alt === b.modifiers.alt && a.modifiers.shift === b.modifiers.shift && a.modifiers.meta === b.modifiers.meta;
   }
@@ -875,16 +907,43 @@ function getSequenceCompletions(pendingKeys, keymap, actionRegistry) {
   const completions = [];
   for (const [hotkeyStr, actionOrActions] of Object.entries(keymap)) {
     const keySeq = parseKeySeq(hotkeyStr);
-    const hasDigitsPlaceholder = keySeq.some((e) => e.type === "digits");
-    if (!hasDigitsPlaceholder && keySeq.length < pendingKeys.length) continue;
+    const hasMultiCharPlaceholder = keySeq.some((e) => e.type === "digits" || e.type === "float");
+    if (!hasMultiCharPlaceholder && keySeq.length < pendingKeys.length) continue;
     let keySeqIdx = 0;
     let pendingIdx = 0;
     let isMatch = true;
     const captures = [];
     let currentDigits = "";
+    let currentFloat = "";
     for (; pendingIdx < pendingKeys.length && keySeqIdx < keySeq.length; pendingIdx++) {
       const elem = keySeq[keySeqIdx];
-      if (elem.type === "digits") {
+      if (elem.type === "float") {
+        if (!/^[0-9.]$/.test(pendingKeys[pendingIdx].key)) {
+          isMatch = false;
+          break;
+        }
+        currentFloat += pendingKeys[pendingIdx].key;
+        if (pendingIdx + 1 < pendingKeys.length && /^[0-9.]$/.test(pendingKeys[pendingIdx + 1].key)) {
+          continue;
+        }
+        if (pendingIdx + 1 >= pendingKeys.length) {
+          const partialVal = parseFloat(currentFloat);
+          if (!isNaN(partialVal)) {
+            captures.push(partialVal);
+            currentFloat = "";
+            keySeqIdx++;
+          }
+          continue;
+        }
+        const floatVal = parseFloat(currentFloat);
+        if (isNaN(floatVal)) {
+          isMatch = false;
+          break;
+        }
+        captures.push(floatVal);
+        currentFloat = "";
+        keySeqIdx++;
+      } else if (elem.type === "digits") {
         if (!/^[0-9]$/.test(pendingKeys[pendingIdx].key)) {
           isMatch = false;
           break;
@@ -1018,31 +1077,31 @@ function fuzzyMatch(pattern, text) {
   return { matched, score, ranges };
 }
 function bindingHasPlaceholders(binding) {
-  return binding.includes("\\d");
+  return binding.includes("\\d") || binding.includes("\\f");
 }
 function hasAnyPlaceholderBindings(bindings) {
   return bindings.some(bindingHasPlaceholders);
 }
 function parseQueryNumbers(query) {
   const trimmed = query.trim();
-  if (/^\d+$/.test(trimmed)) {
+  if (/^\d*\.?\d+$/.test(trimmed)) {
     return {
       text: "",
-      numbers: [parseInt(trimmed, 10)]
+      numbers: [parseFloat(trimmed)]
     };
   }
-  const startMatch = trimmed.match(/^(\d+)\s*(.+)$/);
+  const startMatch = trimmed.match(/^(\d*\.?\d+)\s*(.+)$/);
   if (startMatch) {
     return {
       text: startMatch[2].trim(),
-      numbers: [parseInt(startMatch[1], 10)]
+      numbers: [parseFloat(startMatch[1])]
     };
   }
-  const endMatch = trimmed.match(/^(.+?)\s+(\d+)$/);
+  const endMatch = trimmed.match(/^(.+?)\s+(\d*\.?\d+)$/);
   if (endMatch) {
     return {
       text: endMatch[1].trim(),
-      numbers: [parseInt(endMatch[2], 10)]
+      numbers: [parseFloat(endMatch[2])]
     };
   }
   return { text: trimmed, numbers: [] };
@@ -1133,10 +1192,14 @@ function sequencesMatch(a, b) {
 function isDigit(key) {
   return /^[0-9]$/.test(key);
 }
+function isFloatChar(key) {
+  return /^[0-9.]$/.test(key);
+}
 function initMatchState(seq) {
   return seq.map((elem) => {
     if (elem.type === "digit") return { type: "digit" };
     if (elem.type === "digits") return { type: "digits" };
+    if (elem.type === "float") return { type: "float" };
     return { type: "key", key: elem.key, modifiers: elem.modifiers };
   });
 }
@@ -1167,6 +1230,37 @@ function advanceMatchState(state, pattern, combo) {
         break;
       }
     }
+    if (elem.type === "float" && elem.value === void 0) {
+      if (!elem.partial) break;
+      if (isFloatChar(combo.key)) {
+        const newPartial = (elem.partial || "") + combo.key;
+        if (combo.key === "." && elem.partial.includes(".")) {
+          const floatVal = parseFloat(elem.partial);
+          if (isNaN(floatVal)) {
+            return { status: "failed" };
+          }
+          newState[i] = { type: "float", value: floatVal };
+          pos = i + 1;
+          if (pos >= pattern.length) {
+            return { status: "failed" };
+          }
+          break;
+        }
+        newState[i] = { type: "float", partial: newPartial };
+        return { status: "partial", state: newState };
+      } else {
+        const floatVal = parseFloat(elem.partial);
+        if (isNaN(floatVal)) {
+          return { status: "failed" };
+        }
+        newState[i] = { type: "float", value: floatVal };
+        pos = i + 1;
+        if (pos >= pattern.length) {
+          return { status: "failed" };
+        }
+        break;
+      }
+    }
     pos++;
   }
   if (pos >= pattern.length) {
@@ -1183,6 +1277,11 @@ function advanceMatchState(state, pattern, combo) {
       return { status: "failed" };
     }
     newState[pos] = { type: "digits", partial: combo.key };
+  } else if (currentPattern.type === "float") {
+    if (!isFloatChar(combo.key) || combo.modifiers.ctrl || combo.modifiers.alt || combo.modifiers.meta) {
+      return { status: "failed" };
+    }
+    newState[pos] = { type: "float", partial: combo.key };
   } else {
     if (!matchesKeyElem(combo, currentPattern)) {
       return { status: "failed" };
@@ -1193,30 +1292,41 @@ function advanceMatchState(state, pattern, combo) {
     if (elem.type === "key") return elem.matched === true;
     if (elem.type === "digit") return elem.value !== void 0;
     if (elem.type === "digits") return elem.value !== void 0;
+    if (elem.type === "float") return elem.value !== void 0;
     return false;
   });
   if (isComplete) {
     const captures = newState.filter(
-      (e) => (e.type === "digit" || e.type === "digits") && e.value !== void 0
+      (e) => (e.type === "digit" || e.type === "digits" || e.type === "float") && e.value !== void 0
     ).map((e) => e.value);
     return { status: "matched", state: newState, captures };
   }
   return { status: "partial", state: newState };
 }
 function isCollectingDigits(state) {
-  return state.some((elem) => elem.type === "digits" && elem.partial !== void 0 && elem.value === void 0);
+  return state.some(
+    (elem) => elem.type === "digits" && elem.partial !== void 0 && elem.value === void 0 || elem.type === "float" && elem.partial !== void 0 && elem.value === void 0
+  );
 }
 function finalizeDigits(state) {
   return state.map((elem) => {
     if (elem.type === "digits" && elem.partial !== void 0 && elem.value === void 0) {
       return { type: "digits", value: parseInt(elem.partial, 10) };
     }
+    if (elem.type === "float" && elem.partial !== void 0 && elem.value === void 0) {
+      let partial = elem.partial;
+      if (partial.startsWith(".")) partial = "0" + partial;
+      if (partial.endsWith(".")) partial = partial.slice(0, -1);
+      const val = parseFloat(partial);
+      if (isNaN(val)) return elem;
+      return { type: "float", value: val };
+    }
     return elem;
   });
 }
 function extractMatchCaptures(state) {
   return state.filter(
-    (e) => (e.type === "digit" || e.type === "digits") && e.value !== void 0
+    (e) => (e.type === "digit" || e.type === "digits" || e.type === "float") && e.value !== void 0
   ).map((e) => e.value);
 }
 function useHotkeys(keymap, handlers, options = {}) {
@@ -1349,6 +1459,7 @@ function useHotkeys(keymap, handlers, options = {}) {
             if (elem.type === "key") return elem.matched === true;
             if (elem.type === "digit") return elem.value !== void 0;
             if (elem.type === "digits") return elem.value !== void 0;
+            if (elem.type === "float") return elem.value !== void 0;
             return false;
           });
           if (isComplete) {
@@ -1474,6 +1585,7 @@ function useHotkeys(keymap, handlers, options = {}) {
                     if (elem.type === "key") return elem.matched === true;
                     if (elem.type === "digit") return elem.value !== void 0;
                     if (elem.type === "digits") return elem.value !== void 0;
+                    if (elem.type === "float") return elem.value !== void 0;
                     return false;
                   });
                   if (isComplete) {
@@ -2820,7 +2932,7 @@ function useParamEntry({
   }, []);
   const submitParam = useCallback(() => {
     if (!pendingAction || !paramValue) return;
-    const num = parseInt(paramValue, 10);
+    const num = parseFloat(paramValue);
     if (isNaN(num)) return;
     onSubmit(pendingAction.id, [num]);
     setPendingAction(null);
@@ -3151,6 +3263,9 @@ function renderSeqElem(elem, index, kbdClassName = "kbd-kbd") {
   if (elem.type === "digits") {
     return /* @__PURE__ */ jsx("kbd", { className: kbdClassName, children: "\u27E8##\u27E9" }, index);
   }
+  if (elem.type === "float") {
+    return /* @__PURE__ */ jsx("kbd", { className: kbdClassName, children: "\u27E8#.#\u27E9" }, index);
+  }
   return /* @__PURE__ */ jsxs("kbd", { className: kbdClassName, children: [
     renderModifierIcons(elem.modifiers),
     renderKeyContent(elem.key)
@@ -3171,6 +3286,9 @@ function SeqElemDisplay({ elem }) {
   }
   if (elem.type === "digits") {
     return /* @__PURE__ */ jsx("span", { className: "kbd-placeholder", title: "One or more digits (0-9)", children: "##" });
+  }
+  if (elem.type === "float") {
+    return /* @__PURE__ */ jsx("span", { className: "kbd-placeholder", title: "A number (integer or decimal)", children: "#.#" });
   }
   return /* @__PURE__ */ jsx(KeyCombo, { combo: { key: elem.key, modifiers: elem.modifiers } });
 }
@@ -3496,7 +3614,14 @@ function LookupModal({ defaultBinding = "meta+shift+k" } = {}) {
         const pending = pendingKeys[i];
         const elem = keySeq[keySeqIdx];
         const isDigit2 = /^[0-9]$/.test(pending.key);
-        if (elem.type === "digits") {
+        const isFloatCh = /^[0-9.]$/.test(pending.key);
+        if (elem.type === "float") {
+          if (!isFloatCh) return false;
+          if (i + 1 < pendingKeys.length && /^[0-9.]$/.test(pendingKeys[i + 1].key)) {
+            continue;
+          }
+          keySeqIdx++;
+        } else if (elem.type === "digits") {
           if (!isDigit2) return false;
           if (i + 1 < pendingKeys.length && /^[0-9]$/.test(pendingKeys[i + 1].key)) {
             continue;
@@ -3686,7 +3811,8 @@ function LookupModal({ defaultBinding = "meta+shift+k" } = {}) {
         "input",
         {
           ref: paramEntry.paramInputRef,
-          type: "number",
+          type: "text",
+          inputMode: "decimal",
           className: "kbd-lookup-param-input",
           value: paramEntry.paramValue,
           onChange: (e) => paramEntry.setParamValue(e.target.value),
@@ -3849,6 +3975,9 @@ function SeqElemBadge({ elem }) {
   }
   if (elem.type === "digits") {
     return /* @__PURE__ */ jsx("span", { className: "kbd-placeholder", title: "One or more digits (0-9)", children: "##" });
+  }
+  if (elem.type === "float") {
+    return /* @__PURE__ */ jsx("span", { className: "kbd-placeholder", title: "A number (integer or decimal)", children: "#.#" });
   }
   return /* @__PURE__ */ jsxs(Fragment, { children: [
     elem.modifiers.meta && /* @__PURE__ */ jsx(ModifierIcon, { modifier: "meta", className: "kbd-modifier-icon" }),
@@ -4102,8 +4231,8 @@ function Omnibar({
             {
               ref: paramEntry.paramInputRef,
               type: "text",
-              inputMode: "numeric",
-              pattern: "[0-9]*",
+              inputMode: "decimal",
+              pattern: "[0-9.]*",
               className: "kbd-omnibar-param-input",
               value: paramEntry.paramValue,
               onChange: (e) => paramEntry.setParamValue(e.target.value),
@@ -4249,6 +4378,7 @@ function SequenceModal() {
   useEffect(() => {
     if (!isAwaitingSequence || pendingKeys.length === 0) return;
     const handleKeyDown = (e) => {
+      if (e.shiftKey || e.ctrlKey || e.altKey || e.metaKey) return;
       switch (e.key) {
         case "ArrowDown":
           e.preventDefault();
@@ -4432,6 +4562,9 @@ function SeqElemDisplay2({ elem, className }) {
   }
   if (elem.type === "digits") {
     return /* @__PURE__ */ jsx(Tooltip, { title: "One or more digits (0-9)", children: /* @__PURE__ */ jsx("span", { className: `kbd-placeholder ${className || ""}`, children: "##" }) });
+  }
+  if (elem.type === "float") {
+    return /* @__PURE__ */ jsx(Tooltip, { title: "A number (integer or decimal)", children: /* @__PURE__ */ jsx("span", { className: `kbd-placeholder ${className || ""}`, children: "#.#" }) });
   }
   return /* @__PURE__ */ jsx(KeyDisplay, { combo: { key: elem.key, modifiers: elem.modifiers }, className });
 }
@@ -5173,6 +5306,6 @@ function ShortcutsModal({
   ] }) }) });
 }
 
-export { ACTION_LOOKUP, ACTION_MODAL, ACTION_OMNIBAR, ActionsRegistryContext, Alt, Backspace, Command, Ctrl, DEFAULT_SEQUENCE_TIMEOUT, DIGITS_PLACEHOLDER, DIGIT_PLACEHOLDER, Down, Enter, HotkeysProvider, Kbd, KbdLookup, KbdModal, KbdOmnibar, Kbds, Key, KeybindingEditor, Left, LookupModal, MobileFAB, ModifierIcon, Omnibar, OmnibarEndpointsRegistryContext, Option, Right, SearchIcon2 as SearchIcon, SearchTrigger, SequenceModal, Shift, ShortcutsModal, Up, bindingHasPlaceholders, countPlaceholders, createTwoColumnRenderer, extractCaptures, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, formatKeySeq, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasAnyPlaceholderBindings, hasConflicts, hasDigitPlaceholders, hotkeySequenceToKeySeq, isDigitPlaceholder, isMac, isModifierKey, isPlaceholderSentinel, isSequence, isShiftedSymbol, keySeqToHotkeySequence, normalizeKey, parseHotkeyString, parseKeySeq, parseQueryNumbers, searchActions, useAction, useActions, useActionsRegistry, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useOmnibar, useOmnibarEndpoint, useOmnibarEndpointsRegistry, useParamEntry, useRecordHotkey };
+export { ACTION_LOOKUP, ACTION_MODAL, ACTION_OMNIBAR, ActionsRegistryContext, Alt, Backspace, Command, Ctrl, DEFAULT_SEQUENCE_TIMEOUT, DIGITS_PLACEHOLDER, DIGIT_PLACEHOLDER, Down, Enter, FLOAT_PLACEHOLDER, HotkeysProvider, Kbd, KbdLookup, KbdModal, KbdOmnibar, Kbds, Key, KeybindingEditor, Left, LookupModal, MobileFAB, ModifierIcon, Omnibar, OmnibarEndpointsRegistryContext, Option, Right, SearchIcon2 as SearchIcon, SearchTrigger, SequenceModal, Shift, ShortcutsModal, Up, bindingHasPlaceholders, countPlaceholders, createTwoColumnRenderer, extractCaptures, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, formatKeySeq, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasAnyPlaceholderBindings, hasConflicts, hasDigitPlaceholders, hotkeySequenceToKeySeq, isDigitPlaceholder, isMac, isModifierKey, isPlaceholderSentinel, isSequence, isShiftedSymbol, keySeqToHotkeySequence, normalizeKey, parseHotkeyString, parseKeySeq, parseQueryNumbers, searchActions, useAction, useActions, useActionsRegistry, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useOmnibar, useOmnibarEndpoint, useOmnibarEndpointsRegistry, useParamEntry, useRecordHotkey };
 //# sourceMappingURL=index.js.map
 //# sourceMappingURL=index.js.map
