@@ -6,11 +6,21 @@ Omnibars, editable hotkeys, search, and keyboard-navigation for React apps.
 
 **[📖 Documentation & Demos →][kbd.rbw.sh]**
 
-Also in production at [ctbk.dev] and [awair.runsascoded.com].
+Also in production at [ctbk.dev] ([GitHub][ctbk-gh] · [usage][ctbk-usage]), [awair.runsascoded.com] ([GitHub][awair-gh] · [usage][awair-usage]), [jct.rbw.sh] ([GitHub][jct-gh] · [usage][jct-usage]), and [voro.rbw.sh] ([GitHub][voro-gh] · [usage][voro-usage]).
 
 [kbd.rbw.sh]: https://kbd.rbw.sh
 [ctbk.dev]: https://ctbk.dev
+[ctbk-gh]: https://github.com/hudcostreets/ctbk.dev
+[ctbk-usage]: https://github.com/search?q=repo%3Ahudcostreets%2Fctbk.dev+use-kbd&type=code
 [awair.runsascoded.com]: https://awair.runsascoded.com
+[awair-gh]: https://github.com/runsascoded/awair
+[awair-usage]: https://github.com/search?q=repo%3Arunsascoded%2Fawair+use-kbd&type=code
+[jct.rbw.sh]: https://jct.rbw.sh
+[jct-gh]: https://github.com/runsascoded/jc-taxes
+[jct-usage]: https://github.com/search?q=repo%3Arunsascoded%2Fjc-taxes+use-kbd&type=code
+[voro.rbw.sh]: https://voro.rbw.sh
+[voro-gh]: https://github.com/runsascoded/ImageVoronoi
+[voro-usage]: https://github.com/search?q=repo%3Arunsascoded%2FImageVoronoi+use-kbd&type=code
 
 ## Quick Start
 
