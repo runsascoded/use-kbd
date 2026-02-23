@@ -2,7 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/use-kbd.svg)](https://www.npmjs.com/package/use-kbd)
 
-Omnibars, editable hotkeys, search, and keyboard-navigation for React apps.
+Keyboard-navigation and -control for the web: omnibars, editable hotkeys, search, modes/sequences
 
 **[📖 Documentation & Demos →][kbd.rbw.sh]**
 
@@ -139,7 +139,61 @@ useAction('nav:down-n', {
 })
 ```
 
+Use `\f` for float placeholders (integers or decimals):
+
+```tsx
+useAction('transform:scale', {
+  label: 'Scale values by N',
+  defaultBindings: ['o \\f'],  // e.g., "o 1.5" scales by 1.5
+  handler: (e, captures) => {
+    const factor = captures?.[0] ?? 1
+    scaleBy(factor)
+  },
+})
+```
+
 When a user selects a placeholder action from the Omnibar or LookupModal without providing a number, a parameter entry prompt appears to collect the value.
+
+### Modes
+
+Modes are sticky shortcut scopes—enter a mode via a key sequence, then use short single-key bindings that only exist while the mode is active. Escape exits the mode.
+
+```tsx
+import { useMode, useAction, ModeIndicator } from 'use-kbd'
+
+function Viewport() {
+  const mode = useMode('viewport', {
+    label: 'Pan & Zoom',
+    color: '#4fc3f7',
+    defaultBindings: ['g v'],
+  })
+
+  useAction('viewport:pan-left', {
+    label: 'Pan left',
+    mode: 'viewport',                // Only active when mode is active
+    defaultBindings: ['h', 'left'],
+    handler: () => panLeft(),
+  })
+
+  useAction('viewport:zoom-in', {
+    label: 'Zoom in',
+    mode: 'viewport',
+    defaultBindings: ['='],
+    handler: () => zoomIn(),
+  })
+
+  return <ModeIndicator position="bottom-left" />
+}
+```
+
+**Key behaviors:**
+
+- **Global passthrough** – Keys not bound in the mode pass through to global bindings (default: `passthrough: true`)
+- **Mode shadows global** – If a mode action and a global action share a key, the mode action wins while active
+- **Toggle** – The activation sequence also deactivates the mode (default: `toggle: true`)
+- **Escape exits** – Pressing Escape deactivates the mode (default: `escapeExits: true`)
+- **Omnibar integration** – Mode-scoped actions appear in the Omnibar with a mode badge; executing one auto-activates the mode
+- **ShortcutsModal** – Mode actions appear in their own group with a colored left border
 
 ### Key Aliases
 
@@ -271,6 +325,26 @@ Shows pending keys and available completions during sequence input. No props nee
 
 ```tsx
 <SequenceModal />
+```
+
+### `<ModeIndicator>`
+
+Fixed-position pill showing the active mode. Automatically hides when no mode is active.
+
+```tsx
+<ModeIndicator position="bottom-right" />  {/* or: bottom-left, top-right, top-left */}
+```
+
+### `<SpeedDial>`
+
+Floating action button (FAB) with expandable secondary actions. Opens the omnibar by default, with optional extra actions.
+
+```tsx
+<SpeedDial
+  actions={[
+    { key: 'github', label: 'GitHub', icon: <GitHubIcon />, href: 'https://github.com/...' },
+  ]}
+/>
 ```
 
 ## Styling
@@ -430,6 +504,48 @@ paramEntry.startParamEntry({ id: 'nav:down-n', label: 'Down N rows' })
 
 // Render: paramEntry.isEnteringParam, paramEntry.paramInputRef,
 //         paramEntry.paramValue, paramEntry.handleParamKeyDown
+```
+
+### `useMode(id, config)`
+
+Register a keyboard mode. See [Modes](#modes) for details.
+
+```tsx
+const mode = useMode('edit', {
+  label: 'Edit Mode',
+  color: '#ff9800',
+  defaultBindings: ['g e'],
+})
+// mode.active, mode.activate(), mode.deactivate(), mode.toggle()
+```
+
+### `useOmnibarEndpoint(id, config)`
+
+Add custom result sources to the Omnibar (e.g., search APIs, in-memory data):
+
+```tsx
+useOmnibarEndpoint('search', {
+  group: 'Search Results',
+  priority: 50,
+  minQueryLength: 2,
+  fetch: async (query, signal) => {
+    const results = await searchAPI(query, { signal })
+    return { entries: results.map(r => ({ id: r.id, label: r.title, handler: () => navigate(r.url) })) }
+  },
+})
+```
+
+Sync endpoints skip debouncing for instant results:
+
+```tsx
+useOmnibarEndpoint('filters', {
+  group: 'Quick Filters',
+  filter: (query) => ({
+    entries: allFilters
+      .filter(f => f.label.toLowerCase().includes(query.toLowerCase()))
+      .map(f => ({ id: f.id, label: f.label, handler: f.apply })),
+  }),
+})
 ```
 
 ### `useEditableHotkeys(defaults, handlers, options?)`

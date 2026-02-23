@@ -1,17 +1,41 @@
 # use-kbd Roadmap
 
-## Future Ideas
+## Implemented
 
 ### Built-in Modal Editing UI
 
-Move more generic logic into ShortcutsModal:
+Fully implemented in `ShortcutsModal`:
 
-1. Tab navigation (focus ring, Arrow/Tab key handling)
-2. Hotkey recording (`useRecordHotkey` already exists)
-3. Conflict detection and display
-4. Add/remove binding UI
+- Tab/Shift+Tab navigation between editable bindings
+- Hotkey recording via `useRecordHotkey`
+- Real-time conflict detection and warning UI
+- Add/remove binding UI with protected binding support
+- Export/import bindings as JSON
+- Custom group renderers via `groupRenderers` prop
 
-Expose customization via `renderGroup` for app-specific layouts.
+### Advanced Omnibar
+
+Implemented via `useOmnibarEndpoint`:
+
+- Async endpoints (remote API calls with debouncing)
+- Sync endpoints (in-memory filtering, instant results)
+- Pagination (scroll, buttons, or none)
+- Priority-based result ordering
+- Number-aware search for digit/float placeholder actions
+
+### Modes
+
+Implemented via `useMode`:
+
+- Sticky shortcut scopes activated via key sequences
+- Mode-scoped actions (only active when mode is active)
+- Global passthrough for unbound keys
+- Mode shadowing (mode actions take priority over globals on shared keys)
+- `ModeIndicator` component with configurable position and color
+- Omnibar integration with mode badges and auto-activation
+- ShortcutsModal groups with colored left border
+
+## Future Ideas
 
 ### Type Safety
 
@@ -29,19 +53,6 @@ Expose customization via `renderGroup` for app-specific layouts.
 1. **Icons** (default): `⌘ ↓` - Current SVG icon approach
 2. **Short/Emacs**: `C-↓` or `M-↓` - Compact text notation
 3. **Full text**: `ctrl down` - Fully spelled out
-
-### Advanced Omnibar
-
-Make the omnibar a universal search/navigation hub with multiple result sources:
-
-```tsx
-<Omnibar
-  resultProviders={[
-    { type: 'actions', priority: 1 },
-    { type: 'search', query: async (q) => searchAPI(q), priority: 2 },
-  ]}
-/>
-```
 
 ### Action Sort Order
 
