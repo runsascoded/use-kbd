@@ -6,17 +6,25 @@ Keyboard-navigation and -control for the web: omnibars, editable hotkeys, search
 
 **[📖 Documentation & Demos →][kbd.rbw.sh]**
 
-Also in production at [ctbk.dev] ([GitHub][ctbk-gh] · [usage][ctbk-usage]), [awair.runsascoded.com] ([GitHub][awair-gh] · [usage][awair-usage]), [jct.rbw.sh] ([GitHub][jct-gh] · [usage][jct-usage]), and [voro.rbw.sh] ([GitHub][voro-gh] · [usage][voro-usage]).
+## Used By
+
+- [ctbk.dev] ([GitHub][ctbk-gh] · [usage][ctbk-usage] · [diff][ctbk-diff]) — Citi Bike trip data explorer
+- [awair.runsascoded.com] ([GitHub][awair-gh] · [usage][awair-usage] · [diff][awair-diff]) — Awair air quality dashboard
+- [jct.rbw.sh] ([GitHub][jct-gh] · [usage][jct-usage] · [diff][jct-diff]) — Jersey City 3D tax map
+- [voro.rbw.sh] ([GitHub][voro-gh] · [usage][voro-usage]) — Image Voronoi generator
 
 [kbd.rbw.sh]: https://kbd.rbw.sh
 [ctbk.dev]: https://ctbk.dev
 [ctbk-gh]: https://github.com/hudcostreets/ctbk.dev
+[ctbk-diff]: https://github.com/hudcostreets/ctbk.dev/compare/pre-use-kbd...use-kbd-demo
 [ctbk-usage]: https://github.com/search?q=repo%3Ahudcostreets%2Fctbk.dev+use-kbd&type=code
 [awair.runsascoded.com]: https://awair.runsascoded.com
 [awair-gh]: https://github.com/runsascoded/awair
+[awair-diff]: https://github.com/runsascoded/awair/compare/pre-use-kbd...use-kbd-demo
 [awair-usage]: https://github.com/search?q=repo%3Arunsascoded%2Fawair+use-kbd&type=code
 [jct.rbw.sh]: https://jct.rbw.sh
-[jct-gh]: https://github.com/runsascoded/jc-taxes
+[jct-gh]: https://github.com/neighbor-ryan/jc-taxes
+[jct-diff]: https://github.com/neighbor-ryan/jc-taxes/compare/pre-use-kbd...use-kbd-demo
 [jct-usage]: https://github.com/search?q=repo%3Arunsascoded%2Fjc-taxes+use-kbd&type=code
 [voro.rbw.sh]: https://voro.rbw.sh
 [voro-gh]: https://github.com/runsascoded/ImageVoronoi
@@ -370,10 +378,6 @@ Customize with CSS variables:
 ```
 
 Dark mode is automatically applied via `[data-theme="dark"]` or `.dark` selectors.
-
-See [awair's use-kbd-demo branch] for a real-world integration example.
-
-[awair's use-kbd-demo branch]: https://github.com/runsascoded/awair/compare/use-kbd-demo~1...use-kbd-demo
 
 ## Mobile Support
 
