@@ -1597,3 +1597,215 @@ test.describe('Calendar Demo', () => {
     await expect(todayCell).toBeVisible()
   })
 })
+
+test.describe('Modes', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.removeItem('use-kbd-demo')
+      localStorage.removeItem('use-kbd-demo-removed')
+      localStorage.removeItem('use-kbd-demo-recents')
+    })
+    await page.goto('/canvas')
+    await expect(page.locator('.kbd-speed-dial-primary')).toBeVisible()
+  })
+
+  test('mode-scoped keys are inactive when mode is off', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    // 'h' is bound to Pan left in viewport mode, but mode is not active
+    // So pressing 'h' should NOT create a viewport status element
+    await page.keyboard.press('h')
+    await page.waitForTimeout(200)
+
+    await expect(page.locator('[data-testid="viewport-status"]')).not.toBeVisible()
+  })
+
+  test('activate via sequence, use keys, escape exits', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    // Activate Pan & Zoom mode via g v
+    await page.keyboard.press('g')
+    await page.waitForTimeout(100)
+    await page.keyboard.press('v')
+    await page.waitForTimeout(200)
+
+    // ModeIndicator should be visible
+    const indicator = page.locator('.kbd-mode-indicator')
+    await expect(indicator).toBeVisible()
+    await expect(indicator.locator('.kbd-mode-indicator-label')).toHaveText('Pan & Zoom')
+
+    // Press 'l' to pan right (x -= 50)
+    await page.keyboard.press('l')
+    await page.waitForTimeout(200)
+
+    // Viewport status should show offset
+    await expect(page.locator('[data-testid="viewport-status"]')).toContainText('x=-50')
+
+    // Press Escape to exit mode
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(200)
+
+    // ModeIndicator should be gone
+    await expect(indicator).not.toBeVisible()
+  })
+
+  test('activation toggles off', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    const indicator = page.locator('.kbd-mode-indicator')
+
+    // Enter mode
+    await page.keyboard.press('g')
+    await page.waitForTimeout(100)
+    await page.keyboard.press('v')
+    await page.waitForTimeout(200)
+    await expect(indicator).toBeVisible()
+
+    // Toggle off with same sequence
+    await page.keyboard.press('g')
+    await page.waitForTimeout(100)
+    await page.keyboard.press('v')
+    await page.waitForTimeout(200)
+    await expect(indicator).not.toBeVisible()
+  })
+
+  test('global passthrough: tool shortcut works in mode', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    // Default tool is pen
+    await expect(page.locator('.tool-btn.active')).toHaveText('\u270f')
+
+    // Enter viewport mode
+    await page.keyboard.press('g')
+    await page.waitForTimeout(100)
+    await page.keyboard.press('v')
+    await page.waitForTimeout(200)
+    await expect(page.locator('.kbd-mode-indicator')).toBeVisible()
+
+    // Press 'p' (pen tool) - not bound in viewport mode, so should pass through to global
+    await page.keyboard.press('p')
+    await page.waitForTimeout(200)
+
+    // Tool should still be pen (it was already pen, so verify it didn't break)
+    await expect(page.locator('.tool-btn.active')).toHaveText('\u270f')
+
+    // Switch to line tool via 'r' (rectangle) which isn't bound in viewport mode
+    await page.keyboard.press('r')
+    await page.waitForTimeout(200)
+    await expect(page.locator('.tool-btn.active')).toHaveText('\u25a2')
+  })
+
+  test('mode shadows global: e triggers export-view in mode, eraser outside', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    // Outside mode: 'e' should switch to eraser
+    await page.keyboard.press('e')
+    await page.waitForTimeout(200)
+    await expect(page.locator('.tool-btn.active')).toHaveText('\u232b')
+
+    // Switch back to pen
+    await page.keyboard.press('p')
+    await page.waitForTimeout(200)
+    await expect(page.locator('.tool-btn.active')).toHaveText('\u270f')
+
+    // Enter viewport mode
+    await page.keyboard.press('g')
+    await page.waitForTimeout(100)
+    await page.keyboard.press('v')
+    await page.waitForTimeout(200)
+
+    // In mode: 'e' should trigger export-view (not eraser)
+    // The eraser tool should NOT become active
+    await page.keyboard.press('e')
+    await page.waitForTimeout(200)
+    await expect(page.locator('.tool-btn.active')).toHaveText('\u270f')
+
+    // Exit mode
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(200)
+
+    // Outside mode again: 'e' should switch to eraser
+    await page.keyboard.press('e')
+    await page.waitForTimeout(200)
+    await expect(page.locator('.tool-btn.active')).toHaveText('\u232b')
+  })
+
+  test('omnibar shows mode badge and auto-activates mode', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    // Open omnibar
+    await page.keyboard.press('Meta+k')
+    await page.waitForSelector('.kbd-omnibar', { timeout: 5000 })
+
+    // Search for "pan left"
+    await page.keyboard.type('pan left')
+    await page.waitForTimeout(300)
+
+    // Should show Pan left result with mode badge
+    await expect(page.locator('.kbd-omnibar-result-label', { hasText: 'Pan left' })).toBeVisible()
+    await expect(page.locator('.kbd-mode-badge', { hasText: 'Pan & Zoom' })).toBeVisible()
+
+    // Execute it
+    await page.keyboard.press('Enter')
+    await page.waitForTimeout(300)
+
+    // Mode should auto-activate and action should fire
+    await expect(page.locator('.kbd-mode-indicator')).toBeVisible()
+    await expect(page.locator('[data-testid="viewport-status"]')).toContainText('x=50')
+  })
+
+  test('ShortcutsModal shows mode group with colored border', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    // Open shortcuts modal
+    await page.keyboard.press('?')
+    await page.waitForSelector('.kbd-modal', { timeout: 5000 })
+
+    // Should have a "Pan & Zoom" group with mode styling
+    const modeGroup = page.locator('.kbd-mode-group')
+    await expect(modeGroup).toBeVisible()
+    await expect(modeGroup.locator('.kbd-group-title')).toHaveText('Pan & Zoom')
+
+    // Should contain mode actions
+    await expect(modeGroup.locator('.kbd-action', { hasText: 'Pan left' })).toBeVisible()
+    await expect(modeGroup.locator('.kbd-action', { hasText: 'Zoom in' })).toBeVisible()
+
+    await page.keyboard.press('Escape')
+  })
+
+  test('ModeIndicator lifecycle: enter, exit, re-enter, dismiss', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    const indicator = page.locator('.kbd-mode-indicator')
+
+    // Initially hidden
+    await expect(indicator).not.toBeVisible()
+
+    // Enter mode
+    await page.keyboard.press('g')
+    await page.waitForTimeout(100)
+    await page.keyboard.press('v')
+    await page.waitForTimeout(200)
+
+    // Visible with correct label and color
+    await expect(indicator).toBeVisible()
+    await expect(indicator.locator('.kbd-mode-indicator-label')).toHaveText('Pan & Zoom')
+
+    // Exit via Escape
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(200)
+    await expect(indicator).not.toBeVisible()
+
+    // Re-enter
+    await page.keyboard.press('g')
+    await page.waitForTimeout(100)
+    await page.keyboard.press('v')
+    await page.waitForTimeout(200)
+    await expect(indicator).toBeVisible()
+
+    // Dismiss via button click
+    await indicator.locator('.kbd-mode-indicator-dismiss').click()
+    await page.waitForTimeout(200)
+    await expect(indicator).not.toBeVisible()
+  })
+})

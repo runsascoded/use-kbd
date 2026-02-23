@@ -1,6 +1,6 @@
 import { Tooltip } from '@mui/material'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Kbd, KbdModal, ShortcutsModal, useAction, useActions } from 'use-kbd'
+import { Kbd, KbdModal, ModeIndicator, ShortcutsModal, useAction, useActions, useMode } from 'use-kbd'
 import 'use-kbd/styles.css'
 import { useTheme } from '../contexts/ThemeContext'
 
@@ -314,6 +314,78 @@ function Canvas() {
     }, [tool, color, size, strokes.length]),
   })
 
+  // Pan & Zoom mode
+  const [viewOffset, setViewOffset] = useState({ x: 0, y: 0 })
+  const [zoom, setZoom] = useState(1)
+
+  const viewportMode = useMode('canvas:viewport', {
+    label: 'Pan & Zoom',
+    color: '#4fc3f7',
+    defaultBindings: ['g v'],
+  })
+
+  useAction('viewport:left', {
+    label: 'Pan left',
+    mode: 'canvas:viewport',
+    defaultBindings: ['arrowleft', 'h'],
+    handler: useCallback(() => setViewOffset(v => ({ ...v, x: v.x + 50 })), []),
+  })
+
+  useAction('viewport:right', {
+    label: 'Pan right',
+    mode: 'canvas:viewport',
+    defaultBindings: ['arrowright', 'l'],
+    handler: useCallback(() => setViewOffset(v => ({ ...v, x: v.x - 50 })), []),
+  })
+
+  useAction('viewport:up', {
+    label: 'Pan up',
+    mode: 'canvas:viewport',
+    defaultBindings: ['arrowup', 'k'],
+    handler: useCallback(() => setViewOffset(v => ({ ...v, y: v.y + 50 })), []),
+  })
+
+  useAction('viewport:down', {
+    label: 'Pan down',
+    mode: 'canvas:viewport',
+    defaultBindings: ['arrowdown', 'j'],
+    handler: useCallback(() => setViewOffset(v => ({ ...v, y: v.y - 50 })), []),
+  })
+
+  useAction('viewport:zoom-in', {
+    label: 'Zoom in',
+    mode: 'canvas:viewport',
+    defaultBindings: ['='],
+    handler: useCallback(() => setZoom(z => z * 1.25), []),
+  })
+
+  useAction('viewport:zoom-out', {
+    label: 'Zoom out',
+    mode: 'canvas:viewport',
+    defaultBindings: ['-'],
+    handler: useCallback(() => setZoom(z => z / 1.25), []),
+  })
+
+  useAction('viewport:reset', {
+    label: 'Reset view',
+    mode: 'canvas:viewport',
+    defaultBindings: ['0'],
+    handler: useCallback(() => {
+      setViewOffset({ x: 0, y: 0 })
+      setZoom(1)
+    }, []),
+  })
+
+  useAction('viewport:export-view', {
+    label: 'Export view',
+    mode: 'canvas:viewport',
+    defaultBindings: ['e'],
+    handler: useCallback(() => {
+      console.log('Export view:', { viewOffset, zoom })
+    }, [viewOffset, zoom]),
+  })
+
+  const isDefaultView = viewOffset.x === 0 && viewOffset.y === 0 && zoom === 1
 
   return (
     <div className="canvas-app">
@@ -370,15 +442,20 @@ function Canvas() {
         </div>
       </div>
 
-      <div className="canvas-container">
-        <canvas
-          ref={canvasRef}
-          className="drawing-canvas"
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          onPointerLeave={handlePointerUp}
-        />
+      <div className={`canvas-container${viewportMode.active ? ' canvas-viewport-active' : ''}`}>
+        <div
+          className="canvas-viewport"
+          style={{ transform: `translate(${viewOffset.x}px, ${viewOffset.y}px) scale(${zoom})` }}
+        >
+          <canvas
+            ref={canvasRef}
+            className="drawing-canvas"
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerLeave={handlePointerUp}
+          />
+        </div>
       </div>
 
       <div className="canvas-status">
@@ -386,12 +463,17 @@ function Canvas() {
         <span>Size: {size}px</span>
         <span>Strokes: {strokes.length}</span>
         <span>History: {history.length}</span>
+        {!isDefaultView && (
+          <span data-testid="viewport-status">View: x={viewOffset.x} y={viewOffset.y} zoom={Math.round(zoom * 100)}%</span>
+        )}
       </div>
+
+      <ModeIndicator position="bottom-left" />
 
       <ShortcutsModal
         editable
         multipleBindings={false}
-        groupOrder={['Canvas: Tools', 'Canvas: Colors', 'Canvas: Brush Size', 'Canvas: Edit', 'Global', 'Navigation']}
+        groupOrder={['Canvas: Tools', 'Canvas: Colors', 'Canvas: Brush Size', 'Canvas: Edit', 'Pan & Zoom', 'Global', 'Navigation']}
       />
     </div>
   )
