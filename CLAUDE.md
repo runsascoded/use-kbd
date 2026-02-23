@@ -1,0 +1,2 @@
+- Abbreviations: SM = ShortcutModal, SeqM = SequenceModal, LM = LookupModal, OB = Omnibar
+- Publishing to npm happens via GitHub Actions, not locally. Don't run `pnpm publish` or `npm publish`.
