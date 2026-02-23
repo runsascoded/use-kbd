@@ -68,11 +68,23 @@ function Canvas() {
   useEffect(() => {
     sessionStorage.setItem(`${STORAGE_KEY}-size`, JSON.stringify(size))
   }, [size])
+
   const [isDrawing, setIsDrawing] = useState(false)
-  const [strokes, setStrokes] = useState<Stroke[]>([])
+  const [strokes, setStrokes] = useState<Stroke[]>(() => getStoredValue('strokes', []))
   const [currentStroke, setCurrentStroke] = useState<Stroke | null>(null)
-  const [history, setHistory] = useState<Stroke[][]>([])
-  const [redoStack, setRedoStack] = useState<Stroke[][]>([])
+  const [history, setHistory] = useState<Stroke[][]>(() => getStoredValue('history', []))
+  const [redoStack, setRedoStack] = useState<Stroke[][]>(() => getStoredValue('redoStack', []))
+
+  // Persist canvas state to sessionStorage
+  useEffect(() => {
+    sessionStorage.setItem(`${STORAGE_KEY}-strokes`, JSON.stringify(strokes))
+  }, [strokes])
+  useEffect(() => {
+    sessionStorage.setItem(`${STORAGE_KEY}-history`, JSON.stringify(history))
+  }, [history])
+  useEffect(() => {
+    sessionStorage.setItem(`${STORAGE_KEY}-redoStack`, JSON.stringify(redoStack))
+  }, [redoStack])
 
   // Draw all strokes to canvas
   const redraw = useCallback(() => {
@@ -315,8 +327,14 @@ function Canvas() {
   })
 
   // Pan & Zoom mode
-  const [viewOffset, setViewOffset] = useState({ x: 0, y: 0 })
-  const [zoom, setZoom] = useState(1)
+  const [viewOffset, setViewOffset] = useState(() => getStoredValue('viewOffset', { x: 0, y: 0 }))
+  const [zoom, setZoom] = useState(() => getStoredValue('zoom', 1))
+  useEffect(() => {
+    sessionStorage.setItem(`${STORAGE_KEY}-viewOffset`, JSON.stringify(viewOffset))
+  }, [viewOffset])
+  useEffect(() => {
+    sessionStorage.setItem(`${STORAGE_KEY}-zoom`, JSON.stringify(zoom))
+  }, [zoom])
 
   const viewportMode = useMode('canvas:viewport', {
     label: 'Pan & Zoom',
@@ -328,28 +346,28 @@ function Canvas() {
     label: 'Pan left',
     mode: 'canvas:viewport',
     defaultBindings: ['arrowleft', 'h'],
-    handler: useCallback(() => setViewOffset(v => ({ ...v, x: v.x + 50 })), []),
+    handler: useCallback(() => setViewOffset(v => ({ ...v, x: v.x - 50 })), []),
   })
 
   useAction('viewport:right', {
     label: 'Pan right',
     mode: 'canvas:viewport',
     defaultBindings: ['arrowright', 'l'],
-    handler: useCallback(() => setViewOffset(v => ({ ...v, x: v.x - 50 })), []),
+    handler: useCallback(() => setViewOffset(v => ({ ...v, x: v.x + 50 })), []),
   })
 
   useAction('viewport:up', {
     label: 'Pan up',
     mode: 'canvas:viewport',
     defaultBindings: ['arrowup', 'k'],
-    handler: useCallback(() => setViewOffset(v => ({ ...v, y: v.y + 50 })), []),
+    handler: useCallback(() => setViewOffset(v => ({ ...v, y: v.y - 50 })), []),
   })
 
   useAction('viewport:down', {
     label: 'Pan down',
     mode: 'canvas:viewport',
     defaultBindings: ['arrowdown', 'j'],
-    handler: useCallback(() => setViewOffset(v => ({ ...v, y: v.y - 50 })), []),
+    handler: useCallback(() => setViewOffset(v => ({ ...v, y: v.y + 50 })), []),
   })
 
   useAction('viewport:zoom-in', {

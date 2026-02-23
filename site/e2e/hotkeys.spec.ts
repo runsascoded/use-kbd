@@ -1604,6 +1604,10 @@ test.describe('Modes', () => {
       localStorage.removeItem('use-kbd-demo')
       localStorage.removeItem('use-kbd-demo-removed')
       localStorage.removeItem('use-kbd-demo-recents')
+      // Clear canvas sessionStorage state
+      for (const key of Object.keys(sessionStorage)) {
+        if (key.startsWith('use-kbd-canvas')) sessionStorage.removeItem(key)
+      }
     })
     await page.goto('/canvas')
     await expect(page.locator('.kbd-speed-dial-primary')).toBeVisible()
@@ -1634,12 +1638,12 @@ test.describe('Modes', () => {
     await expect(indicator).toBeVisible()
     await expect(indicator.locator('.kbd-mode-indicator-label')).toHaveText('Pan & Zoom')
 
-    // Press 'l' to pan right (x -= 50)
+    // Press 'l' to pan right (x += 50)
     await page.keyboard.press('l')
     await page.waitForTimeout(200)
 
     // Viewport status should show offset
-    await expect(page.locator('[data-testid="viewport-status"]')).toContainText('x=-50')
+    await expect(page.locator('[data-testid="viewport-status"]')).toContainText('x=50')
 
     // Press Escape to exit mode
     await page.keyboard.press('Escape')
@@ -1751,7 +1755,7 @@ test.describe('Modes', () => {
 
     // Mode should auto-activate and action should fire
     await expect(page.locator('.kbd-mode-indicator')).toBeVisible()
-    await expect(page.locator('[data-testid="viewport-status"]')).toContainText('x=50')
+    await expect(page.locator('[data-testid="viewport-status"]')).toContainText('x=-50')
   })
 
   test('ShortcutsModal shows mode group with colored border', async ({ page }) => {
@@ -1764,7 +1768,10 @@ test.describe('Modes', () => {
     // Should have a "Pan & Zoom" group with mode styling
     const modeGroup = page.locator('.kbd-mode-group')
     await expect(modeGroup).toBeVisible()
-    await expect(modeGroup.locator('.kbd-group-title')).toHaveText('Pan & Zoom')
+    await expect(modeGroup.locator('.kbd-group-title')).toContainText('Pan & Zoom')
+
+    // Should show activation binding in group title
+    await expect(modeGroup.locator('.kbd-mode-activation')).toBeVisible()
 
     // Should contain mode actions
     await expect(modeGroup.locator('.kbd-action', { hasText: 'Pan left' })).toBeVisible()

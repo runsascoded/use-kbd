@@ -1435,6 +1435,19 @@
   padding-left: calc(var(--kbd-padding) - 3px);
 }
 
+.kbd-mode-group .kbd-group-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.kbd-mode-activation {
+  font-size: 0.6875rem;
+  text-transform: none;
+  letter-spacing: normal;
+  opacity: 0.8;
+}
+
 /* === Mode badge in Omnibar === */
 .kbd-mode-badge {
   font-size: 0.6875rem;

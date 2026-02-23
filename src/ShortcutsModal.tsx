@@ -1,5 +1,5 @@
 import { ComponentType, createContext, Fragment, MouseEvent, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { ACTION_MODAL, DEFAULT_SEQUENCE_TIMEOUT } from './constants'
+import { ACTION_MODAL, ACTION_MODE_PREFIX, DEFAULT_SEQUENCE_TIMEOUT } from './constants'
 import { useMaybeHotkeysContext } from './HotkeysProvider'
 import { renderModifierIcons, renderKeyContent } from './KeyElements'
 import { useAction } from './useAction'
@@ -76,6 +76,8 @@ export interface ShortcutGroup {
     id: string
     color?: string
     active: boolean
+    /** Key bindings to activate this mode (e.g., ['g v']) */
+    activationBindings: string[]
   }
 }
 
@@ -277,10 +279,14 @@ function organizeShortcuts(
     if (!actionMode || !modesMap) return undefined
     const mode = modesMap.get(actionMode)
     if (!mode) return undefined
+    // Look up activation bindings from the keymap
+    const activationActionId = `${ACTION_MODE_PREFIX}${actionMode}`
+    const activationBindings = actionBindings.get(activationActionId) ?? []
     return {
       id: actionMode,
       color: mode.config.color,
       active: activeMode === actionMode,
+      activationBindings,
     }
   }
 
@@ -1286,7 +1292,19 @@ export function ShortcutsModal({
               className={`kbd-group${group.mode ? ' kbd-mode-group' : ''}`}
               style={group.mode?.color ? { '--kbd-mode-color': group.mode.color } as React.CSSProperties : undefined}
             >
-              <h3 className="kbd-group-title">{group.name}</h3>
+              <h3 className="kbd-group-title">
+                {group.name}
+                {group.mode?.activationBindings?.map(binding => (
+                  <kbd key={binding} className="kbd-kbd kbd-mode-activation">
+                    {parseKeySeq(binding).map((elem, i) => (
+                      <Fragment key={i}>
+                        {i > 0 && <span className="kbd-sequence-sep"> </span>}
+                        <SeqElemDisplay elem={elem} />
+                      </Fragment>
+                    ))}
+                  </kbd>
+                ))}
+              </h3>
               {renderGroup(group)}
             </div>
           ))}
