@@ -157,6 +157,8 @@ interface ActionDefinition {
     description?: string;
     /** Group for organizing in shortcuts modal (e.g., "Metrics", "Time Range") */
     group?: string;
+    /** Mode ID this action belongs to (only active when mode is active) */
+    mode?: string;
     /** Additional search keywords */
     keywords?: string[];
     /** Icon identifier (user provides rendering) */
@@ -190,6 +192,8 @@ interface ActionSearchResult {
     hasPlaceholders?: boolean;
     /** Captured digit values from query (e.g., "smooth 3" → [3]) */
     captures?: number[];
+    /** Mode ID this action belongs to (if any) */
+    mode?: string;
 }
 /**
  * A possible completion for a partially-typed sequence
@@ -209,6 +213,53 @@ interface SequenceCompletion {
     isComplete: boolean;
     /** Captured digit values from \d and \d+ placeholders */
     captures?: number[];
+}
+/**
+ * Configuration for a keyboard mode (sticky shortcut scope).
+ */
+interface ModeConfig {
+    /** Display label for the mode */
+    label: string;
+    /** Accent color for mode indicator and UI highlights */
+    color?: string;
+    /** Default key bindings to activate the mode (e.g., ['g n']) */
+    defaultBindings?: string[];
+    /** Whether the activation binding also deactivates (default: true) */
+    toggle?: boolean;
+    /** Whether Escape exits the mode (default: true) */
+    escapeExits?: boolean;
+    /** Whether global shortcuts pass through when mode is active (default: true) */
+    passthrough?: boolean;
+    /** Called when mode is activated */
+    onActivate?: () => void;
+    /** Called when mode is deactivated */
+    onDeactivate?: () => void;
+}
+/**
+ * Internal registered mode state
+ */
+interface RegisteredMode {
+    config: ModeConfig;
+    registeredAt: number;
+}
+/**
+ * Return value from useMode hook
+ */
+interface ModeState {
+    /** Mode ID */
+    id: string;
+    /** Whether this mode is currently active */
+    active: boolean;
+    /** Display label */
+    label: string;
+    /** Accent color */
+    color?: string;
+    /** Programmatically activate this mode */
+    activate: () => void;
+    /** Programmatically deactivate this mode */
+    deactivate: () => void;
+    /** Toggle this mode on/off */
+    toggle: () => void;
 }
 /**
  * Base fields for all omnibar entries
@@ -716,6 +767,14 @@ interface ShortcutGroup {
         description?: string;
         bindings: string[];
     }>;
+    /** Mode metadata (if this group represents a mode's actions) */
+    mode?: {
+        id: string;
+        color?: string;
+        active: boolean;
+        /** Key bindings to activate this mode (e.g., ['g v']) */
+        activationBindings: string[];
+    };
 }
 /**
  * Props passed to custom group renderers
@@ -1282,6 +1341,8 @@ interface ActionConfig {
     description?: string;
     /** Group name for organizing in modal */
     group?: string;
+    /** Mode ID this action belongs to (only active when mode is active) */
+    mode?: string;
     /** Default key bindings (user can override) */
     defaultBindings?: string[];
     /** Search keywords for omnibar */
@@ -1388,6 +1449,29 @@ interface UseActionsRegistryOptions {
  */
 declare function useActionsRegistry(options?: UseActionsRegistryOptions): ActionsRegistryValue;
 
+interface ModesRegistryValue {
+    /** Register a mode. Called by useMode on mount. */
+    register: (id: string, config: ModeConfig) => void;
+    /** Unregister a mode. Called by useMode on unmount. */
+    unregister: (id: string) => void;
+    /** Currently registered modes */
+    modes: Map<string, RegisteredMode>;
+    /** Currently active mode ID (null if none) */
+    activeMode: string | null;
+    /** Activate a mode by ID */
+    activateMode: (id: string) => void;
+    /** Deactivate the current mode */
+    deactivateMode: () => void;
+    /** Toggle a mode: deactivate if active, activate otherwise */
+    toggleMode: (id: string) => void;
+}
+declare const ModesRegistryContext: react.Context<ModesRegistryValue | null>;
+/**
+ * Hook to create a modes registry.
+ * Used internally by HotkeysProvider.
+ */
+declare function useModesRegistry(): ModesRegistryValue;
+
 /**
  * Configuration for the HotkeysProvider.
  */
@@ -1467,6 +1551,16 @@ interface HotkeysContextValue {
     getCompletions: (pendingKeys: HotkeySequence) => ReturnType<typeof getSequenceCompletions>;
     /** Cancel the current sequence */
     cancelSequence: () => void;
+    /** Currently active mode ID (null if none) */
+    activeMode: string | null;
+    /** All registered modes */
+    modes: Map<string, RegisteredMode>;
+    /** The modes registry */
+    modesRegistry: ModesRegistryValue;
+    /** Activate a mode by ID */
+    activateMode: (id: string) => void;
+    /** Deactivate the current mode */
+    deactivateMode: () => void;
 }
 interface HotkeysProviderProps {
     config?: HotkeysConfig;
@@ -1514,6 +1608,31 @@ declare function useHotkeysContext(): HotkeysContextValue;
  * Hook to optionally access hotkeys context.
  */
 declare function useMaybeHotkeysContext(): HotkeysContextValue | null;
+
+/**
+ * Register a keyboard mode (sticky shortcut scope).
+ *
+ * Modes create a context where short single-key bindings become active.
+ * Enter a mode via a sequence (e.g., `g n`), then use short keys (`o`, `p`)
+ * that only exist while the mode is active. Escape exits the mode.
+ *
+ * @example
+ * ```tsx
+ * const navMode = useMode('nav:3d', {
+ *   label: '3D Navigation',
+ *   color: '#4fc3f7',
+ *   defaultBindings: ['g n'],
+ * })
+ *
+ * useAction('nav:orbit', {
+ *   label: 'Orbit',
+ *   mode: 'nav:3d',
+ *   defaultBindings: ['o'],
+ *   handler: () => setNavType('orbit'),
+ * })
+ * ```
+ */
+declare function useMode(id: string, config: ModeConfig): ModeState;
 
 /**
  * Register an omnibar endpoint for dynamic search results.
@@ -1746,6 +1865,29 @@ interface LookupModalProps {
  */
 declare function LookupModal({ defaultBinding }?: LookupModalProps): react_jsx_runtime.JSX.Element | null;
 
+type ModeIndicatorPosition = 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left';
+interface ModeIndicatorProps {
+    /** Position on screen (default: 'bottom-right') */
+    position?: ModeIndicatorPosition;
+    /** Additional CSS class */
+    className?: string;
+}
+/**
+ * Optional UI component that shows the currently active mode as a fixed pill.
+ *
+ * Displays the mode label with its accent color and a dismiss button.
+ * Automatically hides when no mode is active.
+ *
+ * @example
+ * ```tsx
+ * <HotkeysProvider>
+ *   <App />
+ *   <ModeIndicator position="bottom-right" />
+ * </HotkeysProvider>
+ * ```
+ */
+declare function ModeIndicator({ position, className, }: ModeIndicatorProps): react_jsx_runtime.JSX.Element | null;
+
 /**
  * @deprecated Use {@link SpeedDialProps} from `SpeedDial` instead.
  */
@@ -1967,5 +2109,10 @@ declare const DEFAULT_SEQUENCE_TIMEOUT: number;
 declare const ACTION_MODAL = "__hotkeys:modal";
 declare const ACTION_OMNIBAR = "__hotkeys:omnibar";
 declare const ACTION_LOOKUP = "__hotkeys:lookup";
+/**
+ * Prefix for mode activation actions.
+ * Mode activation actions are registered with ID `__mode:{modeId}`.
+ */
+declare const ACTION_MODE_PREFIX = "__mode:";
 
-export { ACTION_LOOKUP, ACTION_MODAL, ACTION_OMNIBAR, type ActionConfig, type ActionDefinition, type ActionHandler, type ActionRegistry, type ActionSearchResult, ActionsRegistryContext, type ActionsRegistryValue, Alt, Backspace, type BindingInfo, type BindingsExport, Command, Ctrl, DEFAULT_SEQUENCE_TIMEOUT, DIGITS_PLACEHOLDER, DIGIT_PLACEHOLDER, Down, type EndpointPagination, type EndpointPaginationInfo, type EndpointPaginationMode, type EndpointQueryResult, type EndpointResponse, Enter, FLOAT_PLACEHOLDER, type FuzzyMatchResult, type GroupRenderer, type GroupRendererProps, type HandlerMap, type HotkeyHandler, type HotkeyMap, type HotkeySequence, type HotkeysConfig, type HotkeysContextValue, HotkeysProvider, type HotkeysProviderProps, Kbd, KbdLookup, KbdModal, KbdOmnibar, type KbdProps, Kbds, Key, type KeyCombination, type KeyCombinationDisplay, type KeyConflict, type KeyIconProps, type KeyIconType, type KeySeq, KeybindingEditor, type KeybindingEditorProps, type KeybindingEditorRenderProps, Left, LookupModal, MobileFAB, type MobileFABProps, ModifierIcon, type ModifierIconProps, type ModifierType, type Modifiers, Omnibar, type OmnibarActionEntry, type OmnibarEndpointAsyncConfig, type OmnibarEndpointConfig, type OmnibarEndpointConfigBase, type OmnibarEndpointSyncConfig, OmnibarEndpointsRegistryContext, type OmnibarEndpointsRegistryValue, type OmnibarEntry, type OmnibarEntryBase, type OmnibarLinkEntry, type OmnibarProps, type OmnibarRenderProps, Option, type PendingAction, type RecordHotkeyOptions, type RecordHotkeyResult, type RegisteredAction, type RegisteredEndpoint, type RemoteOmnibarResult, Right, SearchIcon, SearchTrigger, type SearchTriggerProps, type SeqElem, type SeqElemState, type SeqMatchState, type SequenceCompletion, SequenceModal, Shift, type ShortcutGroup, ShortcutsModal, type ShortcutsModalProps, type ShortcutsModalRenderProps, SpeedDial, type SpeedDialAction, type SpeedDialProps, type TooltipComponent, type TooltipProps, type TwoColumnConfig, type TwoColumnRow, Up, type UseEditableHotkeysOptions, type UseEditableHotkeysResult, type UseHotkeysOptions, type UseHotkeysResult, type UseOmnibarOptions, type UseOmnibarResult, type UseParamEntryOptions, type UseParamEntryReturn, bindingHasPlaceholders, countPlaceholders, createTwoColumnRenderer, extractCaptures, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, formatKeySeq, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasAnyPlaceholderBindings, hasConflicts, hasDigitPlaceholders, hotkeySequenceToKeySeq, isDigitPlaceholder, isMac, isModifierKey, isPlaceholderSentinel, isSequence, isShiftedSymbol, keySeqToHotkeySequence, normalizeKey, parseHotkeyString, parseKeySeq, parseQueryNumbers, searchActions, useAction, useActions, useActionsRegistry, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useOmnibar, useOmnibarEndpoint, useOmnibarEndpointsRegistry, useParamEntry, useRecordHotkey };
+export { ACTION_LOOKUP, ACTION_MODAL, ACTION_MODE_PREFIX, ACTION_OMNIBAR, type ActionConfig, type ActionDefinition, type ActionHandler, type ActionRegistry, type ActionSearchResult, ActionsRegistryContext, type ActionsRegistryValue, Alt, Backspace, type BindingInfo, type BindingsExport, Command, Ctrl, DEFAULT_SEQUENCE_TIMEOUT, DIGITS_PLACEHOLDER, DIGIT_PLACEHOLDER, Down, type EndpointPagination, type EndpointPaginationInfo, type EndpointPaginationMode, type EndpointQueryResult, type EndpointResponse, Enter, FLOAT_PLACEHOLDER, type FuzzyMatchResult, type GroupRenderer, type GroupRendererProps, type HandlerMap, type HotkeyHandler, type HotkeyMap, type HotkeySequence, type HotkeysConfig, type HotkeysContextValue, HotkeysProvider, type HotkeysProviderProps, Kbd, KbdLookup, KbdModal, KbdOmnibar, type KbdProps, Kbds, Key, type KeyCombination, type KeyCombinationDisplay, type KeyConflict, type KeyIconProps, type KeyIconType, type KeySeq, KeybindingEditor, type KeybindingEditorProps, type KeybindingEditorRenderProps, Left, LookupModal, MobileFAB, type MobileFABProps, type ModeConfig, ModeIndicator, type ModeIndicatorPosition, type ModeIndicatorProps, type ModeState, ModesRegistryContext, type ModesRegistryValue, ModifierIcon, type ModifierIconProps, type ModifierType, type Modifiers, Omnibar, type OmnibarActionEntry, type OmnibarEndpointAsyncConfig, type OmnibarEndpointConfig, type OmnibarEndpointConfigBase, type OmnibarEndpointSyncConfig, OmnibarEndpointsRegistryContext, type OmnibarEndpointsRegistryValue, type OmnibarEntry, type OmnibarEntryBase, type OmnibarLinkEntry, type OmnibarProps, type OmnibarRenderProps, Option, type PendingAction, type RecordHotkeyOptions, type RecordHotkeyResult, type RegisteredAction, type RegisteredEndpoint, type RegisteredMode, type RemoteOmnibarResult, Right, SearchIcon, SearchTrigger, type SearchTriggerProps, type SeqElem, type SeqElemState, type SeqMatchState, type SequenceCompletion, SequenceModal, Shift, type ShortcutGroup, ShortcutsModal, type ShortcutsModalProps, type ShortcutsModalRenderProps, SpeedDial, type SpeedDialAction, type SpeedDialProps, type TooltipComponent, type TooltipProps, type TwoColumnConfig, type TwoColumnRow, Up, type UseEditableHotkeysOptions, type UseEditableHotkeysResult, type UseHotkeysOptions, type UseHotkeysResult, type UseOmnibarOptions, type UseOmnibarResult, type UseParamEntryOptions, type UseParamEntryReturn, bindingHasPlaceholders, countPlaceholders, createTwoColumnRenderer, extractCaptures, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, formatKeySeq, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasAnyPlaceholderBindings, hasConflicts, hasDigitPlaceholders, hotkeySequenceToKeySeq, isDigitPlaceholder, isMac, isModifierKey, isPlaceholderSentinel, isSequence, isShiftedSymbol, keySeqToHotkeySequence, normalizeKey, parseHotkeyString, parseKeySeq, parseQueryNumbers, searchActions, useAction, useActions, useActionsRegistry, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useMode, useModesRegistry, useOmnibar, useOmnibarEndpoint, useOmnibarEndpointsRegistry, useParamEntry, useRecordHotkey };

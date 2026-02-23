@@ -1360,3 +1360,111 @@
     opacity: 1;
   }
 }
+
+/* === Mode Indicator === */
+.kbd-mode-indicator {
+  position: fixed;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 20px;
+  background-color: var(--kbd-bg);
+  border: 2px solid var(--kbd-mode-color, var(--kbd-accent));
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  z-index: 9990;
+  animation: kbd-mode-indicator-in 200ms ease;
+  font-size: 0.8125rem;
+  color: var(--kbd-text);
+}
+
+@keyframes kbd-mode-indicator-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.kbd-mode-bottom-right {
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  right: 20px;
+}
+
+.kbd-mode-bottom-left {
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  left: 20px;
+}
+
+.kbd-mode-top-right {
+  top: 20px;
+  right: 20px;
+}
+
+.kbd-mode-top-left {
+  top: 20px;
+  left: 20px;
+}
+
+.kbd-mode-indicator-label {
+  font-weight: 600;
+  color: var(--kbd-mode-color, var(--kbd-accent));
+}
+
+.kbd-mode-indicator-dismiss {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0 2px;
+  color: var(--kbd-text-secondary);
+  transition: color var(--kbd-transition);
+}
+
+.kbd-mode-indicator-dismiss:hover {
+  color: var(--kbd-text);
+}
+
+/* === Mode group in ShortcutsModal === */
+.kbd-mode-group {
+  border-left: 3px solid var(--kbd-mode-color, var(--kbd-accent));
+  padding-left: calc(var(--kbd-padding) - 3px);
+}
+
+.kbd-mode-group .kbd-group-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.kbd-mode-activation {
+  font-size: 0.6875rem;
+  text-transform: none;
+  letter-spacing: normal;
+  opacity: 0.8;
+}
+
+/* === Mode badge in Omnibar === */
+.kbd-mode-badge {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 10px;
+  background-color: color-mix(in srgb, var(--kbd-mode-color, var(--kbd-accent)) 15%, transparent);
+  color: var(--kbd-mode-color, var(--kbd-accent));
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.kbd-omnibar-result.kbd-mode-inactive {
+  opacity: 0.6;
+}
+
+.kbd-omnibar-result.kbd-mode-inactive:hover,
+.kbd-omnibar-result.kbd-mode-inactive.selected {
+  opacity: 1;
+}

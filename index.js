@@ -182,6 +182,7 @@ function useActionsRegistry(options = {}) {
         label: config.label,
         description: config.description,
         group: config.group,
+        mode: config.mode,
         keywords: config.keywords,
         hideFromModal: config.hideFromModal,
         enabled: config.enabled,
@@ -329,6 +330,75 @@ function useActionsRegistry(options = {}) {
     importBindings
   ]);
 }
+var ModesRegistryContext = createContext(null);
+function useModesRegistry() {
+  const modesRef = useRef(/* @__PURE__ */ new Map());
+  const [modesVersion, setModesVersion] = useState(0);
+  const [activeMode, setActiveMode] = useState(null);
+  const activeModeRef = useRef(null);
+  activeModeRef.current = activeMode;
+  const register = useCallback((id, config) => {
+    modesRef.current.set(id, {
+      config,
+      registeredAt: Date.now()
+    });
+    setModesVersion((v) => v + 1);
+  }, []);
+  const unregister = useCallback((id) => {
+    modesRef.current.delete(id);
+    if (activeModeRef.current === id) {
+      setActiveMode(null);
+    }
+    setModesVersion((v) => v + 1);
+  }, []);
+  const activateMode = useCallback((id) => {
+    const mode = modesRef.current.get(id);
+    if (!mode) return;
+    const prev = activeModeRef.current;
+    if (prev && prev !== id) {
+      const prevMode = modesRef.current.get(prev);
+      prevMode?.config.onDeactivate?.();
+    }
+    activeModeRef.current = id;
+    setActiveMode(id);
+    mode.config.onActivate?.();
+  }, []);
+  const deactivateMode = useCallback(() => {
+    const current = activeModeRef.current;
+    if (!current) return;
+    const mode = modesRef.current.get(current);
+    activeModeRef.current = null;
+    setActiveMode(null);
+    mode?.config.onDeactivate?.();
+  }, []);
+  const toggleMode = useCallback((id) => {
+    if (activeModeRef.current === id) {
+      deactivateMode();
+    } else {
+      activateMode(id);
+    }
+  }, [activateMode, deactivateMode]);
+  const modes = useMemo(() => {
+    return new Map(modesRef.current);
+  }, [modesVersion]);
+  return useMemo(() => ({
+    register,
+    unregister,
+    modes,
+    activeMode,
+    activateMode,
+    deactivateMode,
+    toggleMode
+  }), [
+    register,
+    unregister,
+    modes,
+    activeMode,
+    activateMode,
+    deactivateMode,
+    toggleMode
+  ]);
+}
 var OmnibarEndpointsRegistryContext = createContext(null);
 function useOmnibarEndpointsRegistry() {
   const endpointsRef = useRef(/* @__PURE__ */ new Map());
@@ -402,6 +472,7 @@ var DEFAULT_SEQUENCE_TIMEOUT = Infinity;
 var ACTION_MODAL = "__hotkeys:modal";
 var ACTION_OMNIBAR = "__hotkeys:omnibar";
 var ACTION_LOOKUP = "__hotkeys:lookup";
+var ACTION_MODE_PREFIX = "__mode:";
 
 // src/utils.ts
 var { max } = Math;
@@ -1141,7 +1212,8 @@ function searchActions(query, actions, keymap) {
       action,
       bindings,
       score,
-      labelMatches: labelMatch.ranges
+      labelMatches: labelMatch.ranges,
+      mode: action.mode
     };
     if (hasPlaceholders) {
       result.hasPlaceholders = true;
@@ -1727,6 +1799,7 @@ function HotkeysProvider({
     ...configProp
   }), [configProp]);
   const registry = useActionsRegistry({ storageKey: config.storageKey });
+  const modesRegistry = useModesRegistry();
   const endpointsRegistry = useOmnibarEndpointsRegistry();
   const [isEnabled, setIsEnabled] = useState(true);
   useEffect(() => {
@@ -1840,25 +1913,57 @@ function HotkeysProvider({
   const keymap = registry.keymap;
   const conflicts = useMemo(() => findConflicts(keymap), [keymap]);
   const hasConflicts2 = conflicts.size > 0;
+  const { activeMode } = modesRegistry;
   const effectiveKeymap = useMemo(() => {
-    if (!config.disableConflicts || conflicts.size === 0) {
-      return keymap;
-    }
-    const filtered = {};
-    for (const [key, action] of Object.entries(keymap)) {
-      if (!conflicts.has(key)) {
-        filtered[key] = action;
+    const activeModeConfig = activeMode ? modesRegistry.modes.get(activeMode)?.config : null;
+    let baseKeymap = keymap;
+    if (config.disableConflicts && conflicts.size > 0) {
+      baseKeymap = {};
+      for (const [key, action] of Object.entries(keymap)) {
+        if (!conflicts.has(key)) {
+          baseKeymap[key] = action;
+        }
       }
     }
-    return filtered;
-  }, [keymap, conflicts, config.disableConflicts]);
+    if (modesRegistry.modes.size === 0) return baseKeymap;
+    const result = {};
+    for (const [key, actionOrActions] of Object.entries(baseKeymap)) {
+      const actions = Array.isArray(actionOrActions) ? actionOrActions : [actionOrActions];
+      const filtered = actions.filter((id) => {
+        const action = registry.actions.get(id);
+        const actionMode = action?.config.mode;
+        if (!actionMode) return true;
+        if (actionMode === activeMode) return true;
+        if (id.startsWith(ACTION_MODE_PREFIX)) return true;
+        return false;
+      });
+      if (filtered.length === 0) continue;
+      if (activeMode && activeModeConfig?.passthrough !== false) {
+        const modeActions = filtered.filter((id) => registry.actions.get(id)?.config.mode === activeMode);
+        if (modeActions.length > 0) {
+          result[key] = modeActions.length === 1 ? modeActions[0] : modeActions;
+          continue;
+        }
+      }
+      result[key] = filtered.length === 1 ? filtered[0] : filtered;
+    }
+    if (activeMode && activeModeConfig?.escapeExits !== false) {
+      result["escape"] = "__mode:exit";
+    }
+    return result;
+  }, [keymap, activeMode, modesRegistry.modes, registry.actions, conflicts, config.disableConflicts]);
   const handlers = useMemo(() => {
     const map = {};
     for (const [id, action] of registry.actions) {
       map[id] = action.config.handler;
     }
+    if (activeMode) {
+      map["__mode:exit"] = () => {
+        modesRegistry.deactivateMode();
+      };
+    }
     return map;
-  }, [registry.actions]);
+  }, [registry.actions, activeMode, modesRegistry]);
   const hotkeysEnabled = isEnabled && !isEditingBinding && !isOmnibarOpen && !isLookupOpen;
   const {
     pendingKeys,
@@ -1884,9 +1989,14 @@ function HotkeysProvider({
     [keymap, registry.actionRegistry]
   );
   const executeAction = useCallback((id, captures) => {
+    const action = registry.actions.get(id);
+    const actionMode = action?.config.mode;
+    if (actionMode && modesRegistry.activeMode !== actionMode) {
+      modesRegistry.activateMode(actionMode);
+    }
     registry.execute(id, captures);
     trackRecentAction(id);
-  }, [registry, trackRecentAction]);
+  }, [registry, trackRecentAction, modesRegistry]);
   const value = useMemo(() => ({
     storageKey: config.storageKey,
     registry,
@@ -1917,7 +2027,12 @@ function HotkeysProvider({
     conflicts,
     hasConflicts: hasConflicts2,
     searchActions: searchActionsHelper,
-    getCompletions
+    getCompletions,
+    activeMode: modesRegistry.activeMode,
+    modes: modesRegistry.modes,
+    modesRegistry,
+    activateMode: modesRegistry.activateMode,
+    deactivateMode: modesRegistry.deactivateMode
   }), [
     config.storageKey,
     registry,
@@ -1947,9 +2062,10 @@ function HotkeysProvider({
     conflicts,
     hasConflicts2,
     searchActionsHelper,
-    getCompletions
+    getCompletions,
+    modesRegistry
   ]);
-  return /* @__PURE__ */ jsx(ActionsRegistryContext.Provider, { value: registry, children: /* @__PURE__ */ jsx(OmnibarEndpointsRegistryContext.Provider, { value: endpointsRegistry, children: /* @__PURE__ */ jsx(HotkeysContext.Provider, { value, children }) }) });
+  return /* @__PURE__ */ jsx(ActionsRegistryContext.Provider, { value: registry, children: /* @__PURE__ */ jsx(ModesRegistryContext.Provider, { value: modesRegistry, children: /* @__PURE__ */ jsx(OmnibarEndpointsRegistryContext.Provider, { value: endpointsRegistry, children: /* @__PURE__ */ jsx(HotkeysContext.Provider, { value, children }) }) }) });
 }
 function useHotkeysContext() {
   const context = useContext(HotkeysContext);
@@ -1989,6 +2105,7 @@ function useAction(id, config) {
     config.label,
     config.description,
     config.group,
+    config.mode,
     // Compare bindings by value
     JSON.stringify(config.defaultBindings),
     JSON.stringify(config.keywords),
@@ -2033,6 +2150,7 @@ function useActions(actions) {
         id,
         c.label,
         c.group,
+        c.mode,
         c.defaultBindings,
         c.keywords,
         c.priority,
@@ -2041,6 +2159,64 @@ function useActions(actions) {
       ])
     )
   ]);
+}
+function useMode(id, config) {
+  const registry = useContext(ModesRegistryContext);
+  if (!registry) {
+    throw new Error("useMode must be used within a HotkeysProvider");
+  }
+  const registryRef = useRef(registry);
+  registryRef.current = registry;
+  const configRef = useRef(config);
+  configRef.current = config;
+  useEffect(() => {
+    registryRef.current.register(id, config);
+    return () => {
+      registryRef.current.unregister(id);
+    };
+  }, [
+    id,
+    config.label,
+    config.color,
+    JSON.stringify(config.defaultBindings),
+    config.toggle,
+    config.escapeExits,
+    config.passthrough
+  ]);
+  const toggle = config.toggle !== false;
+  const activationHandler = useCallback(() => {
+    if (toggle) {
+      registryRef.current.toggleMode(id);
+    } else {
+      registryRef.current.activateMode(id);
+    }
+  }, [id, toggle]);
+  useAction(`${ACTION_MODE_PREFIX}${id}`, {
+    label: `${config.label} mode`,
+    group: "Modes",
+    defaultBindings: config.defaultBindings ?? [],
+    handler: activationHandler,
+    hideFromModal: true
+  });
+  const active = registry.activeMode === id;
+  const activate = useCallback(() => {
+    registryRef.current.activateMode(id);
+  }, [id]);
+  const deactivate = useCallback(() => {
+    registryRef.current.deactivateMode();
+  }, []);
+  const toggleFn = useCallback(() => {
+    registryRef.current.toggleMode(id);
+  }, [id]);
+  return useMemo(() => ({
+    id,
+    active,
+    label: config.label,
+    color: config.color,
+    activate,
+    deactivate,
+    toggle: toggleFn
+  }), [id, active, config.label, config.color, activate, deactivate, toggleFn]);
 }
 function useOmnibarEndpoint(id, config) {
   const registry = useContext(OmnibarEndpointsRegistryContext);
@@ -3845,6 +4021,39 @@ function LookupModal({ defaultBinding = "meta+shift+k" } = {}) {
     ] })
   ] }) });
 }
+function ModeIndicator({
+  position = "bottom-right",
+  className
+}) {
+  const ctx = useMaybeHotkeysContext();
+  const activeMode = ctx?.activeMode;
+  const modeInfo = useMemo(() => {
+    if (!activeMode || !ctx?.modes) return null;
+    return ctx.modes.get(activeMode) ?? null;
+  }, [activeMode, ctx?.modes]);
+  if (!modeInfo || !activeMode) return null;
+  const positionClass = `kbd-mode-${position}`;
+  const classes = ["kbd-mode-indicator", positionClass, className].filter(Boolean).join(" ");
+  return /* @__PURE__ */ jsxs(
+    "div",
+    {
+      className: classes,
+      style: modeInfo.config.color ? { "--kbd-mode-color": modeInfo.config.color } : void 0,
+      children: [
+        /* @__PURE__ */ jsx("span", { className: "kbd-mode-indicator-label", children: modeInfo.config.label }),
+        /* @__PURE__ */ jsx(
+          "button",
+          {
+            className: "kbd-mode-indicator-dismiss",
+            onClick: () => ctx?.deactivateMode(),
+            "aria-label": `Exit ${modeInfo.config.label} mode`,
+            children: "\xD7"
+          }
+        )
+      ]
+    }
+  );
+}
 function SearchIcon({ className }) {
   return /* @__PURE__ */ jsxs(
     "svg",
@@ -4470,19 +4679,33 @@ function Omnibar({
       )
     ] }),
     /* @__PURE__ */ jsx("div", { className: "kbd-omnibar-results", ref: resultsContainerRef, children: totalResults === 0 && !isLoadingRemote ? /* @__PURE__ */ jsx("div", { className: "kbd-omnibar-no-results", children: query ? "No matching commands" : "Start typing to search commands..." }) : /* @__PURE__ */ jsxs(Fragment, { children: [
-      results.map((result, i) => /* @__PURE__ */ jsxs(
-        "div",
-        {
-          className: `kbd-omnibar-result ${i === selectedIndex ? "selected" : ""}`,
-          onClick: () => execute(result.id),
-          children: [
-            /* @__PURE__ */ jsx("span", { className: "kbd-omnibar-result-label", children: result.action.label }),
-            result.action.group && /* @__PURE__ */ jsx("span", { className: "kbd-omnibar-result-category", children: result.action.group }),
-            result.bindings.length > 0 && /* @__PURE__ */ jsx("div", { className: "kbd-omnibar-result-bindings", children: result.bindings.slice(0, 2).map((binding) => /* @__PURE__ */ jsx(BindingBadge, { binding }, binding)) })
-          ]
-        },
-        result.id
-      )),
+      results.map((result, i) => {
+        const modeId = result.mode;
+        const modeInfo = modeId && ctx?.modes ? ctx.modes.get(modeId) : void 0;
+        const isModeInactive = modeId && ctx?.activeMode !== modeId;
+        if (result.id.startsWith(ACTION_MODE_PREFIX)) return null;
+        return /* @__PURE__ */ jsxs(
+          "div",
+          {
+            className: `kbd-omnibar-result ${i === selectedIndex ? "selected" : ""}${isModeInactive ? " kbd-mode-inactive" : ""}`,
+            onClick: () => execute(result.id),
+            children: [
+              /* @__PURE__ */ jsx("span", { className: "kbd-omnibar-result-label", children: result.action.label }),
+              modeInfo && /* @__PURE__ */ jsx(
+                "span",
+                {
+                  className: "kbd-mode-badge",
+                  style: modeInfo.config.color ? { "--kbd-mode-color": modeInfo.config.color } : void 0,
+                  children: modeInfo.config.label
+                }
+              ),
+              !modeInfo && result.action.group && /* @__PURE__ */ jsx("span", { className: "kbd-omnibar-result-category", children: result.action.group }),
+              result.bindings.length > 0 && /* @__PURE__ */ jsx("div", { className: "kbd-omnibar-result-bindings", children: result.bindings.slice(0, 2).map((binding) => /* @__PURE__ */ jsx(BindingBadge, { binding }, binding)) })
+            ]
+          },
+          result.id
+        );
+      }),
       (() => {
         let remoteIndex = 0;
         return Array.from(remoteResultsByEndpoint.entries()).map(([endpointId, endpointResults]) => {
@@ -4673,12 +4896,17 @@ function parseActionId(actionId) {
   }
   return { group: "General", name: actionId };
 }
-function organizeShortcuts(keymap, labels, descriptions, groupNames, groupOrder, actionRegistry, showUnbound = true) {
+function organizeShortcuts(keymap, labels, descriptions, groupNames, groupOrder, actionRegistry, showUnbound = true, modesMap, activeMode) {
   const actionBindings = getActionBindings(keymap);
   const groupMap = /* @__PURE__ */ new Map();
   const includedActions = /* @__PURE__ */ new Set();
   const getGroupName = (actionId) => {
     let groupKey;
+    const actionMode = actionRegistry?.[actionId]?.mode;
+    if (actionMode && modesMap) {
+      const mode = modesMap.get(actionMode);
+      if (mode) return mode.config.label;
+    }
     const registeredGroup = actionRegistry?.[actionId]?.group;
     if (registeredGroup) {
       groupKey = registeredGroup;
@@ -4687,13 +4915,27 @@ function organizeShortcuts(keymap, labels, descriptions, groupNames, groupOrder,
     }
     return groupNames?.[groupKey] ?? groupKey;
   };
+  const getModeForAction = (actionId) => {
+    const actionMode = actionRegistry?.[actionId]?.mode;
+    if (!actionMode || !modesMap) return void 0;
+    const mode = modesMap.get(actionMode);
+    if (!mode) return void 0;
+    const activationActionId = `${ACTION_MODE_PREFIX}${actionMode}`;
+    const activationBindings = actionBindings.get(activationActionId) ?? [];
+    return {
+      id: actionMode,
+      color: mode.config.color,
+      active: activeMode === actionMode,
+      activationBindings
+    };
+  };
   for (const [actionId, bindings] of actionBindings) {
     if (actionRegistry?.[actionId]?.hideFromModal) continue;
     includedActions.add(actionId);
     const { name } = parseActionId(actionId);
     const groupName = getGroupName(actionId);
     if (!groupMap.has(groupName)) {
-      groupMap.set(groupName, { name: groupName, shortcuts: [] });
+      groupMap.set(groupName, { name: groupName, shortcuts: [], mode: getModeForAction(actionId) });
     }
     groupMap.get(groupName).shortcuts.push({
       actionId,
@@ -4709,7 +4951,7 @@ function organizeShortcuts(keymap, labels, descriptions, groupNames, groupOrder,
       const { name } = parseActionId(actionId);
       const groupName = getGroupName(actionId);
       if (!groupMap.has(groupName)) {
-        groupMap.set(groupName, { name: groupName, shortcuts: [] });
+        groupMap.set(groupName, { name: groupName, shortcuts: [], mode: getModeForAction(actionId) });
       }
       groupMap.get(groupName).shortcuts.push({
         actionId,
@@ -4737,6 +4979,8 @@ function organizeShortcuts(keymap, labels, descriptions, groupNames, groupOrder,
     groups.sort((a, b) => {
       if (a.name === "General") return 1;
       if (b.name === "General") return -1;
+      if (a.mode && !b.mode) return 1;
+      if (!a.mode && b.mode) return -1;
       return a.name.localeCompare(b.name);
     });
   }
@@ -5352,8 +5596,8 @@ function ShortcutsModal({
   );
   const effectiveShowUnbound = showUnbound ?? editable;
   const shortcutGroups = useMemo(
-    () => organizeShortcuts(keymap, labels, descriptions, groupNames, groupOrder, ctx?.registry.actionRegistry, effectiveShowUnbound),
-    [keymap, labels, descriptions, groupNames, groupOrder, ctx?.registry.actionRegistry, effectiveShowUnbound]
+    () => organizeShortcuts(keymap, labels, descriptions, groupNames, groupOrder, ctx?.registry.actionRegistry, effectiveShowUnbound, ctx?.modes, ctx?.activeMode),
+    [keymap, labels, descriptions, groupNames, groupOrder, ctx?.registry.actionRegistry, effectiveShowUnbound, ctx?.modes, ctx?.activeMode]
   );
   if (!isOpen) return null;
   if (children) {
@@ -5393,10 +5637,24 @@ function ShortcutsModal({
       /* @__PURE__ */ jsx("span", { children: importError }),
       /* @__PURE__ */ jsx("button", { onClick: () => setImportError(null), "aria-label": "Dismiss error", children: "\xD7" })
     ] }),
-    shortcutGroups.map((group) => /* @__PURE__ */ jsxs("div", { className: "kbd-group", children: [
-      /* @__PURE__ */ jsx("h3", { className: "kbd-group-title", children: group.name }),
-      renderGroup(group)
-    ] }, group.name)),
+    shortcutGroups.map((group) => /* @__PURE__ */ jsxs(
+      "div",
+      {
+        className: `kbd-group${group.mode ? " kbd-mode-group" : ""}`,
+        style: group.mode?.color ? { "--kbd-mode-color": group.mode.color } : void 0,
+        children: [
+          /* @__PURE__ */ jsxs("h3", { className: "kbd-group-title", children: [
+            group.name,
+            group.mode?.activationBindings?.map((binding) => /* @__PURE__ */ jsx("kbd", { className: "kbd-kbd kbd-mode-activation", children: parseKeySeq(binding).map((elem, i) => /* @__PURE__ */ jsxs(Fragment$1, { children: [
+              i > 0 && /* @__PURE__ */ jsx("span", { className: "kbd-sequence-sep", children: " " }),
+              /* @__PURE__ */ jsx(SeqElemDisplay2, { elem })
+            ] }, i)) }, binding))
+          ] }),
+          renderGroup(group)
+        ]
+      },
+      group.name
+    )),
     editable && (handleExport || handleImport || handleReset) && (footerContent !== null && (footerContent ? footerContent({
       exportBindings: hasCustomizations ? handleExport : void 0,
       importBindings: handleImport ? () => importInputRef.current?.click() : void 0,
@@ -5502,6 +5760,6 @@ function ShortcutsModal({
   ] }) }) });
 }
 
-export { ACTION_LOOKUP, ACTION_MODAL, ACTION_OMNIBAR, ActionsRegistryContext, Alt, Backspace, Command, Ctrl, DEFAULT_SEQUENCE_TIMEOUT, DIGITS_PLACEHOLDER, DIGIT_PLACEHOLDER, Down, Enter, FLOAT_PLACEHOLDER, HotkeysProvider, Kbd, KbdLookup, KbdModal, KbdOmnibar, Kbds, Key, KeybindingEditor, Left, LookupModal, MobileFAB, ModifierIcon, Omnibar, OmnibarEndpointsRegistryContext, Option, Right, SearchIcon2 as SearchIcon, SearchTrigger, SequenceModal, Shift, ShortcutsModal, SpeedDial, Up, bindingHasPlaceholders, countPlaceholders, createTwoColumnRenderer, extractCaptures, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, formatKeySeq, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasAnyPlaceholderBindings, hasConflicts, hasDigitPlaceholders, hotkeySequenceToKeySeq, isDigitPlaceholder, isMac, isModifierKey, isPlaceholderSentinel, isSequence, isShiftedSymbol, keySeqToHotkeySequence, normalizeKey, parseHotkeyString, parseKeySeq, parseQueryNumbers, searchActions, useAction, useActions, useActionsRegistry, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useOmnibar, useOmnibarEndpoint, useOmnibarEndpointsRegistry, useParamEntry, useRecordHotkey };
+export { ACTION_LOOKUP, ACTION_MODAL, ACTION_MODE_PREFIX, ACTION_OMNIBAR, ActionsRegistryContext, Alt, Backspace, Command, Ctrl, DEFAULT_SEQUENCE_TIMEOUT, DIGITS_PLACEHOLDER, DIGIT_PLACEHOLDER, Down, Enter, FLOAT_PLACEHOLDER, HotkeysProvider, Kbd, KbdLookup, KbdModal, KbdOmnibar, Kbds, Key, KeybindingEditor, Left, LookupModal, MobileFAB, ModeIndicator, ModesRegistryContext, ModifierIcon, Omnibar, OmnibarEndpointsRegistryContext, Option, Right, SearchIcon2 as SearchIcon, SearchTrigger, SequenceModal, Shift, ShortcutsModal, SpeedDial, Up, bindingHasPlaceholders, countPlaceholders, createTwoColumnRenderer, extractCaptures, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, formatKeySeq, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasAnyPlaceholderBindings, hasConflicts, hasDigitPlaceholders, hotkeySequenceToKeySeq, isDigitPlaceholder, isMac, isModifierKey, isPlaceholderSentinel, isSequence, isShiftedSymbol, keySeqToHotkeySequence, normalizeKey, parseHotkeyString, parseKeySeq, parseQueryNumbers, searchActions, useAction, useActions, useActionsRegistry, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useMode, useModesRegistry, useOmnibar, useOmnibarEndpoint, useOmnibarEndpointsRegistry, useParamEntry, useRecordHotkey };
 //# sourceMappingURL=index.js.map
 //# sourceMappingURL=index.js.map
