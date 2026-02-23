@@ -1,5 +1,5 @@
 import { Fragment, KeyboardEvent, MouseEvent, ReactNode, RefObject, useCallback, useEffect, useMemo, useRef } from 'react'
-import { ACTION_OMNIBAR } from './constants'
+import { ACTION_MODE_PREFIX, ACTION_OMNIBAR } from './constants'
 import { useMaybeHotkeysContext } from './HotkeysProvider'
 import { ModifierIcon } from './ModifierIcons'
 import { useAction } from './useAction'
@@ -527,29 +527,45 @@ export function Omnibar({
           ) : (
             <>
               {/* Local action results */}
-              {results.map((result, i) => (
-                <div
-                  key={result.id}
-                  className={`kbd-omnibar-result ${i === selectedIndex ? 'selected' : ''}`}
-                  onClick={() => execute(result.id)}
-                >
-                  <span className="kbd-omnibar-result-label">
-                    {result.action.label}
-                  </span>
-                  {result.action.group && (
-                    <span className="kbd-omnibar-result-category">
-                      {result.action.group}
+              {results.map((result, i) => {
+                const modeId = result.mode
+                const modeInfo = modeId && ctx?.modes ? ctx.modes.get(modeId) : undefined
+                const isModeInactive = modeId && ctx?.activeMode !== modeId
+                // Skip mode activation actions (they're internal)
+                if (result.id.startsWith(ACTION_MODE_PREFIX)) return null
+
+                return (
+                  <div
+                    key={result.id}
+                    className={`kbd-omnibar-result ${i === selectedIndex ? 'selected' : ''}${isModeInactive ? ' kbd-mode-inactive' : ''}`}
+                    onClick={() => execute(result.id)}
+                  >
+                    <span className="kbd-omnibar-result-label">
+                      {result.action.label}
                     </span>
-                  )}
-                  {result.bindings.length > 0 && (
-                    <div className="kbd-omnibar-result-bindings">
-                      {result.bindings.slice(0, 2).map((binding) => (
-                        <BindingBadge key={binding} binding={binding} />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
+                    {modeInfo && (
+                      <span
+                        className="kbd-mode-badge"
+                        style={modeInfo.config.color ? { '--kbd-mode-color': modeInfo.config.color } as React.CSSProperties : undefined}
+                      >
+                        {modeInfo.config.label}
+                      </span>
+                    )}
+                    {!modeInfo && result.action.group && (
+                      <span className="kbd-omnibar-result-category">
+                        {result.action.group}
+                      </span>
+                    )}
+                    {result.bindings.length > 0 && (
+                      <div className="kbd-omnibar-result-bindings">
+                        {result.bindings.slice(0, 2).map((binding) => (
+                          <BindingBadge key={binding} binding={binding} />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
 
               {/* Remote endpoint results grouped by endpoint */}
               {(() => {

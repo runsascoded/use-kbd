@@ -245,6 +245,7 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
         label: config.label,
         description: config.description,
         group: config.group,
+        mode: config.mode,
         keywords: config.keywords,
         hideFromModal: config.hideFromModal,
         enabled: config.enabled,

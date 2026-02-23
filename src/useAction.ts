@@ -26,6 +26,8 @@ export interface ActionConfig {
   description?: string
   /** Group name for organizing in modal */
   group?: string
+  /** Mode ID this action belongs to (only active when mode is active) */
+  mode?: string
   /** Default key bindings (user can override) */
   defaultBindings?: string[]
   /** Search keywords for omnibar */
@@ -105,6 +107,7 @@ export function useAction(id: string, config: ActionConfig): void {
     config.label,
     config.description,
     config.group,
+    config.mode,
     // Compare bindings by value
     JSON.stringify(config.defaultBindings),
     JSON.stringify(config.keywords),
@@ -169,6 +172,7 @@ export function useActions(actions: Record<string, ActionConfig>): void {
         id,
         c.label,
         c.group,
+        c.mode,
         c.defaultBindings,
         c.keywords,
         c.priority,

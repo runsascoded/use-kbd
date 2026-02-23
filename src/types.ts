@@ -156,6 +156,8 @@ export interface ActionDefinition {
   description?: string
   /** Group for organizing in shortcuts modal (e.g., "Metrics", "Time Range") */
   group?: string
+  /** Mode ID this action belongs to (only active when mode is active) */
+  mode?: string
   /** Additional search keywords */
   keywords?: string[]
   /** Icon identifier (user provides rendering) */
@@ -191,6 +193,8 @@ export interface ActionSearchResult {
   hasPlaceholders?: boolean
   /** Captured digit values from query (e.g., "smooth 3" → [3]) */
   captures?: number[]
+  /** Mode ID this action belongs to (if any) */
+  mode?: string
 }
 
 /**
@@ -211,6 +215,60 @@ export interface SequenceCompletion {
   isComplete: boolean
   /** Captured digit values from \d and \d+ placeholders */
   captures?: number[]
+}
+
+// ============================================================================
+// Mode types
+// ============================================================================
+
+/**
+ * Configuration for a keyboard mode (sticky shortcut scope).
+ */
+export interface ModeConfig {
+  /** Display label for the mode */
+  label: string
+  /** Accent color for mode indicator and UI highlights */
+  color?: string
+  /** Default key bindings to activate the mode (e.g., ['g n']) */
+  defaultBindings?: string[]
+  /** Whether the activation binding also deactivates (default: true) */
+  toggle?: boolean
+  /** Whether Escape exits the mode (default: true) */
+  escapeExits?: boolean
+  /** Whether global shortcuts pass through when mode is active (default: true) */
+  passthrough?: boolean
+  /** Called when mode is activated */
+  onActivate?: () => void
+  /** Called when mode is deactivated */
+  onDeactivate?: () => void
+}
+
+/**
+ * Internal registered mode state
+ */
+export interface RegisteredMode {
+  config: ModeConfig
+  registeredAt: number
+}
+
+/**
+ * Return value from useMode hook
+ */
+export interface ModeState {
+  /** Mode ID */
+  id: string
+  /** Whether this mode is currently active */
+  active: boolean
+  /** Display label */
+  label: string
+  /** Accent color */
+  color?: string
+  /** Programmatically activate this mode */
+  activate: () => void
+  /** Programmatically deactivate this mode */
+  deactivate: () => void
+  /** Toggle this mode on/off */
+  toggle: () => void
 }
 
 // ============================================================================

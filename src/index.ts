@@ -11,6 +11,8 @@ export type {
   KeyCombination,
   KeyCombinationDisplay,
   KeySeq,
+  ModeConfig,
+  ModeState,
   Modifiers,
   OmnibarActionEntry,
   OmnibarEndpointAsyncConfig,
@@ -22,6 +24,7 @@ export type {
   OmnibarLinkEntry,
   RecordHotkeyOptions,
   RecordHotkeyResult,
+  RegisteredMode,
   SeqElem,
   SeqElemState,
   SeqMatchState,
@@ -54,6 +57,11 @@ export { useAction, useActions } from './useAction'
 export type { ActionsRegistryValue, RegisteredAction } from './ActionsRegistry'
 export { ActionsRegistryContext, useActionsRegistry } from './ActionsRegistry'
 
+// Mode registration
+export { useMode } from './useMode'
+export type { ModesRegistryValue } from './ModesRegistry'
+export { ModesRegistryContext, useModesRegistry } from './ModesRegistry'
+
 // Omnibar endpoint registration
 export type { EndpointQueryResult, OmnibarEndpointsRegistryValue, RegisteredEndpoint } from './OmnibarEndpointsRegistry'
 export { OmnibarEndpointsRegistryContext, useOmnibarEndpointsRegistry } from './OmnibarEndpointsRegistry'
@@ -72,6 +80,8 @@ export { Kbd, Kbds, Key, KbdModal, KbdOmnibar, KbdLookup } from './Kbd'
 export type { KbdProps } from './Kbd'
 export { KeybindingEditor } from './KeybindingEditor'
 export { LookupModal } from './LookupModal'
+export { ModeIndicator } from './ModeIndicator'
+export type { ModeIndicatorPosition, ModeIndicatorProps } from './ModeIndicator'
 export { MobileFAB } from './MobileFAB'
 export type { MobileFABProps } from './MobileFAB'
 export { SpeedDial } from './SpeedDial'
@@ -138,8 +148,9 @@ export type { FuzzyMatchResult, KeyConflict } from './utils'
 
 // Constants
 export {
-  DEFAULT_SEQUENCE_TIMEOUT,
-  ACTION_MODAL,
-  ACTION_OMNIBAR,
   ACTION_LOOKUP,
+  ACTION_MODAL,
+  ACTION_MODE_PREFIX,
+  ACTION_OMNIBAR,
+  DEFAULT_SEQUENCE_TIMEOUT,
 } from './constants'

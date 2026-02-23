@@ -11,3 +11,9 @@ export const DEFAULT_SEQUENCE_TIMEOUT = Infinity
 export const ACTION_MODAL = '__hotkeys:modal'
 export const ACTION_OMNIBAR = '__hotkeys:omnibar'
 export const ACTION_LOOKUP = '__hotkeys:lookup'
+
+/**
+ * Prefix for mode activation actions.
+ * Mode activation actions are registered with ID `__mode:{modeId}`.
+ */
+export const ACTION_MODE_PREFIX = '__mode:'

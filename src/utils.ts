@@ -1192,6 +1192,7 @@ export function searchActions(
       bindings,
       score,
       labelMatches: labelMatch.ranges,
+      mode: action.mode,
     }
 
     // Include placeholder info and captures if applicable

@@ -1,12 +1,14 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ActionsRegistryContext, useActionsRegistry } from './ActionsRegistry'
+import { ModesRegistryContext, useModesRegistry } from './ModesRegistry'
 import { OmnibarEndpointsRegistryContext, useOmnibarEndpointsRegistry } from './OmnibarEndpointsRegistry'
-import { DEFAULT_SEQUENCE_TIMEOUT } from './constants'
+import { ACTION_MODE_PREFIX, DEFAULT_SEQUENCE_TIMEOUT } from './constants'
 import { useHotkeys } from './useHotkeys'
 import { findConflicts, getSequenceCompletions, searchActions } from './utils'
 import type { ActionsRegistryValue } from './ActionsRegistry'
+import type { ModesRegistryValue } from './ModesRegistry'
 import type { OmnibarEndpointsRegistryValue } from './OmnibarEndpointsRegistry'
-import type { HotkeySequence } from './types'
+import type { HotkeySequence, RegisteredMode } from './types'
 
 /**
  * Configuration for the HotkeysProvider.
@@ -92,6 +94,16 @@ export interface HotkeysContextValue {
   getCompletions: (pendingKeys: HotkeySequence) => ReturnType<typeof getSequenceCompletions>
   /** Cancel the current sequence */
   cancelSequence: () => void
+  /** Currently active mode ID (null if none) */
+  activeMode: string | null
+  /** All registered modes */
+  modes: Map<string, RegisteredMode>
+  /** The modes registry */
+  modesRegistry: ModesRegistryValue
+  /** Activate a mode by ID */
+  activateMode: (id: string) => void
+  /** Deactivate the current mode */
+  deactivateMode: () => void
 }
 
 const HotkeysContext = createContext<HotkeysContextValue | null>(null)
@@ -152,6 +164,9 @@ export function HotkeysProvider({
 
   // Create the actions registry
   const registry = useActionsRegistry({ storageKey: config.storageKey })
+
+  // Create the modes registry
+  const modesRegistry = useModesRegistry()
 
   // Create the omnibar endpoints registry
   const endpointsRegistry = useOmnibarEndpointsRegistry()
@@ -328,21 +343,58 @@ export function HotkeysProvider({
   const conflicts = useMemo(() => findConflicts(keymap), [keymap])
   const hasConflicts = conflicts.size > 0
 
-  // Effective keymap (without conflicts if disabled)
+  // Mode-aware effective keymap
+  const { activeMode } = modesRegistry
   const effectiveKeymap = useMemo(() => {
-    if (!config.disableConflicts || conflicts.size === 0) {
-      return keymap
-    }
-    const filtered: typeof keymap = {}
-    for (const [key, action] of Object.entries(keymap)) {
-      if (!conflicts.has(key)) {
-        filtered[key] = action
+    const activeModeConfig = activeMode ? modesRegistry.modes.get(activeMode)?.config : null
+
+    // Start with conflict filtering if needed
+    let baseKeymap = keymap
+    if (config.disableConflicts && conflicts.size > 0) {
+      baseKeymap = {}
+      for (const [key, action] of Object.entries(keymap)) {
+        if (!conflicts.has(key)) {
+          baseKeymap[key] = action
+        }
       }
     }
-    return filtered
-  }, [keymap, conflicts, config.disableConflicts])
 
-  // Build handlers map from registered actions
+    // If no modes are registered at all, skip mode filtering
+    if (modesRegistry.modes.size === 0) return baseKeymap
+
+    const result: typeof keymap = {}
+    for (const [key, actionOrActions] of Object.entries(baseKeymap)) {
+      const actions = Array.isArray(actionOrActions) ? actionOrActions : [actionOrActions]
+      const filtered = actions.filter(id => {
+        const action = registry.actions.get(id)
+        const actionMode = action?.config.mode
+        if (!actionMode) return true                          // global: always include
+        if (actionMode === activeMode) return true            // active mode: include
+        if (id.startsWith(ACTION_MODE_PREFIX)) return true    // mode activators: always
+        return false                                          // inactive mode: exclude
+      })
+      if (filtered.length === 0) continue
+
+      // If mode action shadows global on same key, keep only mode action
+      if (activeMode && activeModeConfig?.passthrough !== false) {
+        const modeActions = filtered.filter(id => registry.actions.get(id)?.config.mode === activeMode)
+        if (modeActions.length > 0) {
+          result[key] = modeActions.length === 1 ? modeActions[0] : modeActions
+          continue
+        }
+      }
+      result[key] = filtered.length === 1 ? filtered[0] : filtered
+    }
+
+    // Inject escape → mode exit when a mode is active and escapeExits !== false
+    if (activeMode && activeModeConfig?.escapeExits !== false) {
+      result['escape'] = '__mode:exit'
+    }
+
+    return result
+  }, [keymap, activeMode, modesRegistry.modes, registry.actions, conflicts, config.disableConflicts])
+
+  // Build handlers map from registered actions + mode exit handler
   const handlers = useMemo(() => {
     const map: Record<string, (e: KeyboardEvent, captures?: number[]) => void> = {}
 
@@ -350,8 +402,15 @@ export function HotkeysProvider({
       map[id] = action.config.handler
     }
 
+    // Add mode exit handler
+    if (activeMode) {
+      map['__mode:exit'] = () => {
+        modesRegistry.deactivateMode()
+      }
+    }
+
     return map
-  }, [registry.actions])
+  }, [registry.actions, activeMode, modesRegistry])
 
   // Register hotkeys (enabled unless editing a binding, omnibar, or lookup is open)
   const hotkeysEnabled = isEnabled && !isEditingBinding && !isOmnibarOpen && !isLookupOpen
@@ -385,11 +444,16 @@ export function HotkeysProvider({
     [keymap, registry.actionRegistry]
   )
 
-  // Wrap execute to track recents
+  // Wrap execute to track recents + auto-activate mode for mode-scoped actions
   const executeAction = useCallback((id: string, captures?: number[]) => {
+    const action = registry.actions.get(id)
+    const actionMode = action?.config.mode
+    if (actionMode && modesRegistry.activeMode !== actionMode) {
+      modesRegistry.activateMode(actionMode)
+    }
     registry.execute(id, captures)
     trackRecentAction(id)
-  }, [registry, trackRecentAction])
+  }, [registry, trackRecentAction, modesRegistry])
 
   const value = useMemo<HotkeysContextValue>(() => ({
     storageKey: config.storageKey,
@@ -422,6 +486,11 @@ export function HotkeysProvider({
     hasConflicts,
     searchActions: searchActionsHelper,
     getCompletions,
+    activeMode: modesRegistry.activeMode,
+    modes: modesRegistry.modes,
+    modesRegistry,
+    activateMode: modesRegistry.activateMode,
+    deactivateMode: modesRegistry.deactivateMode,
   }), [
     config.storageKey,
     registry,
@@ -452,15 +521,18 @@ export function HotkeysProvider({
     hasConflicts,
     searchActionsHelper,
     getCompletions,
+    modesRegistry,
   ])
 
   return (
     <ActionsRegistryContext.Provider value={registry}>
-      <OmnibarEndpointsRegistryContext.Provider value={endpointsRegistry}>
-        <HotkeysContext.Provider value={value}>
-          {children}
-        </HotkeysContext.Provider>
-      </OmnibarEndpointsRegistryContext.Provider>
+      <ModesRegistryContext.Provider value={modesRegistry}>
+        <OmnibarEndpointsRegistryContext.Provider value={endpointsRegistry}>
+          <HotkeysContext.Provider value={value}>
+            {children}
+          </HotkeysContext.Provider>
+        </OmnibarEndpointsRegistryContext.Provider>
+      </ModesRegistryContext.Provider>
     </ActionsRegistryContext.Provider>
   )
 }

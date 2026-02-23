@@ -6,7 +6,7 @@ import { useAction } from './useAction'
 import { useHotkeys } from './useHotkeys'
 import { useRecordHotkey } from './useRecordHotkey'
 import { findConflicts, formatCombination, getActionBindings, parseHotkeyString, parseKeySeq } from './utils'
-import type { ActionRegistry, HotkeySequence, KeyCombination, KeyCombinationDisplay, SeqElem } from './types'
+import type { ActionRegistry, HotkeySequence, KeyCombination, KeyCombinationDisplay, RegisteredMode, SeqElem } from './types'
 import type { HotkeyMap } from './useHotkeys'
 
 /**
@@ -71,6 +71,12 @@ export interface ShortcutGroup {
     description?: string
     bindings: string[]
   }>
+  /** Mode metadata (if this group represents a mode's actions) */
+  mode?: {
+    id: string
+    color?: string
+    active: boolean
+  }
 }
 
 /**
@@ -233,6 +239,8 @@ function organizeShortcuts(
   groupOrder?: string[],
   actionRegistry?: ActionRegistry,
   showUnbound = true,
+  modesMap?: Map<string, RegisteredMode>,
+  activeMode?: string | null,
 ): ShortcutGroup[] {
   // Build action -> bindings map
   const actionBindings = getActionBindings(keymap)
@@ -242,6 +250,13 @@ function organizeShortcuts(
   // Helper to get group name for an action (consistent logic for both paths)
   const getGroupName = (actionId: string): string => {
     let groupKey: string
+
+    // For mode-scoped actions, use mode label as group name
+    const actionMode = actionRegistry?.[actionId]?.mode
+    if (actionMode && modesMap) {
+      const mode = modesMap.get(actionMode)
+      if (mode) return mode.config.label
+    }
 
     // First, check if action has a registered group in the registry
     const registeredGroup = actionRegistry?.[actionId]?.group
@@ -256,6 +271,19 @@ function organizeShortcuts(
     return groupNames?.[groupKey] ?? groupKey
   }
 
+  // Helper to get mode metadata for a group
+  const getModeForAction = (actionId: string): ShortcutGroup['mode'] => {
+    const actionMode = actionRegistry?.[actionId]?.mode
+    if (!actionMode || !modesMap) return undefined
+    const mode = modesMap.get(actionMode)
+    if (!mode) return undefined
+    return {
+      id: actionMode,
+      color: mode.config.color,
+      active: activeMode === actionMode,
+    }
+  }
+
   for (const [actionId, bindings] of actionBindings) {
     // Skip actions marked as hidden from modal
     if (actionRegistry?.[actionId]?.hideFromModal) continue
@@ -265,7 +293,7 @@ function organizeShortcuts(
     const groupName = getGroupName(actionId)
 
     if (!groupMap.has(groupName)) {
-      groupMap.set(groupName, { name: groupName, shortcuts: [] })
+      groupMap.set(groupName, { name: groupName, shortcuts: [], mode: getModeForAction(actionId) })
     }
 
     groupMap.get(groupName)!.shortcuts.push({
@@ -287,7 +315,7 @@ function organizeShortcuts(
       const groupName = getGroupName(actionId)
 
       if (!groupMap.has(groupName)) {
-        groupMap.set(groupName, { name: groupName, shortcuts: [] })
+        groupMap.set(groupName, { name: groupName, shortcuts: [], mode: getModeForAction(actionId) })
       }
 
       groupMap.get(groupName)!.shortcuts.push({
@@ -318,10 +346,13 @@ function organizeShortcuts(
       return aIdx - bIdx
     })
   } else {
-    // Default: "General" last, others alphabetically
+    // Default: "General" last, mode groups after regular groups, others alphabetically
     groups.sort((a, b) => {
       if (a.name === 'General') return 1
       if (b.name === 'General') return -1
+      // Mode groups sort after non-mode groups
+      if (a.mode && !b.mode) return 1
+      if (!a.mode && b.mode) return -1
       return a.name.localeCompare(b.name)
     })
   }
@@ -1173,8 +1204,8 @@ export function ShortcutsModal({
   // Default showUnbound to true in editable mode, false otherwise
   const effectiveShowUnbound = showUnbound ?? editable
   const shortcutGroups = useMemo(
-    () => organizeShortcuts(keymap, labels, descriptions, groupNames, groupOrder, ctx?.registry.actionRegistry, effectiveShowUnbound),
-    [keymap, labels, descriptions, groupNames, groupOrder, ctx?.registry.actionRegistry, effectiveShowUnbound],
+    () => organizeShortcuts(keymap, labels, descriptions, groupNames, groupOrder, ctx?.registry.actionRegistry, effectiveShowUnbound, ctx?.modes, ctx?.activeMode),
+    [keymap, labels, descriptions, groupNames, groupOrder, ctx?.registry.actionRegistry, effectiveShowUnbound, ctx?.modes, ctx?.activeMode],
   )
 
   if (!isOpen) return null
@@ -1250,7 +1281,11 @@ export function ShortcutsModal({
           )}
 
           {shortcutGroups.map((group) => (
-            <div key={group.name} className="kbd-group">
+            <div
+              key={group.name}
+              className={`kbd-group${group.mode ? ' kbd-mode-group' : ''}`}
+              style={group.mode?.color ? { '--kbd-mode-color': group.mode.color } as React.CSSProperties : undefined}
+            >
               <h3 className="kbd-group-title">{group.name}</h3>
               {renderGroup(group)}
             </div>
