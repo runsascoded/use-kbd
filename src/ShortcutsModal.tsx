@@ -1,5 +1,6 @@
 import { ComponentType, createContext, Fragment, MouseEvent, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { ACTION_MODAL, ACTION_MODE_PREFIX, DEFAULT_SEQUENCE_TIMEOUT } from './constants'
+import { dbg } from './debug'
 import { useMaybeHotkeysContext } from './HotkeysProvider'
 import { renderModifierIcons, renderKeyContent } from './KeyElements'
 import { Left, Right, Up, Down } from './KeyIcons'
@@ -1185,6 +1186,7 @@ export function ShortcutsModal({
 
   // Start editing an arrow group's modifiers
   const startArrowGroupEditing = useCallback((groupId: string) => {
+    dbg.recording('arrow group edit start: %s', groupId)
     // Cancel any regular editing first
     cancelEditing()
     arrowGroupEditRef.current = { groupId }
@@ -1194,6 +1196,7 @@ export function ShortcutsModal({
   }, [cancelEditing, ctx?.setIsEditingBinding])
 
   const cancelArrowGroupEditing = useCallback(() => {
+    dbg.recording('arrow group edit cancel')
     arrowGroupEditRef.current = null
     setArrowGroupEditState(null)
     setArrowGroupActiveKeys(null)
@@ -1493,6 +1496,7 @@ export function ShortcutsModal({
       if (isArrow || e.key === 'Enter') {
         const currentRef = arrowGroupEditRef.current
         if (!currentRef) return
+        dbg.recording('arrow group confirm: %s (key: %s)', currentRef.groupId, e.key)
 
         // Build modifier prefix from held keys
         const mods: string[] = []
@@ -1535,6 +1539,7 @@ export function ShortcutsModal({
       }
 
       // Modifier key: update display
+      dbg.recording('arrow group modifier update: ctrl=%s alt=%s shift=%s meta=%s', e.ctrlKey, e.altKey, e.shiftKey, e.metaKey)
       setArrowGroupActiveKeys({
         key: '',
         modifiers: {

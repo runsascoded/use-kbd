@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { DEFAULT_SEQUENCE_TIMEOUT } from './constants'
+import { dbg } from './debug'
 import { DIGIT_PLACEHOLDER, DIGITS_PLACEHOLDER, formatCombination, isModifierKey, isShiftedSymbol, normalizeKey } from './utils'
 import type { KeyCombination, HotkeySequence, RecordHotkeyOptions, RecordHotkeyResult } from './types'
 
@@ -93,6 +94,7 @@ export function useRecordHotkey(options: RecordHotkeyOptions = {}): RecordHotkey
     if (seq.length === 0) return
 
     const display = formatCombination(seq)
+    dbg.recording('submit: %s (%d keys)', display.id, seq.length)
 
     // Clear state
     clearTimeout_()
@@ -110,6 +112,7 @@ export function useRecordHotkey(options: RecordHotkeyOptions = {}): RecordHotkey
   }, [clearTimeout_, onCapture])
 
   const cancel = useCallback(() => {
+    dbg.recording('cancel recording')
     clearTimeout_()
     setIsRecording(false)
     pendingKeysRef.current = []
@@ -134,6 +137,7 @@ export function useRecordHotkey(options: RecordHotkeyOptions = {}): RecordHotkey
   }, [submit, cancel])
 
   const startRecording = useCallback(() => {
+    dbg.recording('start recording')
     clearTimeout_()
     setIsRecording(true)
     setSequence(null)
@@ -178,6 +182,7 @@ export function useRecordHotkey(options: RecordHotkeyOptions = {}): RecordHotkey
       // Handle Tab BEFORE preventDefault - let browser handle focus navigation
       // This enables native tab order through focusable kbd elements
       if (e.key === 'Tab') {
+        dbg.recording('Tab: committing pending keys')
         clearTimeout_()
 
         // Read pending keys from ref (synchronous, unaffected by React batching)
@@ -226,6 +231,7 @@ export function useRecordHotkey(options: RecordHotkeyOptions = {}): RecordHotkey
 
       // Enter submits current sequence
       if (e.key === 'Enter') {
+        dbg.recording('Enter: submitting sequence')
         setPendingKeys(current => {
           if (current.length > 0) {
             submit(current)
@@ -237,6 +243,7 @@ export function useRecordHotkey(options: RecordHotkeyOptions = {}): RecordHotkey
 
       // Escape cancels
       if (e.key === 'Escape') {
+        dbg.recording('Escape: cancelling')
         cancel()
         return
       }
@@ -333,19 +340,23 @@ export function useRecordHotkey(options: RecordHotkeyOptions = {}): RecordHotkey
             combo = { key: DIGIT_PLACEHOLDER, modifiers: { ctrl: false, alt: false, shift: false, meta: false } }
             newSequence = [...pending, combo]
             hashCycleRef.current = 1
+            dbg.recording('hash cycle: # → single digit placeholder')
           } else if (hashCycleRef.current === 1 && lastCombo?.key === DIGIT_PLACEHOLDER) {
             // Second #: replace with multi-digit placeholder
             newSequence = [...pending.slice(0, -1), { key: DIGITS_PLACEHOLDER, modifiers: { ctrl: false, alt: false, shift: false, meta: false } }]
             hashCycleRef.current = 2
+            dbg.recording('hash cycle: ## → multi-digit placeholder')
           } else if (hashCycleRef.current === 2 && lastCombo?.key === DIGITS_PLACEHOLDER) {
             // Third #: replace with literal #
             newSequence = [...pending.slice(0, -1), { key: '#', modifiers: { ctrl: false, alt: false, shift: false, meta: false } }]
             hashCycleRef.current = 3
+            dbg.recording('hash cycle: ### → literal #')
           } else {
             // Fourth # (or any other state): commit literal, add new single digit placeholder
             combo = { key: DIGIT_PLACEHOLDER, modifiers: { ctrl: false, alt: false, shift: false, meta: false } }
             newSequence = [...pending, combo]
             hashCycleRef.current = 1
+            dbg.recording('hash cycle: #### → commit literal, new single digit')
           }
         } else {
           // Non-# key: reset hash cycle and add normally
@@ -355,6 +366,7 @@ export function useRecordHotkey(options: RecordHotkeyOptions = {}): RecordHotkey
 
         pendingKeysRef.current = newSequence
         setPendingKeys(newSequence)
+        dbg.recording('key committed (%d pending)', newSequence.length)
 
         // Submit immediately if timeout is 0 (no sequences mode)
         // Otherwise set timeout to submit (unless paused or Infinity)

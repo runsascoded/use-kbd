@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { DEFAULT_SEQUENCE_TIMEOUT } from './constants'
+import { dbg } from './debug'
 import {
   isModifierKey,
   isShiftedChar,
@@ -531,12 +532,14 @@ export function useHotkeys(
           eventTarget instanceof HTMLSelectElement ||
           eventTarget.isContentEditable
         ) {
+          dbg.hotkeys('skip: form element focused (%s)', eventTarget.tagName)
           return
         }
       }
 
       // Skip modifier-only keypresses
       if (isModifierKey(e.key)) {
+        dbg.hotkeys('skip: modifier-only key (%s)', e.key)
         return
       }
 
@@ -549,6 +552,7 @@ export function useHotkeys(
       // Enter key submits current sequence (handled by SequenceModal when visible)
       // Note: SequenceModal captures Enter in capture phase and executes via executeAction
       if (e.key === 'Enter' && pendingKeysRef.current.length > 0) {
+        dbg.hotkeys('Enter during sequence (%d pending keys)', pendingKeysRef.current.length)
         e.preventDefault()
 
         // Try to execute any complete or finalizable digit patterns from current match states
@@ -587,6 +591,7 @@ export function useHotkeys(
 
       // Escape cancels current sequence
       if (e.key === 'Escape' && pendingKeysRef.current.length > 0) {
+        dbg.hotkeys('Escape: cancelling sequence')
         e.preventDefault()
         cancelSequence()
         return
@@ -598,6 +603,7 @@ export function useHotkeys(
       // Backspace during sequence: check if any binding matches backspace continuation
       // If not, treat as "delete last key" for editing the sequence
       if (e.key === 'Backspace' && pendingKeysRef.current.length > 0) {
+        dbg.hotkeys('Backspace during sequence (%d pending keys)', pendingKeysRef.current.length)
         // Quick check: would backspace match any pattern continuation?
         let backspaceMatches = false
         for (const entry of parsedKeymapRef.current) {
@@ -697,11 +703,14 @@ export function useHotkeys(
         }
       }
 
+      dbg.hotkeys('KeySeq results: %d complete, %d partial, key=%s', completeMatches.length, hasPartials ? matchStates.size : 0, normalizeKey(e.key))
+
       // Permissive conflict resolution:
       // - If exactly one complete match AND no partial matches → execute immediately
       // - Otherwise → enter sequence mode for disambiguation via SeqM
       if (completeMatches.length === 1 && !hasPartials) {
         const match = completeMatches[0]
+        dbg.hotkeys('immediate execute: %s (captures: %o)', match.key, match.captures)
         if (tryExecuteKeySeq(match.key, match.captures, e)) {
           clearPending()
           return
@@ -710,6 +719,7 @@ export function useHotkeys(
 
       // Multiple complete matches OR partials exist → enter sequence mode
       if (completeMatches.length > 0 || hasPartials) {
+        dbg.hotkeys('sequence mode: %d complete, %d partial pending', completeMatches.length, matchStates.size)
         // We have partial matches, wait for more keys
         setPendingKeys(newSequence)
         setIsAwaitingSequence(true)
@@ -765,6 +775,7 @@ export function useHotkeys(
       // Fall back to legacy exact matching for non-placeholder patterns
       const exactMatch = tryExecute(newSequence, e)
       if (exactMatch) {
+        dbg.hotkeys('legacy exact match for sequence of %d keys', newSequence.length)
         clearPending()
         return
       }
@@ -773,6 +784,7 @@ export function useHotkeys(
       if (hasPotentialMatch(newSequence)) {
         // Check if there are longer sequences this could match
         if (hasSequenceExtension(newSequence)) {
+          dbg.hotkeys('partial sequence: waiting for more keys (%d so far)', newSequence.length)
           // Wait for more keys
           setPendingKeys(newSequence)
           setIsAwaitingSequence(true)
@@ -821,6 +833,7 @@ export function useHotkeys(
 
       // No match and no potential
       if (pendingKeysRef.current.length > 0) {
+        dbg.hotkeys('no match: invalid key in sequence (%s)', normalizeKey(e.key))
         // Already in sequence mode - keep modal open with invalid key showing
         // "No matching shortcuts". User can backspace to fix or Escape to cancel.
         setPendingKeys(newSequence)
@@ -832,9 +845,12 @@ export function useHotkeys(
 
       // Try as single key (sequence of 1)
       const singleMatch = tryExecute([currentCombo], e)
-      if (!singleMatch) {
+      if (singleMatch) {
+        dbg.hotkeys('single key match: %s', normalizeKey(e.key))
+      } else {
         // Check if single key could start a sequence
         if (hasSequenceExtension([currentCombo])) {
+          dbg.hotkeys('sequence start: %s', normalizeKey(e.key))
           setPendingKeys([currentCombo])
           setIsAwaitingSequence(true)
           onSequenceStart?.([currentCombo])

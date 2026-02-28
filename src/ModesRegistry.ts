@@ -1,4 +1,5 @@
 import { createContext, useCallback, useMemo, useRef, useState } from 'react'
+import { dbg } from './debug'
 import type { ModeConfig, RegisteredMode } from './types'
 
 export interface ModesRegistryValue {
@@ -34,6 +35,7 @@ export function useModesRegistry(): ModesRegistryValue {
   activeModeRef.current = activeMode
 
   const register = useCallback((id: string, config: ModeConfig) => {
+    dbg.modes('register mode: %s (%s)', id, config.label)
     modesRef.current.set(id, {
       config,
       registeredAt: Date.now(),
@@ -42,6 +44,7 @@ export function useModesRegistry(): ModesRegistryValue {
   }, [])
 
   const unregister = useCallback((id: string) => {
+    dbg.modes('unregister mode: %s', id)
     modesRef.current.delete(id)
     // If the unregistered mode was active, deactivate it
     if (activeModeRef.current === id) {
@@ -53,6 +56,7 @@ export function useModesRegistry(): ModesRegistryValue {
   const activateMode = useCallback((id: string) => {
     const mode = modesRef.current.get(id)
     if (!mode) return
+    dbg.modes('activate mode: %s', id)
 
     // Deactivate previous mode if different
     const prev = activeModeRef.current
@@ -69,6 +73,7 @@ export function useModesRegistry(): ModesRegistryValue {
   const deactivateMode = useCallback(() => {
     const current = activeModeRef.current
     if (!current) return
+    dbg.modes('deactivate mode: %s', current)
 
     const mode = modesRef.current.get(current)
     activeModeRef.current = null

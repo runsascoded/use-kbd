@@ -946,13 +946,6 @@ export function getActionBindings(keymap: Record<string, string | string[]>): Ma
     }
   }
 
-  // Debug logging for stack:none and region:nyc
-  const stackNone = actionToKeys.get('stack:none')
-  const regionNyc = actionToKeys.get('region:nyc')
-  if (stackNone || regionNyc) {
-    console.log('getActionBindings:', { 'stack:none': stackNone, 'region:nyc': regionNyc })
-  }
-
   return actionToKeys
 }
 

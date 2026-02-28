@@ -1,4 +1,5 @@
 import { createContext, useCallback, useMemo, useRef, useState } from 'react'
+import { dbg } from './debug'
 import type { ActionRegistry, BindingsExport } from './types'
 import type { ActionConfig } from './useAction'
 import type { HotkeyMap } from './useHotkeys'
@@ -166,6 +167,7 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
   }, [storageKey])
 
   const register = useCallback((id: string, config: ActionConfig) => {
+    dbg.registry('register: %s (bindings: %o, group: %s)', id, config.defaultBindings, config.group)
     actionsRef.current.set(id, {
       config,
       registeredAt: Date.now(),
@@ -174,6 +176,7 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
   }, [])
 
   const unregister = useCallback((id: string) => {
+    dbg.registry('unregister: %s', id)
     actionsRef.current.delete(id)
     setActionsVersion(v => v + 1)
   }, [])
@@ -181,6 +184,7 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
   const execute = useCallback((id: string, captures?: number[]) => {
     const action = actionsRef.current.get(id)
     if (action && (action.config.enabled ?? true)) {
+      dbg.registry('execute: %s (captures: %o)', id, captures)
       action.config.handler(undefined, captures)
     }
   }, [])
@@ -233,6 +237,7 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
       }
     }
 
+    dbg.registry('keymap recomputed: %d bindings, %d actions', Object.keys(map).length, actionsRef.current.size)
     return map
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [actionsVersion, overrides, removedDefaults])
@@ -276,6 +281,7 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
   }, [getBindingsForAction])
 
   const setBinding = useCallback((actionId: string, key: string) => {
+    dbg.registry('setBinding: %s → %s', key, actionId)
     // If this binding is a default for this action, just remove it from removedDefaults
     // (no need to store in overrides since it will come from defaults)
     if (isDefaultBinding(key, actionId)) {
@@ -301,6 +307,7 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
   }, [updateOverrides, updateRemovedDefaults, isDefaultBinding])
 
   const removeBinding = useCallback((actionId: string, key: string) => {
+    dbg.registry('removeBinding: %s from %s', key, actionId)
     // Check if this is a default binding for this specific action
     const action = actionsRef.current.get(actionId)
     const isDefault = action?.config.defaultBindings?.includes(key)

@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ActionsRegistryContext, useActionsRegistry } from './ActionsRegistry'
+import { dbg } from './debug'
 import { ModesRegistryContext, useModesRegistry } from './ModesRegistry'
 import { OmnibarEndpointsRegistryContext, useOmnibarEndpointsRegistry } from './OmnibarEndpointsRegistry'
 import { ACTION_MODE_PREFIX, DEFAULT_SEQUENCE_TIMEOUT } from './constants'
@@ -391,6 +392,7 @@ export function HotkeysProvider({
       result['escape'] = '__mode:exit'
     }
 
+    dbg.modes('effective keymap: %d bindings (active mode: %s)', Object.keys(result).length, activeMode ?? 'none')
     return result
   }, [keymap, activeMode, modesRegistry.modes, registry.actions, conflicts, config.disableConflicts])
 
@@ -414,6 +416,7 @@ export function HotkeysProvider({
 
   // Register hotkeys (enabled unless editing a binding, omnibar, or lookup is open)
   const hotkeysEnabled = isEnabled && !isEditingBinding && !isOmnibarOpen && !isLookupOpen
+  dbg.modes('hotkeys %s (editing=%s, omnibar=%s, lookup=%s)', hotkeysEnabled ? 'enabled' : 'disabled', isEditingBinding, isOmnibarOpen, isLookupOpen)
   const {
     pendingKeys,
     isAwaitingSequence,
