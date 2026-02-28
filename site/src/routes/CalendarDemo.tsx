@@ -161,21 +161,21 @@ function Calendar() {
   }, [viewMode])
 
   // Day navigation within month view
-  const moveDayLeft = useCallback(() => {
-    setSelectedDate(d => new Date(d.getTime() - 86400000))
+  // Auto-advance currentDate when selectedDate crosses a month boundary
+  const moveDay = useCallback((delta: number) => {
+    setSelectedDate(d => {
+      const next = new Date(d.getTime() + delta)
+      if (next.getMonth() !== d.getMonth() || next.getFullYear() !== d.getFullYear()) {
+        setCurrentDate(new Date(next.getFullYear(), next.getMonth(), 1))
+      }
+      return next
+    })
   }, [])
 
-  const moveDayRight = useCallback(() => {
-    setSelectedDate(d => new Date(d.getTime() + 86400000))
-  }, [])
-
-  const moveDayUp = useCallback(() => {
-    setSelectedDate(d => new Date(d.getTime() - 7 * 86400000))
-  }, [])
-
-  const moveDayDown = useCallback(() => {
-    setSelectedDate(d => new Date(d.getTime() + 7 * 86400000))
-  }, [])
+  const moveDayLeft = useCallback(() => moveDay(-86400000), [moveDay])
+  const moveDayRight = useCallback(() => moveDay(86400000), [moveDay])
+  const moveDayUp = useCallback(() => moveDay(-7 * 86400000), [moveDay])
+  const moveDayDown = useCallback(() => moveDay(7 * 86400000), [moveDay])
 
   // Event management
   const createEvent = useCallback(() => {
