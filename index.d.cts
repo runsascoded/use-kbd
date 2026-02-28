@@ -169,7 +169,16 @@ interface ActionDefinition {
     hideFromModal?: boolean;
     /** Protect bindings from removal (user can still add more, but not remove existing) */
     protected?: boolean;
+    /** Arrow group metadata (set by useArrowGroup) */
+    arrowGroup?: {
+        groupId: string;
+        direction: Direction;
+    };
 }
+/** Cardinal direction for arrow key groups */
+type Direction = 'left' | 'right' | 'up' | 'down';
+/** Modifier key name */
+type ModifierName = 'ctrl' | 'alt' | 'shift' | 'meta';
 /**
  * Registry of all available actions
  */
@@ -759,14 +768,31 @@ interface TooltipProps {
  * Default uses native title attribute; can be replaced with MUI Tooltip etc.
  */
 type TooltipComponent = ComponentType<TooltipProps>;
+/** A regular action shortcut entry */
+interface ActionShortcut {
+    type: 'action';
+    actionId: string;
+    label: string;
+    description?: string;
+    bindings: string[];
+}
+/** An arrow group shortcut entry (collapsed from 4 directional actions) */
+interface ArrowGroupShortcut {
+    type: 'arrowGroup';
+    groupId: string;
+    label: string;
+    description?: string;
+    /** Action IDs for each direction */
+    actionIds: Record<Direction, string>;
+    /** Current modifier prefix for the arrow bindings */
+    modifierPrefix: string;
+    /** Extra per-direction bindings (non-arrow, e.g., vim keys) */
+    extraBindings: Partial<Record<Direction, string[]>>;
+}
+type ShortcutEntry = ActionShortcut | ArrowGroupShortcut;
 interface ShortcutGroup {
     name: string;
-    shortcuts: Array<{
-        actionId: string;
-        label: string;
-        description?: string;
-        bindings: string[];
-    }>;
+    shortcuts: ShortcutEntry[];
     /** Mode metadata (if this group represents a mode's actions) */
     mode?: {
         id: string;
@@ -1357,6 +1383,11 @@ interface ActionConfig {
     hideFromModal?: boolean;
     /** Protect bindings from removal (user can still add more, but not remove existing) */
     protected?: boolean;
+    /** Arrow group metadata (set by useArrowGroup) */
+    arrowGroup?: {
+        groupId: string;
+        direction: Direction;
+    };
 }
 /**
  * Register an action with the hotkeys system.
@@ -1608,6 +1639,42 @@ declare function useHotkeysContext(): HotkeysContextValue;
  * Hook to optionally access hotkeys context.
  */
 declare function useMaybeHotkeysContext(): HotkeysContextValue | null;
+
+interface ArrowGroupConfig {
+    label: string;
+    group?: string;
+    mode?: string;
+    description?: string;
+    defaultModifiers: ModifierName[];
+    handlers: Record<Direction, ActionHandler>;
+    enabled?: boolean;
+    keywords?: string[];
+    /** Additional per-direction bindings (e.g., { left: ['h'], right: ['l'] }) */
+    extraBindings?: Partial<Record<Direction, string[]>>;
+}
+/**
+ * Register four directional arrow-key actions as a group.
+ *
+ * Creates actions `{id}-left`, `{id}-right`, `{id}-up`, `{id}-down`,
+ * each bound to `{modifiers}+arrow{dir}`. The group is displayed as a
+ * single compact row in ShortcutsModal.
+ *
+ * @example
+ * ```tsx
+ * useArrowGroup('nav:pan', {
+ *   label: 'Pan',
+ *   group: 'Camera',
+ *   defaultModifiers: ['shift'],
+ *   handlers: {
+ *     left:  () => pan(-1, 0),
+ *     right: () => pan(1, 0),
+ *     up:    () => pan(0, -1),
+ *     down:  () => pan(0, 1),
+ *   },
+ * })
+ * ```
+ */
+declare function useArrowGroup(id: string, config: ArrowGroupConfig): void;
 
 /**
  * Register a keyboard mode (sticky shortcut scope).
@@ -2115,4 +2182,4 @@ declare const ACTION_LOOKUP = "__hotkeys:lookup";
  */
 declare const ACTION_MODE_PREFIX = "__mode:";
 
-export { ACTION_LOOKUP, ACTION_MODAL, ACTION_MODE_PREFIX, ACTION_OMNIBAR, type ActionConfig, type ActionDefinition, type ActionHandler, type ActionRegistry, type ActionSearchResult, ActionsRegistryContext, type ActionsRegistryValue, Alt, Backspace, type BindingInfo, type BindingsExport, Command, Ctrl, DEFAULT_SEQUENCE_TIMEOUT, DIGITS_PLACEHOLDER, DIGIT_PLACEHOLDER, Down, type EndpointPagination, type EndpointPaginationInfo, type EndpointPaginationMode, type EndpointQueryResult, type EndpointResponse, Enter, FLOAT_PLACEHOLDER, type FuzzyMatchResult, type GroupRenderer, type GroupRendererProps, type HandlerMap, type HotkeyHandler, type HotkeyMap, type HotkeySequence, type HotkeysConfig, type HotkeysContextValue, HotkeysProvider, type HotkeysProviderProps, Kbd, KbdLookup, KbdModal, KbdOmnibar, type KbdProps, Kbds, Key, type KeyCombination, type KeyCombinationDisplay, type KeyConflict, type KeyIconProps, type KeyIconType, type KeySeq, KeybindingEditor, type KeybindingEditorProps, type KeybindingEditorRenderProps, Left, LookupModal, MobileFAB, type MobileFABProps, type ModeConfig, ModeIndicator, type ModeIndicatorPosition, type ModeIndicatorProps, type ModeState, ModesRegistryContext, type ModesRegistryValue, ModifierIcon, type ModifierIconProps, type ModifierType, type Modifiers, Omnibar, type OmnibarActionEntry, type OmnibarEndpointAsyncConfig, type OmnibarEndpointConfig, type OmnibarEndpointConfigBase, type OmnibarEndpointSyncConfig, OmnibarEndpointsRegistryContext, type OmnibarEndpointsRegistryValue, type OmnibarEntry, type OmnibarEntryBase, type OmnibarLinkEntry, type OmnibarProps, type OmnibarRenderProps, Option, type PendingAction, type RecordHotkeyOptions, type RecordHotkeyResult, type RegisteredAction, type RegisteredEndpoint, type RegisteredMode, type RemoteOmnibarResult, Right, SearchIcon, SearchTrigger, type SearchTriggerProps, type SeqElem, type SeqElemState, type SeqMatchState, type SequenceCompletion, SequenceModal, Shift, type ShortcutGroup, ShortcutsModal, type ShortcutsModalProps, type ShortcutsModalRenderProps, SpeedDial, type SpeedDialAction, type SpeedDialProps, type TooltipComponent, type TooltipProps, type TwoColumnConfig, type TwoColumnRow, Up, type UseEditableHotkeysOptions, type UseEditableHotkeysResult, type UseHotkeysOptions, type UseHotkeysResult, type UseOmnibarOptions, type UseOmnibarResult, type UseParamEntryOptions, type UseParamEntryReturn, bindingHasPlaceholders, countPlaceholders, createTwoColumnRenderer, extractCaptures, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, formatKeySeq, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasAnyPlaceholderBindings, hasConflicts, hasDigitPlaceholders, hotkeySequenceToKeySeq, isDigitPlaceholder, isMac, isModifierKey, isPlaceholderSentinel, isSequence, isShiftedSymbol, keySeqToHotkeySequence, normalizeKey, parseHotkeyString, parseKeySeq, parseQueryNumbers, searchActions, useAction, useActions, useActionsRegistry, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useMode, useModesRegistry, useOmnibar, useOmnibarEndpoint, useOmnibarEndpointsRegistry, useParamEntry, useRecordHotkey };
+export { ACTION_LOOKUP, ACTION_MODAL, ACTION_MODE_PREFIX, ACTION_OMNIBAR, type ActionConfig, type ActionDefinition, type ActionHandler, type ActionRegistry, type ActionSearchResult, type ActionShortcut, ActionsRegistryContext, type ActionsRegistryValue, Alt, type ArrowGroupConfig, type ArrowGroupShortcut, Backspace, type BindingInfo, type BindingsExport, Command, Ctrl, DEFAULT_SEQUENCE_TIMEOUT, DIGITS_PLACEHOLDER, DIGIT_PLACEHOLDER, type Direction, Down, type EndpointPagination, type EndpointPaginationInfo, type EndpointPaginationMode, type EndpointQueryResult, type EndpointResponse, Enter, FLOAT_PLACEHOLDER, type FuzzyMatchResult, type GroupRenderer, type GroupRendererProps, type HandlerMap, type HotkeyHandler, type HotkeyMap, type HotkeySequence, type HotkeysConfig, type HotkeysContextValue, HotkeysProvider, type HotkeysProviderProps, Kbd, KbdLookup, KbdModal, KbdOmnibar, type KbdProps, Kbds, Key, type KeyCombination, type KeyCombinationDisplay, type KeyConflict, type KeyIconProps, type KeyIconType, type KeySeq, KeybindingEditor, type KeybindingEditorProps, type KeybindingEditorRenderProps, Left, LookupModal, MobileFAB, type MobileFABProps, type ModeConfig, ModeIndicator, type ModeIndicatorPosition, type ModeIndicatorProps, type ModeState, ModesRegistryContext, type ModesRegistryValue, ModifierIcon, type ModifierIconProps, type ModifierName, type ModifierType, type Modifiers, Omnibar, type OmnibarActionEntry, type OmnibarEndpointAsyncConfig, type OmnibarEndpointConfig, type OmnibarEndpointConfigBase, type OmnibarEndpointSyncConfig, OmnibarEndpointsRegistryContext, type OmnibarEndpointsRegistryValue, type OmnibarEntry, type OmnibarEntryBase, type OmnibarLinkEntry, type OmnibarProps, type OmnibarRenderProps, Option, type PendingAction, type RecordHotkeyOptions, type RecordHotkeyResult, type RegisteredAction, type RegisteredEndpoint, type RegisteredMode, type RemoteOmnibarResult, Right, SearchIcon, SearchTrigger, type SearchTriggerProps, type SeqElem, type SeqElemState, type SeqMatchState, type SequenceCompletion, SequenceModal, Shift, type ShortcutEntry, type ShortcutGroup, ShortcutsModal, type ShortcutsModalProps, type ShortcutsModalRenderProps, SpeedDial, type SpeedDialAction, type SpeedDialProps, type TooltipComponent, type TooltipProps, type TwoColumnConfig, type TwoColumnRow, Up, type UseEditableHotkeysOptions, type UseEditableHotkeysResult, type UseHotkeysOptions, type UseHotkeysResult, type UseOmnibarOptions, type UseOmnibarResult, type UseParamEntryOptions, type UseParamEntryReturn, bindingHasPlaceholders, countPlaceholders, createTwoColumnRenderer, extractCaptures, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, formatKeySeq, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasAnyPlaceholderBindings, hasConflicts, hasDigitPlaceholders, hotkeySequenceToKeySeq, isDigitPlaceholder, isMac, isModifierKey, isPlaceholderSentinel, isSequence, isShiftedSymbol, keySeqToHotkeySequence, normalizeKey, parseHotkeyString, parseKeySeq, parseQueryNumbers, searchActions, useAction, useActions, useActionsRegistry, useArrowGroup, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useMode, useModesRegistry, useOmnibar, useOmnibarEndpoint, useOmnibarEndpointsRegistry, useParamEntry, useRecordHotkey };

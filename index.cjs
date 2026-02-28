@@ -2,6 +2,11 @@
 
 var jsxRuntime = require('react/jsx-runtime');
 var react = require('react');
+var createDebug = require('debug');
+
+function _interopDefault (e) { return e && e.__esModule ? e : { default: e }; }
+
+var createDebug__default = /*#__PURE__*/_interopDefault(createDebug);
 
 // src/types.ts
 function extractCaptures(state) {
@@ -20,7 +25,7 @@ function createTwoColumnRenderer(config) {
   const [labelHeader, leftHeader, rightHeader] = headers;
   return function TwoColumnRenderer({ group, renderCell }) {
     const bindingsMap = new Map(
-      group.shortcuts.map((s) => [s.actionId, s.bindings])
+      group.shortcuts.filter((s) => s.type === "action").map((s) => [s.actionId, s.bindings])
     );
     const rows = getRows(group);
     return /* @__PURE__ */ jsxRuntime.jsxs("table", { className: "kbd-table", children: [
@@ -42,6 +47,14 @@ function createTwoColumnRenderer(config) {
     ] });
   };
 }
+var dbg = {
+  hotkeys: createDebug__default.default("use-kbd:hotkeys"),
+  recording: createDebug__default.default("use-kbd:recording"),
+  registry: createDebug__default.default("use-kbd:registry"),
+  modes: createDebug__default.default("use-kbd:modes")
+};
+
+// src/ActionsRegistry.ts
 var EXPORT_VERSION = "0.8.0";
 var ActionsRegistryContext = react.createContext(null);
 function useActionsRegistry(options = {}) {
@@ -127,6 +140,7 @@ function useActionsRegistry(options = {}) {
     });
   }, [storageKey]);
   const register = react.useCallback((id, config) => {
+    dbg.registry("register: %s (bindings: %o, group: %s)", id, config.defaultBindings, config.group);
     actionsRef.current.set(id, {
       config,
       registeredAt: Date.now()
@@ -134,12 +148,14 @@ function useActionsRegistry(options = {}) {
     setActionsVersion((v) => v + 1);
   }, []);
   const unregister = react.useCallback((id) => {
+    dbg.registry("unregister: %s", id);
     actionsRef.current.delete(id);
     setActionsVersion((v) => v + 1);
   }, []);
   const execute = react.useCallback((id, captures) => {
     const action = actionsRef.current.get(id);
     if (action && (action.config.enabled ?? true)) {
+      dbg.registry("execute: %s (captures: %o)", id, captures);
       action.config.handler(void 0, captures);
     }
   }, []);
@@ -175,6 +191,7 @@ function useActionsRegistry(options = {}) {
         }
       }
     }
+    dbg.registry("keymap recomputed: %d bindings, %d actions", Object.keys(map).length, actionsRef.current.size);
     return map;
   }, [actionsVersion, overrides, removedDefaults]);
   const actionRegistry = react.useMemo(() => {
@@ -188,7 +205,8 @@ function useActionsRegistry(options = {}) {
         keywords: config.keywords,
         hideFromModal: config.hideFromModal,
         enabled: config.enabled,
-        protected: config.protected
+        protected: config.protected,
+        arrowGroup: config.arrowGroup
       };
     }
     return registry;
@@ -207,6 +225,7 @@ function useActionsRegistry(options = {}) {
     return getBindingsForAction(actionId)[0];
   }, [getBindingsForAction]);
   const setBinding = react.useCallback((actionId, key) => {
+    dbg.registry("setBinding: %s \u2192 %s", key, actionId);
     if (isDefaultBinding(key, actionId)) {
       updateRemovedDefaults((prev) => {
         const existing = prev[actionId] ?? [];
@@ -228,6 +247,7 @@ function useActionsRegistry(options = {}) {
     }
   }, [updateOverrides, updateRemovedDefaults, isDefaultBinding]);
   const removeBinding = react.useCallback((actionId, key) => {
+    dbg.registry("removeBinding: %s from %s", key, actionId);
     const action = actionsRef.current.get(actionId);
     const isDefault = action?.config.defaultBindings?.includes(key);
     if (isDefault) {
@@ -340,6 +360,7 @@ function useModesRegistry() {
   const activeModeRef = react.useRef(null);
   activeModeRef.current = activeMode;
   const register = react.useCallback((id, config) => {
+    dbg.modes("register mode: %s (%s)", id, config.label);
     modesRef.current.set(id, {
       config,
       registeredAt: Date.now()
@@ -347,6 +368,7 @@ function useModesRegistry() {
     setModesVersion((v) => v + 1);
   }, []);
   const unregister = react.useCallback((id) => {
+    dbg.modes("unregister mode: %s", id);
     modesRef.current.delete(id);
     if (activeModeRef.current === id) {
       setActiveMode(null);
@@ -356,6 +378,7 @@ function useModesRegistry() {
   const activateMode = react.useCallback((id) => {
     const mode = modesRef.current.get(id);
     if (!mode) return;
+    dbg.modes("activate mode: %s", id);
     const prev = activeModeRef.current;
     if (prev && prev !== id) {
       const prevMode = modesRef.current.get(prev);
@@ -368,6 +391,7 @@ function useModesRegistry() {
   const deactivateMode = react.useCallback(() => {
     const current = activeModeRef.current;
     if (!current) return;
+    dbg.modes("deactivate mode: %s", current);
     const mode = modesRef.current.get(current);
     activeModeRef.current = null;
     setActiveMode(null);
@@ -1090,11 +1114,6 @@ function getActionBindings(keymap) {
       actionToKeys.set(action, [...existing, key]);
     }
   }
-  const stackNone = actionToKeys.get("stack:none");
-  const regionNyc = actionToKeys.get("region:nyc");
-  if (stackNone || regionNyc) {
-    console.log("getActionBindings:", { "stack:none": stackNone, "region:nyc": regionNyc });
-  }
   return actionToKeys;
 }
 function fuzzyMatch(pattern, text) {
@@ -1514,10 +1533,12 @@ function useHotkeys(keymap, handlers, options = {}) {
         const eventTarget = e.target;
         const isTextInput = eventTarget instanceof HTMLInputElement && ["text", "email", "password", "search", "tel", "url", "number", "date", "datetime-local", "month", "time", "week"].includes(eventTarget.type);
         if (isTextInput || eventTarget instanceof HTMLTextAreaElement || eventTarget instanceof HTMLSelectElement || eventTarget.isContentEditable) {
+          dbg.hotkeys("skip: form element focused (%s)", eventTarget.tagName);
           return;
         }
       }
       if (isModifierKey(e.key)) {
+        dbg.hotkeys("skip: modifier-only key (%s)", e.key);
         return;
       }
       if (timeoutRef.current) {
@@ -1525,6 +1546,7 @@ function useHotkeys(keymap, handlers, options = {}) {
         timeoutRef.current = null;
       }
       if (e.key === "Enter" && pendingKeysRef.current.length > 0) {
+        dbg.hotkeys("Enter during sequence (%d pending keys)", pendingKeysRef.current.length);
         e.preventDefault();
         let executed = false;
         for (const [key, state] of matchStatesRef.current.entries()) {
@@ -1552,12 +1574,14 @@ function useHotkeys(keymap, handlers, options = {}) {
         return;
       }
       if (e.key === "Escape" && pendingKeysRef.current.length > 0) {
+        dbg.hotkeys("Escape: cancelling sequence");
         e.preventDefault();
         cancelSequence();
         return;
       }
       const currentCombo = eventToCombination(e);
       if (e.key === "Backspace" && pendingKeysRef.current.length > 0) {
+        dbg.hotkeys("Backspace during sequence (%d pending keys)", pendingKeysRef.current.length);
         let backspaceMatches = false;
         for (const entry of parsedKeymapRef.current) {
           let state = matchStatesRef.current.get(entry.key);
@@ -1629,14 +1653,17 @@ function useHotkeys(keymap, handlers, options = {}) {
           matchStates.delete(entry.key);
         }
       }
+      dbg.hotkeys("KeySeq results: %d complete, %d partial, key=%s", completeMatches.length, hasPartials ? matchStates.size : 0, normalizeKey(e.key));
       if (completeMatches.length === 1 && !hasPartials) {
         const match = completeMatches[0];
+        dbg.hotkeys("immediate execute: %s (captures: %o)", match.key, match.captures);
         if (tryExecuteKeySeq(match.key, match.captures, e)) {
           clearPending();
           return;
         }
       }
       if (completeMatches.length > 0 || hasPartials) {
+        dbg.hotkeys("sequence mode: %d complete, %d partial pending", completeMatches.length, matchStates.size);
         setPendingKeys(newSequence);
         setIsAwaitingSequence(true);
         if (pendingKeysRef.current.length === 0) {
@@ -1680,11 +1707,13 @@ function useHotkeys(keymap, handlers, options = {}) {
       }
       const exactMatch = tryExecute(newSequence, e);
       if (exactMatch) {
+        dbg.hotkeys("legacy exact match for sequence of %d keys", newSequence.length);
         clearPending();
         return;
       }
       if (hasPotentialMatch(newSequence)) {
         if (hasSequenceExtension(newSequence)) {
+          dbg.hotkeys("partial sequence: waiting for more keys (%d so far)", newSequence.length);
           setPendingKeys(newSequence);
           setIsAwaitingSequence(true);
           if (pendingKeysRef.current.length === 0) {
@@ -1720,6 +1749,7 @@ function useHotkeys(keymap, handlers, options = {}) {
         }
       }
       if (pendingKeysRef.current.length > 0) {
+        dbg.hotkeys("no match: invalid key in sequence (%s)", normalizeKey(e.key));
         setPendingKeys(newSequence);
         if (preventDefault) {
           e.preventDefault();
@@ -1727,8 +1757,11 @@ function useHotkeys(keymap, handlers, options = {}) {
         return;
       }
       const singleMatch = tryExecute([currentCombo], e);
-      if (!singleMatch) {
+      if (singleMatch) {
+        dbg.hotkeys("single key match: %s", normalizeKey(e.key));
+      } else {
         if (hasSequenceExtension([currentCombo])) {
+          dbg.hotkeys("sequence start: %s", normalizeKey(e.key));
           setPendingKeys([currentCombo]);
           setIsAwaitingSequence(true);
           onSequenceStart?.([currentCombo]);
@@ -1952,6 +1985,7 @@ function HotkeysProvider({
     if (activeMode && activeModeConfig?.escapeExits !== false) {
       result["escape"] = "__mode:exit";
     }
+    dbg.modes("effective keymap: %d bindings (active mode: %s)", Object.keys(result).length, activeMode ?? "none");
     return result;
   }, [keymap, activeMode, modesRegistry.modes, registry.actions, conflicts, config.disableConflicts]);
   const handlers = react.useMemo(() => {
@@ -1967,6 +2001,7 @@ function HotkeysProvider({
     return map;
   }, [registry.actions, activeMode, modesRegistry]);
   const hotkeysEnabled = isEnabled && !isEditingBinding && !isOmnibarOpen && !isLookupOpen;
+  dbg.modes("hotkeys %s (editing=%s, omnibar=%s, lookup=%s)", hotkeysEnabled ? "enabled" : "disabled", isEditingBinding, isOmnibarOpen, isLookupOpen);
   const {
     pendingKeys,
     isAwaitingSequence,
@@ -2113,7 +2148,8 @@ function useAction(id, config) {
     JSON.stringify(config.keywords),
     config.priority,
     config.hideFromModal,
-    config.protected
+    config.protected,
+    JSON.stringify(config.arrowGroup)
   ]);
 }
 function useActions(actions) {
@@ -2157,10 +2193,64 @@ function useActions(actions) {
         c.keywords,
         c.priority,
         c.hideFromModal,
-        c.protected
+        c.protected,
+        c.arrowGroup
       ])
     )
   ]);
+}
+var DIRECTIONS = ["left", "right", "up", "down"];
+var ARROW_KEYS = {
+  left: "arrowleft",
+  right: "arrowright",
+  up: "arrowup",
+  down: "arrowdown"
+};
+function useArrowGroup(id, config) {
+  const {
+    label,
+    group,
+    mode,
+    description,
+    defaultModifiers,
+    handlers,
+    enabled,
+    keywords,
+    extraBindings
+  } = config;
+  const actions = react.useMemo(() => {
+    const modPrefix = defaultModifiers.length > 0 ? defaultModifiers.join("+") + "+" : "";
+    const result = {};
+    for (const dir of DIRECTIONS) {
+      const arrowBinding = `${modPrefix}${ARROW_KEYS[dir]}`;
+      const extra = extraBindings?.[dir] ?? [];
+      const allBindings = [arrowBinding, ...extra];
+      result[`${id}-${dir}`] = {
+        label: `${label} ${dir}`,
+        group,
+        mode,
+        description,
+        defaultBindings: allBindings,
+        keywords: keywords ? [...keywords, dir] : [dir],
+        handler: handlers[dir],
+        enabled,
+        arrowGroup: { groupId: id, direction: dir }
+      };
+    }
+    return result;
+  }, [
+    id,
+    label,
+    group,
+    mode,
+    description,
+    JSON.stringify(defaultModifiers),
+    JSON.stringify(extraBindings),
+    JSON.stringify(keywords),
+    enabled
+    // handlers excluded — refs handle staleness in useActions
+  ]);
+  useActions(actions);
 }
 function useMode(id, config) {
   const registry = react.useContext(ModesRegistryContext);
@@ -2310,6 +2400,7 @@ function useRecordHotkey(options = {}) {
   const submit = react.useCallback((seq) => {
     if (seq.length === 0) return;
     const display2 = formatCombination(seq);
+    dbg.recording("submit: %s (%d keys)", display2.id, seq.length);
     clearTimeout_();
     pressedKeysRef.current.clear();
     hasNonModifierRef.current = false;
@@ -2322,6 +2413,7 @@ function useRecordHotkey(options = {}) {
     onCapture?.(seq, display2);
   }, [clearTimeout_, onCapture]);
   const cancel = react.useCallback(() => {
+    dbg.recording("cancel recording");
     clearTimeout_();
     setIsRecording(false);
     pendingKeysRef.current = [];
@@ -2342,6 +2434,7 @@ function useRecordHotkey(options = {}) {
     }
   }, [submit, cancel]);
   const startRecording = react.useCallback(() => {
+    dbg.recording("start recording");
     clearTimeout_();
     setIsRecording(true);
     setSequence(null);
@@ -2375,6 +2468,7 @@ function useRecordHotkey(options = {}) {
     if (!isRecording) return;
     const handleKeyDown = (e) => {
       if (e.key === "Tab") {
+        dbg.recording("Tab: committing pending keys");
         clearTimeout_();
         const pendingSeq = [...pendingKeysRef.current];
         if (hasNonModifierRef.current && currentComboRef.current) {
@@ -2408,6 +2502,7 @@ function useRecordHotkey(options = {}) {
       }
       clearTimeout_();
       if (e.key === "Enter") {
+        dbg.recording("Enter: submitting sequence");
         setPendingKeys((current) => {
           if (current.length > 0) {
             submit(current);
@@ -2417,6 +2512,7 @@ function useRecordHotkey(options = {}) {
         return;
       }
       if (e.key === "Escape") {
+        dbg.recording("Escape: cancelling");
         cancel();
         return;
       }
@@ -2482,16 +2578,20 @@ function useRecordHotkey(options = {}) {
             combo = { key: DIGIT_PLACEHOLDER, modifiers: { ctrl: false, alt: false, shift: false, meta: false } };
             newSequence = [...pending, combo];
             hashCycleRef.current = 1;
+            dbg.recording("hash cycle: # \u2192 single digit placeholder");
           } else if (hashCycleRef.current === 1 && lastCombo?.key === DIGIT_PLACEHOLDER) {
             newSequence = [...pending.slice(0, -1), { key: DIGITS_PLACEHOLDER, modifiers: { ctrl: false, alt: false, shift: false, meta: false } }];
             hashCycleRef.current = 2;
+            dbg.recording("hash cycle: ## \u2192 multi-digit placeholder");
           } else if (hashCycleRef.current === 2 && lastCombo?.key === DIGITS_PLACEHOLDER) {
             newSequence = [...pending.slice(0, -1), { key: "#", modifiers: { ctrl: false, alt: false, shift: false, meta: false } }];
             hashCycleRef.current = 3;
+            dbg.recording("hash cycle: ### \u2192 literal #");
           } else {
             combo = { key: DIGIT_PLACEHOLDER, modifiers: { ctrl: false, alt: false, shift: false, meta: false } };
             newSequence = [...pending, combo];
             hashCycleRef.current = 1;
+            dbg.recording("hash cycle: #### \u2192 commit literal, new single digit");
           }
         } else {
           hashCycleRef.current = 0;
@@ -2499,6 +2599,7 @@ function useRecordHotkey(options = {}) {
         }
         pendingKeysRef.current = newSequence;
         setPendingKeys(newSequence);
+        dbg.recording("key committed (%d pending)", newSequence.length);
         clearTimeout_();
         if (sequenceTimeout === 0) {
           submit(newSequence);
@@ -4940,6 +5041,7 @@ function organizeShortcuts(keymap, labels, descriptions, groupNames, groupOrder,
       groupMap.set(groupName, { name: groupName, shortcuts: [], mode: getModeForAction(actionId) });
     }
     groupMap.get(groupName).shortcuts.push({
+      type: "action",
       actionId,
       label: labels?.[actionId] ?? actionRegistry?.[actionId]?.label ?? name,
       description: descriptions?.[actionId] ?? actionRegistry?.[actionId]?.description,
@@ -4956,6 +5058,7 @@ function organizeShortcuts(keymap, labels, descriptions, groupNames, groupOrder,
         groupMap.set(groupName, { name: groupName, shortcuts: [], mode: getModeForAction(actionId) });
       }
       groupMap.get(groupName).shortcuts.push({
+        type: "action",
         actionId,
         label: labels?.[actionId] ?? action.label ?? name,
         description: descriptions?.[actionId] ?? action.description,
@@ -4965,7 +5068,86 @@ function organizeShortcuts(keymap, labels, descriptions, groupNames, groupOrder,
     }
   }
   for (const group of groupMap.values()) {
-    group.shortcuts.sort((a, b) => a.actionId.localeCompare(b.actionId));
+    group.shortcuts.sort((a, b) => {
+      const aId = a.type === "action" ? a.actionId : a.groupId;
+      const bId = b.type === "action" ? b.actionId : b.groupId;
+      return aId.localeCompare(bId);
+    });
+  }
+  if (actionRegistry) {
+    for (const group of groupMap.values()) {
+      const arrowGroups = /* @__PURE__ */ new Map();
+      for (const entry of group.shortcuts) {
+        if (entry.type !== "action") continue;
+        const ag = actionRegistry[entry.actionId]?.arrowGroup;
+        if (!ag) continue;
+        if (!arrowGroups.has(ag.groupId)) {
+          arrowGroups.set(ag.groupId, { entries: [], directions: /* @__PURE__ */ new Set() });
+        }
+        const g = arrowGroups.get(ag.groupId);
+        g.entries.push(entry);
+        g.directions.add(ag.direction);
+      }
+      const toRemove = /* @__PURE__ */ new Set();
+      const toInsert = [];
+      for (const [groupId, { entries, directions }] of arrowGroups) {
+        if (directions.size !== 4) continue;
+        const firstEntry = entries[0];
+        const label = firstEntry.label.replace(/\s+(left|right|up|down)$/i, "");
+        const actionIds = {};
+        const extraBindings = {};
+        let modifierPrefix = "";
+        for (const entry of entries) {
+          const ag = actionRegistry[entry.actionId].arrowGroup;
+          actionIds[ag.direction] = entry.actionId;
+          const arrowKey = `arrow${ag.direction}`;
+          const extras = [];
+          for (const b of entry.bindings) {
+            if (b.endsWith(arrowKey)) {
+              const prefix = b.slice(0, b.length - arrowKey.length);
+              if (ag.direction === "left") {
+                modifierPrefix = prefix;
+              }
+            } else {
+              extras.push(b);
+            }
+          }
+          if (extras.length > 0) {
+            extraBindings[ag.direction] = extras;
+          }
+          toRemove.add(entry.actionId);
+        }
+        const firstIndex = group.shortcuts.findIndex(
+          (s) => s.type === "action" && s.actionId === entries[0].actionId
+        );
+        toInsert.push({
+          index: firstIndex,
+          entry: {
+            type: "arrowGroup",
+            groupId,
+            label,
+            description: firstEntry.description,
+            actionIds,
+            modifierPrefix,
+            extraBindings
+          }
+        });
+      }
+      if (toRemove.size > 0) {
+        group.shortcuts = group.shortcuts.filter(
+          (s) => s.type !== "action" || !toRemove.has(s.actionId)
+        );
+        toInsert.sort((a, b) => b.index - a.index);
+        for (const { entry } of toInsert) {
+          let insertIdx = group.shortcuts.findIndex((s) => {
+            const sId = s.type === "action" ? s.actionId : s.groupId;
+            return sId.localeCompare(entry.groupId) > 0;
+          });
+          if (insertIdx === -1) insertIdx = group.shortcuts.length;
+          group.shortcuts.splice(insertIdx, 0, entry);
+        }
+      }
+    }
   }
   const groups = Array.from(groupMap.values());
   if (groupOrder) {
@@ -5095,6 +5277,75 @@ function BindingDisplay2({
     )
   ] });
 }
+function parseModifierPrefix(prefix) {
+  const p = prefix.toLowerCase();
+  return {
+    ctrl: p.includes("ctrl"),
+    alt: p.includes("alt"),
+    shift: p.includes("shift"),
+    meta: p.includes("meta")
+  };
+}
+var DIRECTION_ICONS = { left: Left, right: Right, up: Up, down: Down };
+var DIRECTION_ORDER = ["left", "right", "up", "down"];
+function ArrowGroupRow({
+  entry,
+  editable,
+  TooltipComponent: Tooltip,
+  onStartEditing,
+  renderExtraBindings,
+  arrowGroupEditState,
+  arrowGroupActiveKeys
+}) {
+  const isEditing = arrowGroupEditState?.groupId === entry.groupId;
+  const modifiers = parseModifierPrefix(entry.modifierPrefix);
+  const hasModifiers = modifiers.ctrl || modifiers.alt || modifiers.shift || modifiers.meta;
+  const hasExtras = DIRECTION_ORDER.some((d) => (entry.extraBindings[d]?.length ?? 0) > 0);
+  return /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "kbd-action kbd-arrow-group-row", "data-arrow-group": entry.groupId, children: [
+    entry.description ? /* @__PURE__ */ jsxRuntime.jsx(Tooltip, { title: entry.description, children: /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-action-label", children: entry.label }) }) : /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-action-label", children: entry.label }),
+    /* @__PURE__ */ jsxRuntime.jsxs("span", { className: "kbd-action-bindings", children: [
+      /* @__PURE__ */ jsxRuntime.jsx(
+        "kbd",
+        {
+          className: `kbd-kbd kbd-arrow-group-binding${editable ? " editable" : ""}${isEditing ? " editing" : ""}`,
+          onClick: editable ? () => onStartEditing(entry.groupId) : void 0,
+          tabIndex: editable ? 0 : void 0,
+          onKeyDown: editable ? (e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onStartEditing(entry.groupId);
+            }
+          } : void 0,
+          children: isEditing ? /* @__PURE__ */ jsxRuntime.jsxs(jsxRuntime.Fragment, { children: [
+            arrowGroupActiveKeys && (arrowGroupActiveKeys.modifiers.ctrl || arrowGroupActiveKeys.modifiers.alt || arrowGroupActiveKeys.modifiers.shift || arrowGroupActiveKeys.modifiers.meta) ? /* @__PURE__ */ jsxRuntime.jsxs(jsxRuntime.Fragment, { children: [
+              renderModifierIcons(arrowGroupActiveKeys.modifiers),
+              /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-arrow-group-plus", children: "+" })
+            ] }) : null,
+            /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-arrow-group-arrows", children: DIRECTION_ORDER.map((dir) => {
+              const Icon = DIRECTION_ICONS[dir];
+              return /* @__PURE__ */ jsxRuntime.jsx(Icon, { className: "kbd-key-icon" }, dir);
+            }) }),
+            /* @__PURE__ */ jsxRuntime.jsx("span", { children: "..." })
+          ] }) : /* @__PURE__ */ jsxRuntime.jsxs(jsxRuntime.Fragment, { children: [
+            hasModifiers && /* @__PURE__ */ jsxRuntime.jsxs(jsxRuntime.Fragment, { children: [
+              renderModifierIcons(modifiers),
+              /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-arrow-group-plus", children: "+" })
+            ] }),
+            /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-arrow-group-arrows", children: DIRECTION_ORDER.map((dir) => {
+              const Icon = DIRECTION_ICONS[dir];
+              return /* @__PURE__ */ jsxRuntime.jsx(Icon, { className: "kbd-key-icon" }, dir);
+            }) })
+          ] })
+        }
+      ),
+      hasExtras && DIRECTION_ORDER.map((dir) => {
+        const extras = entry.extraBindings[dir];
+        if (!extras || extras.length === 0) return null;
+        return /* @__PURE__ */ jsxRuntime.jsx(react.Fragment, { children: renderExtraBindings(entry.actionIds[dir], extras) }, dir);
+      })
+    ] })
+  ] });
+}
 function ShortcutsModal({
   keymap: keymapProp,
   defaults: defaultsProp,
@@ -5222,6 +5473,9 @@ function ShortcutsModal({
   const [addingAction, setAddingAction] = react.useState(null);
   const [pendingConflict, setPendingConflict] = react.useState(null);
   const [hasPendingConflictState, setHasPendingConflictState] = react.useState(false);
+  const [arrowGroupEditState, setArrowGroupEditState] = react.useState(null);
+  const [arrowGroupActiveKeys, setArrowGroupActiveKeys] = react.useState(null);
+  const arrowGroupEditRef = react.useRef(null);
   const editingActionRef = react.useRef(null);
   const editingKeyRef = react.useRef(null);
   const addingActionRef = react.useRef(null);
@@ -5238,6 +5492,9 @@ function ShortcutsModal({
     editingKeyRef.current = null;
     addingActionRef.current = null;
     setPendingConflict(null);
+    arrowGroupEditRef.current = null;
+    setArrowGroupEditState(null);
+    setArrowGroupActiveKeys(null);
     if (onCloseProp) {
       onCloseProp();
     } else if (ctx?.closeModal) {
@@ -5399,6 +5656,21 @@ function ShortcutsModal({
     setPendingConflict(null);
     ctx?.setIsEditingBinding(false);
   }, [cancel, ctx?.setIsEditingBinding]);
+  const startArrowGroupEditing = react.useCallback((groupId) => {
+    dbg.recording("arrow group edit start: %s", groupId);
+    cancelEditing();
+    arrowGroupEditRef.current = { groupId };
+    setArrowGroupEditState({ groupId });
+    setArrowGroupActiveKeys(null);
+    ctx?.setIsEditingBinding(true);
+  }, [cancelEditing, ctx?.setIsEditingBinding]);
+  const cancelArrowGroupEditing = react.useCallback(() => {
+    dbg.recording("arrow group edit cancel");
+    arrowGroupEditRef.current = null;
+    setArrowGroupEditState(null);
+    setArrowGroupActiveKeys(null);
+    ctx?.setIsEditingBinding(false);
+  }, [ctx?.setIsEditingBinding]);
   const removeBinding = react.useCallback(
     (action, key) => {
       handleBindingRemove?.(action, key);
@@ -5587,6 +5859,13 @@ function ShortcutsModal({
   );
   const handleModalClick = react.useCallback(
     (e) => {
+      if (arrowGroupEditState) {
+        const target2 = e.target;
+        if (!target2.closest(".kbd-arrow-group-binding")) {
+          cancelArrowGroupEditing();
+        }
+        return;
+      }
       if (!editingAction && !addingAction) return;
       const target = e.target;
       if (target.closest(".kbd-kbd.editing")) return;
@@ -5594,13 +5873,94 @@ function ShortcutsModal({
       if (target.closest(".kbd-add-btn")) return;
       cancelEditing();
     },
-    [editingAction, addingAction, cancelEditing]
+    [editingAction, addingAction, cancelEditing, arrowGroupEditState, cancelArrowGroupEditing]
   );
   const effectiveShowUnbound = showUnbound ?? editable;
   const shortcutGroups = react.useMemo(
     () => organizeShortcuts(keymap, labels, descriptions, groupNames, groupOrder, ctx?.registry.actionRegistry, effectiveShowUnbound, ctx?.modes, ctx?.activeMode),
     [keymap, labels, descriptions, groupNames, groupOrder, ctx?.registry.actionRegistry, effectiveShowUnbound, ctx?.modes, ctx?.activeMode]
   );
+  react.useEffect(() => {
+    if (!arrowGroupEditState) return;
+    const handleKeyDown = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.key === "Escape") {
+        cancelArrowGroupEditing();
+        return;
+      }
+      const isArrow = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key);
+      if (isArrow || e.key === "Enter") {
+        const currentRef = arrowGroupEditRef.current;
+        if (!currentRef) return;
+        dbg.recording("arrow group confirm: %s (key: %s)", currentRef.groupId, e.key);
+        const mods = [];
+        if (e.ctrlKey) mods.push("ctrl");
+        if (e.altKey) mods.push("alt");
+        if (e.shiftKey) mods.push("shift");
+        if (e.metaKey) mods.push("meta");
+        const modPrefix = mods.length > 0 ? mods.join("+") + "+" : "";
+        for (const group of shortcutGroups) {
+          for (const entry of group.shortcuts) {
+            if (entry.type === "arrowGroup" && entry.groupId === currentRef.groupId) {
+              const arrowKeys = {
+                left: "arrowleft",
+                right: "arrowright",
+                up: "arrowup",
+                down: "arrowdown"
+              };
+              for (const dir of DIRECTION_ORDER) {
+                const actionId = entry.actionIds[dir];
+                const oldArrowBinding = `${entry.modifierPrefix}${arrowKeys[dir]}`;
+                const newArrowBinding = `${modPrefix}${arrowKeys[dir]}`;
+                if (oldArrowBinding !== newArrowBinding) {
+                  handleBindingChange?.(actionId, oldArrowBinding, newArrowBinding);
+                }
+              }
+              break;
+            }
+          }
+        }
+        cancelArrowGroupEditing();
+        return;
+      }
+      if (!["Control", "Alt", "Shift", "Meta"].includes(e.key)) {
+        cancelArrowGroupEditing();
+        return;
+      }
+      dbg.recording("arrow group modifier update: ctrl=%s alt=%s shift=%s meta=%s", e.ctrlKey, e.altKey, e.shiftKey, e.metaKey);
+      setArrowGroupActiveKeys({
+        key: "",
+        modifiers: {
+          ctrl: e.ctrlKey,
+          alt: e.altKey,
+          shift: e.shiftKey,
+          meta: e.metaKey
+        }
+      });
+    };
+    const handleKeyUp = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (["Control", "Alt", "Shift", "Meta"].includes(e.key)) {
+        setArrowGroupActiveKeys({
+          key: "",
+          modifiers: {
+            ctrl: e.ctrlKey,
+            alt: e.altKey,
+            shift: e.shiftKey,
+            meta: e.metaKey
+          }
+        });
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown, true);
+    window.addEventListener("keyup", handleKeyUp, true);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown, true);
+      window.removeEventListener("keyup", handleKeyUp, true);
+    };
+  }, [arrowGroupEditState, shortcutGroups, handleBindingChange, cancelArrowGroupEditing]);
   if (!isOpen) return null;
   if (children) {
     return /* @__PURE__ */ jsxRuntime.jsx(jsxRuntime.Fragment, { children: children({
@@ -5624,10 +5984,28 @@ function ShortcutsModal({
     if (customRenderer) {
       return customRenderer({ group, ...groupRendererProps });
     }
-    return group.shortcuts.map(({ actionId, label, description, bindings }) => /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "kbd-action", children: [
-      description ? /* @__PURE__ */ jsxRuntime.jsx(TooltipComponentProp, { title: description, children: /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-action-label", children: label }) }) : /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-action-label", children: label }),
-      renderCell(actionId, bindings)
-    ] }, actionId));
+    return group.shortcuts.map((entry) => {
+      if (entry.type === "arrowGroup") {
+        return /* @__PURE__ */ jsxRuntime.jsx(
+          ArrowGroupRow,
+          {
+            entry,
+            editable,
+            TooltipComponent: TooltipComponentProp,
+            onStartEditing: startArrowGroupEditing,
+            renderExtraBindings: (actionId2, bindings2) => /* @__PURE__ */ jsxRuntime.jsx(jsxRuntime.Fragment, { children: bindings2.map((key) => renderEditableKbd(actionId2, key, true)) }),
+            arrowGroupEditState,
+            arrowGroupActiveKeys
+          },
+          entry.groupId
+        );
+      }
+      const { actionId, label, description, bindings } = entry;
+      return /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "kbd-action", children: [
+        description ? /* @__PURE__ */ jsxRuntime.jsx(TooltipComponentProp, { title: description, children: /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-action-label", children: label }) }) : /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-action-label", children: label }),
+        renderCell(actionId, bindings)
+      ] }, actionId);
+    });
   };
   return /* @__PURE__ */ jsxRuntime.jsx(TooltipContext.Provider, { value: TooltipComponentProp, children: /* @__PURE__ */ jsxRuntime.jsx("div", { className: backdropClassName, onClick: handleBackdropClick, children: /* @__PURE__ */ jsxRuntime.jsxs("div", { className: modalClassName, role: "dialog", "aria-modal": "true", "aria-label": "Keyboard shortcuts", onClick: handleModalClick, children: [
     /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "kbd-modal-header", children: [
@@ -5836,6 +6214,7 @@ exports.searchActions = searchActions;
 exports.useAction = useAction;
 exports.useActions = useActions;
 exports.useActionsRegistry = useActionsRegistry;
+exports.useArrowGroup = useArrowGroup;
 exports.useEditableHotkeys = useEditableHotkeys;
 exports.useHotkeys = useHotkeys;
 exports.useHotkeysContext = useHotkeysContext;
