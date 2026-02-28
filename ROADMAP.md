@@ -35,6 +35,24 @@ Implemented via `useMode`:
 - Omnibar integration with mode badges and auto-activation
 - ShortcutsModal groups with colored left border
 
+### Arrow Groups
+
+Implemented via `useArrowGroup`:
+
+- Compact registration of four directional arrow actions
+- Single-row display in ShortcutsModal with arrow icons
+- Grouped modifier editing (hold modifiers + Enter/arrow to confirm)
+- Optional per-direction extra bindings (e.g., vim keys)
+- Mode-aware (works with `useMode`)
+
+### Debug Logging
+
+Implemented via the `debug` package:
+
+- Four namespaces: `use-kbd:hotkeys`, `use-kbd:recording`, `use-kbd:registry`, `use-kbd:modes`
+- Controlled via `localStorage.debug` — zero output by default
+- Covers key matching, recording, action registry, and mode state
+
 ## Future Ideas
 
 ### Type Safety

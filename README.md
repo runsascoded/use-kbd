@@ -203,6 +203,33 @@ function Viewport() {
 - **Omnibar integration** – Mode-scoped actions appear in the Omnibar with a mode badge; executing one auto-activates the mode
 - **ShortcutsModal** – Mode actions appear in their own group with a colored left border
 
+### Arrow Groups
+
+Register four directional arrow-key actions as a compact group with `useArrowGroup`. They display as a single row in `ShortcutsModal`, and the modifier prefix can be edited as a unit (hold modifiers + press Enter or an arrow key to confirm):
+
+```tsx
+import { useArrowGroup } from 'use-kbd'
+
+useArrowGroup('camera:pan', {
+  label: 'Pan',
+  group: 'Camera',
+  mode: 'viewport',
+  defaultModifiers: ['shift'],
+  handlers: {
+    left:  () => pan(-1, 0),
+    right: () => pan(1, 0),
+    up:    () => pan(0, -1),
+    down:  () => pan(0, 1),
+  },
+  extraBindings: {                  // Optional non-arrow aliases
+    left: ['h'], right: ['l'],
+    up: ['k'], down: ['j'],
+  },
+})
+```
+
+This creates four actions (`camera:pan-left`, …, `camera:pan-down`), each bound to `shift+arrow{dir}` plus any extras. In `ShortcutsModal` they collapse into one row showing `⇧ + ← → ↑ ↓`.
+
 ### Key Aliases
 
 For convenience, common key names have shorter aliases:
@@ -523,6 +550,23 @@ const mode = useMode('edit', {
 // mode.active, mode.activate(), mode.deactivate(), mode.toggle()
 ```
 
+### `useArrowGroup(id, config)`
+
+Register four directional arrow actions as a group. See [Arrow Groups](#arrow-groups) for details.
+
+```tsx
+useArrowGroup('nav:scroll', {
+  label: 'Scroll',
+  defaultModifiers: [],
+  handlers: {
+    left:  () => scrollLeft(),
+    right: () => scrollRight(),
+    up:    () => scrollUp(),
+    down:  () => scrollDown(),
+  },
+})
+```
+
 ### `useOmnibarEndpoint(id, config)`
 
 Add custom result sources to the Omnibar (e.g., search APIs, in-memory data):
@@ -555,6 +599,34 @@ useOmnibarEndpoint('filters', {
 ### `useEditableHotkeys(defaults, handlers, options?)`
 
 Wraps `useHotkeys` with localStorage persistence and conflict detection.
+
+## Debugging
+
+use-kbd uses the [`debug`] package for internal logging, controlled via `localStorage.debug`. Zero output by default—no config needed in downstream apps.
+
+**Enable in browser devtools:**
+
+```js
+localStorage.debug = 'use-kbd:*'  // All namespaces
+location.reload()
+```
+
+**Available namespaces:**
+
+| Namespace | What it logs |
+|-----------|-------------|
+| `use-kbd:hotkeys` | Key matching, execution, sequence state |
+| `use-kbd:recording` | Recording start/cancel/submit, hash cycling |
+| `use-kbd:registry` | Action register/unregister, binding changes, keymap recomputation |
+| `use-kbd:modes` | Mode activate/deactivate, effective keymap |
+
+Filter to a single namespace for focused debugging:
+
+```js
+localStorage.debug = 'use-kbd:hotkeys'  // Only key handling
+```
+
+[`debug`]: https://www.npmjs.com/package/debug
 
 ## Inspiration
 
