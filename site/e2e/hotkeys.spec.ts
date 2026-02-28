@@ -1979,6 +1979,79 @@ test.describe('Arrow Groups', () => {
     await page.keyboard.press('Escape')
   })
 
+  test('bare arrow key confirms without triggering underlying action', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    // Activate viewport mode so arrow keys are bound
+    await page.keyboard.press('g')
+    await page.waitForTimeout(100)
+    await page.keyboard.press('v')
+    await page.waitForTimeout(200)
+    await expect(page.locator('.kbd-mode-indicator')).toBeVisible()
+
+    // Open shortcuts modal
+    await page.keyboard.press('?')
+    await page.waitForSelector('.kbd-modal', { timeout: 5000 })
+
+    // First, change to Shift+arrows so we can test switching back to bare
+    const arrowGroupRow = page.locator('.kbd-arrow-group-row', { hasText: 'Pan' })
+    await arrowGroupRow.locator('.kbd-arrow-group-binding').click()
+    await expect(arrowGroupRow.locator('.kbd-kbd.editing')).toBeVisible()
+
+    // Hold Shift + press Enter to set Shift+arrows
+    await page.keyboard.down('Shift')
+    await page.keyboard.press('Enter')
+    await page.keyboard.up('Shift')
+    await page.waitForTimeout(300)
+    await expect(arrowGroupRow.locator('.kbd-kbd.editing')).not.toBeVisible()
+
+    // Now click to edit again
+    await arrowGroupRow.locator('.kbd-arrow-group-binding').click()
+    await expect(arrowGroupRow.locator('.kbd-kbd.editing')).toBeVisible()
+
+    // Press bare ArrowUp to confirm — should set bare arrows, NOT trigger pan
+    await page.keyboard.press('ArrowUp')
+    await page.waitForTimeout(300)
+
+    // Should exit editing
+    await expect(arrowGroupRow.locator('.kbd-kbd.editing')).not.toBeVisible()
+    // Should have no modifier icons (bare arrows)
+    await expect(arrowGroupRow.locator('.kbd-arrow-group-binding .kbd-modifier-icon')).toHaveCount(0)
+
+    // Close modal and verify the arrow didn't trigger the pan action
+    await page.keyboard.press('Escape') // close modal
+    await page.waitForTimeout(200)
+
+    // Viewport status should NOT exist (arrow was consumed by editing, not by pan)
+    await expect(page.locator('[data-testid="viewport-status"]')).not.toBeVisible()
+  })
+
+  test('grouped editing: Ctrl + arrow key sets ctrl modifier', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    // Open shortcuts modal
+    await page.keyboard.press('?')
+    await page.waitForSelector('.kbd-modal', { timeout: 5000 })
+
+    // Click the arrow group binding to start editing
+    const arrowGroupRow = page.locator('.kbd-arrow-group-row', { hasText: 'Pan' })
+    await arrowGroupRow.locator('.kbd-arrow-group-binding').click()
+    await expect(arrowGroupRow.locator('.kbd-kbd.editing')).toBeVisible()
+
+    // Hold Ctrl + press ArrowRight to confirm
+    await page.keyboard.down('Control')
+    await page.keyboard.press('ArrowRight')
+    await page.keyboard.up('Control')
+    await page.waitForTimeout(300)
+
+    // Should exit editing state and show Ctrl modifier
+    await expect(arrowGroupRow.locator('.kbd-kbd.editing')).not.toBeVisible()
+    const binding = arrowGroupRow.locator('.kbd-arrow-group-binding')
+    await expect(binding.locator('.kbd-modifier-icon')).toBeVisible()
+
+    await page.keyboard.press('Escape')
+  })
+
   test('omnibar search finds individual directions', async ({ page }) => {
     await page.locator('body').click({ position: { x: 10, y: 10 } })
 
