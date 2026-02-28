@@ -250,6 +250,7 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
         hideFromModal: config.hideFromModal,
         enabled: config.enabled,
         protected: config.protected,
+        arrowGroup: config.arrowGroup,
       }
     }
     return registry

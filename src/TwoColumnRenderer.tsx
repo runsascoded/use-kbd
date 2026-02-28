@@ -58,9 +58,11 @@ export function createTwoColumnRenderer(config: TwoColumnConfig) {
   const [labelHeader, leftHeader, rightHeader] = headers
 
   return function TwoColumnRenderer({ group, renderCell }: GroupRendererProps): ReactNode {
-    // Build a map of actionId -> bindings for quick lookup
+    // Build a map of actionId -> bindings for quick lookup (only regular actions)
     const bindingsMap = new Map(
-      group.shortcuts.map(s => [s.actionId, s.bindings])
+      group.shortcuts
+        .filter((s): s is Extract<typeof s, { type: 'action' }> => s.type === 'action')
+        .map(s => [s.actionId, s.bindings])
     )
 
     const rows = getRows(group)

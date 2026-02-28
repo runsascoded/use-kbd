@@ -29,6 +29,8 @@ export type {
   SeqElemState,
   SeqMatchState,
   SequenceCompletion,
+  Direction,
+  ModifierName,
 } from './types'
 
 // Sequence type utilities
@@ -42,7 +44,7 @@ export type {
   KeybindingEditorProps,
   KeybindingEditorRenderProps,
 } from './KeybindingEditor'
-export type { GroupRenderer, GroupRendererProps, ShortcutGroup, ShortcutsModalProps, ShortcutsModalRenderProps, TooltipComponent, TooltipProps } from './ShortcutsModal'
+export type { ActionShortcut, ArrowGroupShortcut, GroupRenderer, GroupRendererProps, ShortcutEntry, ShortcutGroup, ShortcutsModalProps, ShortcutsModalRenderProps, TooltipComponent, TooltipProps } from './ShortcutsModal'
 export type { TwoColumnConfig, TwoColumnRow } from './TwoColumnRenderer'
 export { createTwoColumnRenderer } from './TwoColumnRenderer'
 export type { OmnibarProps, OmnibarRenderProps } from './Omnibar'
@@ -54,6 +56,8 @@ export { HotkeysProvider, useHotkeysContext, useMaybeHotkeysContext } from './Ho
 // Action registration
 export type { ActionConfig, ActionHandler } from './useAction'
 export { useAction, useActions } from './useAction'
+export type { ArrowGroupConfig } from './useArrowGroup'
+export { useArrowGroup } from './useArrowGroup'
 export type { ActionsRegistryValue, RegisteredAction } from './ActionsRegistry'
 export { ActionsRegistryContext, useActionsRegistry } from './ActionsRegistry'
 

@@ -1773,8 +1773,8 @@ test.describe('Modes', () => {
     // Should show activation binding in group title
     await expect(modeGroup.locator('.kbd-mode-activation')).toBeVisible()
 
-    // Should contain mode actions
-    await expect(modeGroup.locator('.kbd-action', { hasText: 'Pan left' })).toBeVisible()
+    // Should contain arrow group row for Pan and individual action for Zoom
+    await expect(modeGroup.locator('.kbd-arrow-group-row', { hasText: 'Pan' })).toBeVisible()
     await expect(modeGroup.locator('.kbd-action', { hasText: 'Zoom in' })).toBeVisible()
 
     await page.keyboard.press('Escape')
@@ -1814,5 +1814,184 @@ test.describe('Modes', () => {
     await indicator.locator('.kbd-mode-indicator-dismiss').click()
     await page.waitForTimeout(200)
     await expect(indicator).not.toBeVisible()
+  })
+})
+
+test.describe('Arrow Groups', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.removeItem('use-kbd-demo')
+      localStorage.removeItem('use-kbd-demo-removed')
+      localStorage.removeItem('use-kbd-demo-recents')
+      for (const key of Object.keys(sessionStorage)) {
+        if (key.startsWith('use-kbd-canvas')) sessionStorage.removeItem(key)
+      }
+    })
+    await page.goto('/canvas')
+    await expect(page.locator('.kbd-speed-dial-primary')).toBeVisible()
+  })
+
+  test('compact display: arrow group shows single row with arrow icons', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    // Open shortcuts modal
+    await page.keyboard.press('?')
+    await page.waitForSelector('.kbd-modal', { timeout: 5000 })
+
+    // Should show a compact arrow group row for Pan
+    const arrowGroupRow = page.locator('.kbd-arrow-group-row', { hasText: 'Pan' })
+    await expect(arrowGroupRow).toBeVisible()
+
+    // Should have 4 arrow key icons inside the binding area
+    const arrows = arrowGroupRow.locator('.kbd-arrow-group-arrows .kbd-key-icon')
+    await expect(arrows).toHaveCount(4)
+
+    // Non-arrow-group actions should still render as individual rows
+    await expect(page.locator('.kbd-action', { hasText: 'Zoom in' })).toBeVisible()
+    await expect(page.locator('.kbd-action', { hasText: 'Zoom out' })).toBeVisible()
+    await expect(page.locator('.kbd-action', { hasText: 'Reset view' })).toBeVisible()
+
+    await page.keyboard.press('Escape')
+  })
+
+  test('arrow keys still work in mode', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    // Activate Pan & Zoom mode
+    await page.keyboard.press('g')
+    await page.waitForTimeout(100)
+    await page.keyboard.press('v')
+    await page.waitForTimeout(200)
+    await expect(page.locator('.kbd-mode-indicator')).toBeVisible()
+
+    // Press ArrowRight → x should change by +50
+    await page.keyboard.press('ArrowRight')
+    await page.waitForTimeout(200)
+    await expect(page.locator('[data-testid="viewport-status"]')).toContainText('x=50')
+
+    // Press ArrowUp → y should change by -50
+    await page.keyboard.press('ArrowUp')
+    await page.waitForTimeout(200)
+    await expect(page.locator('[data-testid="viewport-status"]')).toContainText('y=-50')
+
+    await page.keyboard.press('Escape')
+  })
+
+  test('vim keys work via extraBindings', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    // Activate Pan & Zoom mode
+    await page.keyboard.press('g')
+    await page.waitForTimeout(100)
+    await page.keyboard.press('v')
+    await page.waitForTimeout(200)
+
+    // Press 'l' (vim right) → x should change by +50
+    await page.keyboard.press('l')
+    await page.waitForTimeout(200)
+    await expect(page.locator('[data-testid="viewport-status"]')).toContainText('x=50')
+
+    // Press 'k' (vim up) → y should change by -50
+    await page.keyboard.press('k')
+    await page.waitForTimeout(200)
+    await expect(page.locator('[data-testid="viewport-status"]')).toContainText('y=-50')
+
+    await page.keyboard.press('Escape')
+  })
+
+  test('grouped editing: hold Shift + Enter to update all 4 bindings', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    // Open shortcuts modal
+    await page.keyboard.press('?')
+    await page.waitForSelector('.kbd-modal', { timeout: 5000 })
+
+    // Click the arrow group binding to start editing
+    const arrowGroupRow = page.locator('.kbd-arrow-group-row', { hasText: 'Pan' })
+    await arrowGroupRow.locator('.kbd-arrow-group-binding').click()
+
+    // Should enter editing state
+    await expect(arrowGroupRow.locator('.kbd-kbd.editing')).toBeVisible()
+
+    // Hold Shift + press Enter to confirm
+    await page.keyboard.down('Shift')
+    await page.keyboard.press('Enter')
+    await page.keyboard.up('Shift')
+    await page.waitForTimeout(300)
+
+    // Should exit editing state
+    await expect(arrowGroupRow.locator('.kbd-kbd.editing')).not.toBeVisible()
+
+    // Now the binding should show Shift modifier
+    // The modifier icons should be visible in the arrow group binding
+    const binding = arrowGroupRow.locator('.kbd-arrow-group-binding')
+    await expect(binding.locator('.kbd-modifier-icon')).toBeVisible()
+
+    await page.keyboard.press('Escape')
+  })
+
+  test('grouped editing: press arrow key to confirm modifiers', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    // Open shortcuts modal
+    await page.keyboard.press('?')
+    await page.waitForSelector('.kbd-modal', { timeout: 5000 })
+
+    // Click the arrow group binding to start editing
+    const arrowGroupRow = page.locator('.kbd-arrow-group-row', { hasText: 'Pan' })
+    await arrowGroupRow.locator('.kbd-arrow-group-binding').click()
+
+    // Hold Alt + press ArrowLeft to confirm
+    await page.keyboard.down('Alt')
+    await page.keyboard.press('ArrowLeft')
+    await page.keyboard.up('Alt')
+    await page.waitForTimeout(300)
+
+    // Should exit editing state and show Alt modifier
+    await expect(arrowGroupRow.locator('.kbd-kbd.editing')).not.toBeVisible()
+    const binding = arrowGroupRow.locator('.kbd-arrow-group-binding')
+    await expect(binding.locator('.kbd-modifier-icon')).toBeVisible()
+
+    await page.keyboard.press('Escape')
+  })
+
+  test('Enter alone sets bare arrows (no modifiers)', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    // Open shortcuts modal
+    await page.keyboard.press('?')
+    await page.waitForSelector('.kbd-modal', { timeout: 5000 })
+
+    // Click the arrow group binding to start editing
+    const arrowGroupRow = page.locator('.kbd-arrow-group-row', { hasText: 'Pan' })
+    await arrowGroupRow.locator('.kbd-arrow-group-binding').click()
+    await expect(arrowGroupRow.locator('.kbd-kbd.editing')).toBeVisible()
+
+    // Press Enter alone (no modifiers) → bare arrows
+    await page.keyboard.press('Enter')
+    await page.waitForTimeout(300)
+
+    // Should exit editing with no modifier icons visible
+    await expect(arrowGroupRow.locator('.kbd-kbd.editing')).not.toBeVisible()
+    // No modifier icons in the binding (bare arrows)
+    await expect(arrowGroupRow.locator('.kbd-arrow-group-binding .kbd-modifier-icon')).toHaveCount(0)
+
+    await page.keyboard.press('Escape')
+  })
+
+  test('omnibar search finds individual directions', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    // Open omnibar
+    await page.keyboard.press('Meta+k')
+    await page.waitForSelector('.kbd-omnibar', { timeout: 5000 })
+
+    // Search for "pan left" — should find the individual action
+    await page.keyboard.type('pan left')
+    await page.waitForTimeout(300)
+
+    await expect(page.locator('.kbd-omnibar-result-label', { hasText: 'Pan left' })).toBeVisible()
+
+    await page.keyboard.press('Escape')
   })
 })

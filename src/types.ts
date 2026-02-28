@@ -168,7 +168,15 @@ export interface ActionDefinition {
   hideFromModal?: boolean
   /** Protect bindings from removal (user can still add more, but not remove existing) */
   protected?: boolean
+  /** Arrow group metadata (set by useArrowGroup) */
+  arrowGroup?: { groupId: string; direction: Direction }
 }
+
+/** Cardinal direction for arrow key groups */
+export type Direction = 'left' | 'right' | 'up' | 'down'
+
+/** Modifier key name */
+export type ModifierName = 'ctrl' | 'alt' | 'shift' | 'meta'
 
 /**
  * Registry of all available actions

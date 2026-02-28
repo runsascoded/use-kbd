@@ -1,6 +1,6 @@
 import { Tooltip } from '@mui/material'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Kbd, KbdModal, ModeIndicator, ShortcutsModal, useAction, useActions, useMode } from 'use-kbd'
+import { Kbd, KbdModal, ModeIndicator, ShortcutsModal, useAction, useActions, useArrowGroup, useMode } from 'use-kbd'
 import 'use-kbd/styles.css'
 import { useTheme } from '../contexts/ThemeContext'
 
@@ -342,32 +342,17 @@ function Canvas() {
     defaultBindings: ['g v'],
   })
 
-  useAction('viewport:left', {
-    label: 'Pan left',
+  useArrowGroup('viewport:pan', {
+    label: 'Pan',
     mode: 'canvas:viewport',
-    defaultBindings: ['arrowleft', 'h'],
-    handler: useCallback(() => setViewOffset(v => ({ ...v, x: v.x - 50 })), []),
-  })
-
-  useAction('viewport:right', {
-    label: 'Pan right',
-    mode: 'canvas:viewport',
-    defaultBindings: ['arrowright', 'l'],
-    handler: useCallback(() => setViewOffset(v => ({ ...v, x: v.x + 50 })), []),
-  })
-
-  useAction('viewport:up', {
-    label: 'Pan up',
-    mode: 'canvas:viewport',
-    defaultBindings: ['arrowup', 'k'],
-    handler: useCallback(() => setViewOffset(v => ({ ...v, y: v.y - 50 })), []),
-  })
-
-  useAction('viewport:down', {
-    label: 'Pan down',
-    mode: 'canvas:viewport',
-    defaultBindings: ['arrowdown', 'j'],
-    handler: useCallback(() => setViewOffset(v => ({ ...v, y: v.y + 50 })), []),
+    defaultModifiers: [],
+    extraBindings: { left: ['h'], right: ['l'], up: ['k'], down: ['j'] },
+    handlers: {
+      left:  useCallback(() => setViewOffset(v => ({ ...v, x: v.x - 50 })), []),
+      right: useCallback(() => setViewOffset(v => ({ ...v, x: v.x + 50 })), []),
+      up:    useCallback(() => setViewOffset(v => ({ ...v, y: v.y - 50 })), []),
+      down:  useCallback(() => setViewOffset(v => ({ ...v, y: v.y + 50 })), []),
+    },
   })
 
   useAction('viewport:zoom-in', {

@@ -2,11 +2,12 @@ import { ComponentType, createContext, Fragment, MouseEvent, ReactNode, useCallb
 import { ACTION_MODAL, ACTION_MODE_PREFIX, DEFAULT_SEQUENCE_TIMEOUT } from './constants'
 import { useMaybeHotkeysContext } from './HotkeysProvider'
 import { renderModifierIcons, renderKeyContent } from './KeyElements'
+import { Left, Right, Up, Down } from './KeyIcons'
 import { useAction } from './useAction'
 import { useHotkeys } from './useHotkeys'
 import { useRecordHotkey } from './useRecordHotkey'
 import { findConflicts, formatCombination, getActionBindings, parseHotkeyString, parseKeySeq } from './utils'
-import type { ActionRegistry, HotkeySequence, KeyCombination, KeyCombinationDisplay, RegisteredMode, SeqElem } from './types'
+import type { ActionRegistry, Direction, HotkeySequence, KeyCombination, KeyCombinationDisplay, Modifiers, RegisteredMode, SeqElem } from './types'
 import type { HotkeyMap } from './useHotkeys'
 
 /**
@@ -63,14 +64,34 @@ const ResetIcon = () => (
  */
 const TooltipContext = createContext<TooltipComponent>(DefaultTooltip)
 
+/** A regular action shortcut entry */
+export interface ActionShortcut {
+  type: 'action'
+  actionId: string
+  label: string
+  description?: string
+  bindings: string[]
+}
+
+/** An arrow group shortcut entry (collapsed from 4 directional actions) */
+export interface ArrowGroupShortcut {
+  type: 'arrowGroup'
+  groupId: string
+  label: string
+  description?: string
+  /** Action IDs for each direction */
+  actionIds: Record<Direction, string>
+  /** Current modifier prefix for the arrow bindings */
+  modifierPrefix: string
+  /** Extra per-direction bindings (non-arrow, e.g., vim keys) */
+  extraBindings: Partial<Record<Direction, string[]>>
+}
+
+export type ShortcutEntry = ActionShortcut | ArrowGroupShortcut
+
 export interface ShortcutGroup {
   name: string
-  shortcuts: Array<{
-    actionId: string
-    label: string
-    description?: string
-    bindings: string[]
-  }>
+  shortcuts: ShortcutEntry[]
   /** Mode metadata (if this group represents a mode's actions) */
   mode?: {
     id: string
@@ -303,6 +324,7 @@ function organizeShortcuts(
     }
 
     groupMap.get(groupName)!.shortcuts.push({
+      type: 'action',
       actionId,
       label: labels?.[actionId] ?? actionRegistry?.[actionId]?.label ?? name,
       description: descriptions?.[actionId] ?? actionRegistry?.[actionId]?.description,
@@ -325,6 +347,7 @@ function organizeShortcuts(
       }
 
       groupMap.get(groupName)!.shortcuts.push({
+        type: 'action',
         actionId,
         label: labels?.[actionId] ?? action.label ?? name,
         description: descriptions?.[actionId] ?? action.description,
@@ -335,7 +358,110 @@ function organizeShortcuts(
 
   // Sort shortcuts within each group by actionId
   for (const group of groupMap.values()) {
-    group.shortcuts.sort((a, b) => a.actionId.localeCompare(b.actionId))
+    group.shortcuts.sort((a, b) => {
+      const aId = a.type === 'action' ? a.actionId : a.groupId
+      const bId = b.type === 'action' ? b.actionId : b.groupId
+      return aId.localeCompare(bId)
+    })
+  }
+
+  // Collapse arrow group actions into compact ArrowGroupShortcut entries
+  if (actionRegistry) {
+    for (const group of groupMap.values()) {
+      const arrowGroups = new Map<string, { entries: ActionShortcut[]; directions: Set<Direction> }>()
+
+      // Identify arrow group members
+      for (const entry of group.shortcuts) {
+        if (entry.type !== 'action') continue
+        const ag = actionRegistry[entry.actionId]?.arrowGroup
+        if (!ag) continue
+        if (!arrowGroups.has(ag.groupId)) {
+          arrowGroups.set(ag.groupId, { entries: [], directions: new Set() })
+        }
+        const g = arrowGroups.get(ag.groupId)!
+        g.entries.push(entry)
+        g.directions.add(ag.direction)
+      }
+
+      // Only collapse complete quads (all 4 directions present)
+      const toRemove = new Set<string>()
+      const toInsert: Array<{ index: number; entry: ArrowGroupShortcut }> = []
+
+      for (const [groupId, { entries, directions }] of arrowGroups) {
+        if (directions.size !== 4) continue
+
+        // Extract shared label (strip direction suffix)
+        const firstEntry = entries[0]
+        const label = firstEntry.label.replace(/\s+(left|right|up|down)$/i, '')
+
+        // Parse arrow bindings to extract modifier prefix and extra bindings
+        const actionIds = {} as Record<Direction, string>
+        const extraBindings: Partial<Record<Direction, string[]>> = {}
+        let modifierPrefix = ''
+
+        for (const entry of entries) {
+          const ag = actionRegistry[entry.actionId]!.arrowGroup!
+          actionIds[ag.direction] = entry.actionId
+
+          // Separate arrow bindings from extra bindings
+          const arrowKey = `arrow${ag.direction}`
+          const extras: string[] = []
+          for (const b of entry.bindings) {
+            if (b.endsWith(arrowKey)) {
+              // Extract modifier prefix from this arrow binding
+              const prefix = b.slice(0, b.length - arrowKey.length)
+              if (ag.direction === 'left') {
+                modifierPrefix = prefix
+              }
+            } else {
+              extras.push(b)
+            }
+          }
+          if (extras.length > 0) {
+            extraBindings[ag.direction] = extras
+          }
+
+          toRemove.add(entry.actionId)
+        }
+
+        // Find insertion index (position of first entry)
+        const firstIndex = group.shortcuts.findIndex(
+          s => s.type === 'action' && s.actionId === entries[0].actionId
+        )
+
+        toInsert.push({
+          index: firstIndex,
+          entry: {
+            type: 'arrowGroup',
+            groupId,
+            label,
+            description: firstEntry.description,
+            actionIds,
+            modifierPrefix,
+            extraBindings,
+          },
+        })
+      }
+
+      if (toRemove.size > 0) {
+        // Remove individual entries and insert collapsed ones
+        group.shortcuts = group.shortcuts.filter(
+          s => s.type !== 'action' || !toRemove.has(s.actionId)
+        )
+        // Insert collapsed entries at their original positions (adjusted for removals)
+        // Sort inserts by original index descending to insert from end
+        toInsert.sort((a, b) => b.index - a.index)
+        for (const { entry } of toInsert) {
+          // Find the right insertion point based on groupId sorting
+          let insertIdx = group.shortcuts.findIndex(s => {
+            const sId = s.type === 'action' ? s.actionId : s.groupId
+            return sId.localeCompare(entry.groupId) > 0
+          })
+          if (insertIdx === -1) insertIdx = group.shortcuts.length
+          group.shortcuts.splice(insertIdx, 0, entry)
+        }
+      }
+    }
   }
 
   // Sort groups
@@ -525,6 +651,107 @@ function BindingDisplay({
         </button>
       )}
     </kbd>
+  )
+}
+
+/** Parse a modifier prefix string like "shift+" into Modifiers */
+function parseModifierPrefix(prefix: string): Modifiers {
+  const p = prefix.toLowerCase()
+  return {
+    ctrl: p.includes('ctrl'),
+    alt: p.includes('alt'),
+    shift: p.includes('shift'),
+    meta: p.includes('meta'),
+  }
+}
+
+const DIRECTION_ICONS: Record<Direction, typeof Left> = { left: Left, right: Right, up: Up, down: Down }
+const DIRECTION_ORDER: Direction[] = ['left', 'right', 'up', 'down']
+
+/**
+ * Compact row for an arrow group — renders as:
+ *   Pan    [Shift] + [←] [→] [↑] [↓]    [h] [l] [k] [j]
+ */
+function ArrowGroupRow({
+  entry,
+  editable,
+  TooltipComponent: Tooltip,
+  onStartEditing,
+  renderExtraBindings,
+  arrowGroupEditState,
+  arrowGroupActiveKeys,
+}: {
+  entry: ArrowGroupShortcut
+  editable: boolean
+  TooltipComponent: TooltipComponent
+  onStartEditing: (groupId: string) => void
+  renderExtraBindings: (actionId: string, bindings: string[]) => ReactNode
+  arrowGroupEditState: { groupId: string } | null
+  arrowGroupActiveKeys: KeyCombination | null
+}) {
+  const isEditing = arrowGroupEditState?.groupId === entry.groupId
+  const modifiers = parseModifierPrefix(entry.modifierPrefix)
+  const hasModifiers = modifiers.ctrl || modifiers.alt || modifiers.shift || modifiers.meta
+
+  // Collect extra bindings across all directions
+  const hasExtras = DIRECTION_ORDER.some(d => (entry.extraBindings[d]?.length ?? 0) > 0)
+
+  return (
+    <div className="kbd-action kbd-arrow-group-row" data-arrow-group={entry.groupId}>
+      {entry.description ? (
+        <Tooltip title={entry.description}>
+          <span className="kbd-action-label">{entry.label}</span>
+        </Tooltip>
+      ) : (
+        <span className="kbd-action-label">{entry.label}</span>
+      )}
+      <span className="kbd-action-bindings">
+        <kbd
+          className={`kbd-kbd kbd-arrow-group-binding${editable ? ' editable' : ''}${isEditing ? ' editing' : ''}`}
+          onClick={editable ? () => onStartEditing(entry.groupId) : undefined}
+          tabIndex={editable ? 0 : undefined}
+          onKeyDown={editable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onStartEditing(entry.groupId) } } : undefined}
+        >
+          {isEditing ? (
+            <>
+              {arrowGroupActiveKeys && (arrowGroupActiveKeys.modifiers.ctrl || arrowGroupActiveKeys.modifiers.alt || arrowGroupActiveKeys.modifiers.shift || arrowGroupActiveKeys.modifiers.meta) ? (
+                <>
+                  {renderModifierIcons(arrowGroupActiveKeys.modifiers)}
+                  <span className="kbd-arrow-group-plus">+</span>
+                </>
+              ) : null}
+              <span className="kbd-arrow-group-arrows">
+                {DIRECTION_ORDER.map(dir => {
+                  const Icon = DIRECTION_ICONS[dir]
+                  return <Icon key={dir} className="kbd-key-icon" />
+                })}
+              </span>
+              <span>...</span>
+            </>
+          ) : (
+            <>
+              {hasModifiers && (
+                <>
+                  {renderModifierIcons(modifiers)}
+                  <span className="kbd-arrow-group-plus">+</span>
+                </>
+              )}
+              <span className="kbd-arrow-group-arrows">
+                {DIRECTION_ORDER.map(dir => {
+                  const Icon = DIRECTION_ICONS[dir]
+                  return <Icon key={dir} className="kbd-key-icon" />
+                })}
+              </span>
+            </>
+          )}
+        </kbd>
+        {hasExtras && DIRECTION_ORDER.map(dir => {
+          const extras = entry.extraBindings[dir]
+          if (!extras || extras.length === 0) return null
+          return <Fragment key={dir}>{renderExtraBindings(entry.actionIds[dir], extras)}</Fragment>
+        })}
+      </span>
+    </div>
   )
 }
 
@@ -725,6 +952,11 @@ export function ShortcutsModal({
   // Track if current pending keys have a conflict (for pausing timeout)
   const [hasPendingConflictState, setHasPendingConflictState] = useState(false)
 
+  // Arrow group editing state
+  const [arrowGroupEditState, setArrowGroupEditState] = useState<{ groupId: string } | null>(null)
+  const [arrowGroupActiveKeys, setArrowGroupActiveKeys] = useState<KeyCombination | null>(null)
+  const arrowGroupEditRef = useRef<{ groupId: string } | null>(null)
+
   // Refs to avoid stale closures in onCapture callback
   const editingActionRef = useRef<string | null>(null)
   const editingKeyRef = useRef<string | null>(null)
@@ -745,6 +977,9 @@ export function ShortcutsModal({
     editingKeyRef.current = null
     addingActionRef.current = null
     setPendingConflict(null)
+    arrowGroupEditRef.current = null
+    setArrowGroupEditState(null)
+    setArrowGroupActiveKeys(null)
     // Use prop callback, then context, then nothing
     if (onCloseProp) {
       onCloseProp()
@@ -947,6 +1182,23 @@ export function ShortcutsModal({
     setPendingConflict(null)
     ctx?.setIsEditingBinding(false)
   }, [cancel, ctx?.setIsEditingBinding])
+
+  // Start editing an arrow group's modifiers
+  const startArrowGroupEditing = useCallback((groupId: string) => {
+    // Cancel any regular editing first
+    cancelEditing()
+    arrowGroupEditRef.current = { groupId }
+    setArrowGroupEditState({ groupId })
+    setArrowGroupActiveKeys(null)
+    ctx?.setIsEditingBinding(true)
+  }, [cancelEditing, ctx?.setIsEditingBinding])
+
+  const cancelArrowGroupEditing = useCallback(() => {
+    arrowGroupEditRef.current = null
+    setArrowGroupEditState(null)
+    setArrowGroupActiveKeys(null)
+    ctx?.setIsEditingBinding(false)
+  }, [ctx?.setIsEditingBinding])
 
   const removeBinding = useCallback(
     (action: string, key: string) => {
@@ -1193,6 +1445,14 @@ export function ShortcutsModal({
   // Cancel editing when clicking outside the editing element
   const handleModalClick = useCallback(
     (e: MouseEvent) => {
+      // Cancel arrow group editing on outside click
+      if (arrowGroupEditState) {
+        const target = e.target as HTMLElement
+        if (!target.closest('.kbd-arrow-group-binding')) {
+          cancelArrowGroupEditing()
+        }
+        return
+      }
       if (!editingAction && !addingAction) return
       const target = e.target as HTMLElement
       // If click is on or inside an editing kbd, don't cancel
@@ -1203,7 +1463,7 @@ export function ShortcutsModal({
       if (target.closest('.kbd-add-btn')) return
       cancelEditing()
     },
-    [editingAction, addingAction, cancelEditing],
+    [editingAction, addingAction, cancelEditing, arrowGroupEditState, cancelArrowGroupEditing],
   )
 
   // Organize shortcuts into groups (include actionRegistry to show actions with no bindings)
@@ -1213,6 +1473,103 @@ export function ShortcutsModal({
     () => organizeShortcuts(keymap, labels, descriptions, groupNames, groupOrder, ctx?.registry.actionRegistry, effectiveShowUnbound, ctx?.modes, ctx?.activeMode),
     [keymap, labels, descriptions, groupNames, groupOrder, ctx?.registry.actionRegistry, effectiveShowUnbound, ctx?.modes, ctx?.activeMode],
   )
+
+  // Arrow group modifier-only recording: listen for keydown/keyup when editing
+  useEffect(() => {
+    if (!arrowGroupEditState) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+
+      // Escape cancels
+      if (e.key === 'Escape') {
+        cancelArrowGroupEditing()
+        return
+      }
+
+      // Arrow key or Enter confirms with currently-held modifiers
+      const isArrow = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)
+      if (isArrow || e.key === 'Enter') {
+        const currentRef = arrowGroupEditRef.current
+        if (!currentRef) return
+
+        // Build modifier prefix from held keys
+        const mods: string[] = []
+        if (e.ctrlKey) mods.push('ctrl')
+        if (e.altKey) mods.push('alt')
+        if (e.shiftKey) mods.push('shift')
+        if (e.metaKey) mods.push('meta')
+        const modPrefix = mods.length > 0 ? mods.join('+') + '+' : ''
+
+        // Find the arrow group entry in current shortcutGroups
+        for (const group of shortcutGroups) {
+          for (const entry of group.shortcuts) {
+            if (entry.type === 'arrowGroup' && entry.groupId === currentRef.groupId) {
+              // Update all 4 direction bindings
+              const arrowKeys: Record<Direction, string> = {
+                left: 'arrowleft', right: 'arrowright',
+                up: 'arrowup', down: 'arrowdown',
+              }
+              for (const dir of DIRECTION_ORDER) {
+                const actionId = entry.actionIds[dir]
+                const oldArrowBinding = `${entry.modifierPrefix}${arrowKeys[dir]}`
+                const newArrowBinding = `${modPrefix}${arrowKeys[dir]}`
+                if (oldArrowBinding !== newArrowBinding) {
+                  handleBindingChange?.(actionId, oldArrowBinding, newArrowBinding)
+                }
+              }
+              break
+            }
+          }
+        }
+
+        cancelArrowGroupEditing()
+        return
+      }
+
+      // Non-modifier, non-arrow, non-Enter key cancels
+      if (!['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) {
+        cancelArrowGroupEditing()
+        return
+      }
+
+      // Modifier key: update display
+      setArrowGroupActiveKeys({
+        key: '',
+        modifiers: {
+          ctrl: e.ctrlKey,
+          alt: e.altKey,
+          shift: e.shiftKey,
+          meta: e.metaKey,
+        },
+      })
+    }
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      // Update modifier display on keyup
+      if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) {
+        setArrowGroupActiveKeys({
+          key: '',
+          modifiers: {
+            ctrl: e.ctrlKey,
+            alt: e.altKey,
+            shift: e.shiftKey,
+            meta: e.metaKey,
+          },
+        })
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown, true)
+    window.addEventListener('keyup', handleKeyUp, true)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown, true)
+      window.removeEventListener('keyup', handleKeyUp, true)
+    }
+  }, [arrowGroupEditState, shortcutGroups, handleBindingChange, cancelArrowGroupEditing])
 
   if (!isOpen) return null
 
@@ -1247,22 +1604,43 @@ export function ShortcutsModal({
     }
 
     // Default single-column rendering
-    return group.shortcuts.map(({ actionId, label, description, bindings }) => (
-      <div key={actionId} className="kbd-action">
-        {description ? (
-          <TooltipComponentProp title={description}>
+    return group.shortcuts.map((entry) => {
+      if (entry.type === 'arrowGroup') {
+        return (
+          <ArrowGroupRow
+            key={entry.groupId}
+            entry={entry}
+            editable={editable}
+            TooltipComponent={TooltipComponentProp}
+            onStartEditing={startArrowGroupEditing}
+            renderExtraBindings={(actionId, bindings) => (
+              <>
+                {bindings.map(key => renderEditableKbd(actionId, key, true))}
+              </>
+            )}
+            arrowGroupEditState={arrowGroupEditState}
+            arrowGroupActiveKeys={arrowGroupActiveKeys}
+          />
+        )
+      }
+      const { actionId, label, description, bindings } = entry
+      return (
+        <div key={actionId} className="kbd-action">
+          {description ? (
+            <TooltipComponentProp title={description}>
+              <span className="kbd-action-label">
+                {label}
+              </span>
+            </TooltipComponentProp>
+          ) : (
             <span className="kbd-action-label">
               {label}
             </span>
-          </TooltipComponentProp>
-        ) : (
-          <span className="kbd-action-label">
-            {label}
-          </span>
-        )}
-        {renderCell(actionId, bindings)}
-      </div>
-    ))
+          )}
+          {renderCell(actionId, bindings)}
+        </div>
+      )
+    })
   }
 
   // Default render

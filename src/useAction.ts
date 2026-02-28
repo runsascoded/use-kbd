@@ -1,5 +1,6 @@
 import { useContext, useEffect, useRef } from 'react'
 import { ActionsRegistryContext } from './ActionsRegistry'
+import type { Direction } from './types'
 
 /**
  * Handler function for actions.
@@ -42,6 +43,8 @@ export interface ActionConfig {
   hideFromModal?: boolean
   /** Protect bindings from removal (user can still add more, but not remove existing) */
   protected?: boolean
+  /** Arrow group metadata (set by useArrowGroup) */
+  arrowGroup?: { groupId: string; direction: Direction }
 }
 
 /**
@@ -114,6 +117,7 @@ export function useAction(id: string, config: ActionConfig): void {
     config.priority,
     config.hideFromModal,
     config.protected,
+    JSON.stringify(config.arrowGroup),
   ])
 }
 
@@ -178,6 +182,7 @@ export function useActions(actions: Record<string, ActionConfig>): void {
         c.priority,
         c.hideFromModal,
         c.protected,
+        c.arrowGroup,
       ])
     ),
   ])

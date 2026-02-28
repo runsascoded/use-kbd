@@ -247,6 +247,25 @@
   align-items: center;
 }
 
+/* === Arrow Group Row === */
+.kbd-arrow-group-binding {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.kbd-arrow-group-plus {
+  margin: 0 2px;
+  font-size: 0.75rem;
+  opacity: 0.6;
+}
+
+.kbd-arrow-group-arrows {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+}
+
 /* === Kbd element === */
 .kbd-kbd {
   position: relative;
