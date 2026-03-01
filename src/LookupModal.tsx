@@ -52,6 +52,7 @@ export function LookupModal({ defaultBinding = 'meta+shift+k' }: LookupModalProp
   useAction(ACTION_LOOKUP, {
     label: 'Key lookup',
     group: builtinGroup,
+    sortOrder: 2,
     defaultBindings: defaultBinding ? [defaultBinding] : [],
     handler: useCallback(() => toggleLookup(), [toggleLookup]),
   })

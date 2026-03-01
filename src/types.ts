@@ -174,6 +174,8 @@ export interface ActionDefinition {
   actionPair?: { pairId: string; index: 0 | 1 }
   /** Action triplet metadata (set by useActionTriplet) */
   actionTriplet?: { tripletId: string; index: 0 | 1 | 2 }
+  /** Sort order within group in ShortcutsModal (default: 0, lower = earlier; registration order breaks ties) */
+  sortOrder?: number
 }
 
 /** Cardinal direction for arrow key groups */

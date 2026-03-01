@@ -49,6 +49,8 @@ export interface ActionConfig {
   actionPair?: { pairId: string; index: 0 | 1 }
   /** Action triplet metadata (set by useActionTriplet) */
   actionTriplet?: { tripletId: string; index: 0 | 1 | 2 }
+  /** Sort order within group in ShortcutsModal (default: 0, lower = earlier; registration order breaks ties) */
+  sortOrder?: number
 }
 
 /**
@@ -124,6 +126,7 @@ export function useAction(id: string, config: ActionConfig): void {
     JSON.stringify(config.arrowGroup),
     JSON.stringify(config.actionPair),
     JSON.stringify(config.actionTriplet),
+    config.sortOrder,
   ])
 }
 
@@ -191,6 +194,7 @@ export function useActions(actions: Record<string, ActionConfig>): void {
         c.arrowGroup,
         c.actionPair,
         c.actionTriplet,
+        c.sortOrder,
       ])
     ),
   ])

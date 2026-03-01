@@ -205,6 +205,7 @@ export function Omnibar({
   useAction(ACTION_OMNIBAR, {
     label: 'Command palette',
     group: ctx?.builtinGroup ?? DEFAULT_BUILTIN_GROUP,
+    sortOrder: 1,
     defaultBindings: defaultBinding ? [defaultBinding] : [],
     handler: useCallback(() => ctx?.toggleOmnibar(), [ctx?.toggleOmnibar]),
   })

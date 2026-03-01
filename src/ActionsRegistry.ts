@@ -437,6 +437,7 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
         arrowGroup: config.arrowGroup,
         actionPair: config.actionPair,
         actionTriplet: config.actionTriplet,
+        sortOrder: config.sortOrder,
       }
     }
     return registry

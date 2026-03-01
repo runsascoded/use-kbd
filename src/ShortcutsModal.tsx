@@ -294,6 +294,7 @@ function organizeShortcuts(
   modesMap?: Map<string, RegisteredMode>,
   activeMode?: string | null,
   getEffectiveMode?: (actionId: string) => string | undefined,
+  registeredActions?: Map<string, { registeredAt: number }>,
 ): ShortcutGroup[] {
   // Build action -> bindings map
   const actionBindings = getActionBindings(keymap)
@@ -386,12 +387,21 @@ function organizeShortcuts(
     }
   }
 
-  // Sort shortcuts within each group by actionId
+  // Sort shortcuts within each group: sortOrder first, then registration order
+  const getSortKey = (entry: ShortcutEntry): { order: number; registeredAt: number } => {
+    const actionId = entry.type === 'action' ? entry.actionId
+      : entry.type === 'arrowGroup' ? entry.actionIds.left
+      : entry.actionIds[0]
+    const order = actionRegistry?.[actionId]?.sortOrder ?? 0
+    const registeredAt = registeredActions?.get(actionId)?.registeredAt ?? 0
+    return { order, registeredAt }
+  }
   for (const group of groupMap.values()) {
     group.shortcuts.sort((a, b) => {
-      const aId = a.type === 'action' ? a.actionId : a.type === 'arrowGroup' ? a.groupId : a.type === 'actionPair' ? a.pairId : a.tripletId
-      const bId = b.type === 'action' ? b.actionId : b.type === 'arrowGroup' ? b.groupId : b.type === 'actionPair' ? b.pairId : b.tripletId
-      return aId.localeCompare(bId)
+      const ak = getSortKey(a)
+      const bk = getSortKey(b)
+      if (ak.order !== bk.order) return ak.order - bk.order
+      return ak.registeredAt - bk.registeredAt
     })
   }
 
@@ -1434,6 +1444,7 @@ export function ShortcutsModal({
     label: 'Show shortcuts',
     group: ctx?.builtinGroup ?? DEFAULT_BUILTIN_GROUP,
     defaultBindings: defaultBinding ? [defaultBinding] : [],
+    sortOrder: 0,
     protected: true, // Prevent users from removing the only way to edit shortcuts
     handler: useCallback(() => {
       if (ctx) {
@@ -1964,8 +1975,8 @@ export function ShortcutsModal({
   // Default showUnbound to true in editable mode, false otherwise
   const effectiveShowUnbound = showUnbound ?? editable
   const shortcutGroups = useMemo(
-    () => organizeShortcuts(keymap, labels, descriptions, groupNames, groupOrder, ctx?.registry.actionRegistry, effectiveShowUnbound, ctx?.modes, ctx?.activeMode, ctx?.registry.getEffectiveMode),
-    [keymap, labels, descriptions, groupNames, groupOrder, ctx?.registry.actionRegistry, effectiveShowUnbound, ctx?.modes, ctx?.activeMode, ctx?.registry.getEffectiveMode],
+    () => organizeShortcuts(keymap, labels, descriptions, groupNames, groupOrder, ctx?.registry.actionRegistry, effectiveShowUnbound, ctx?.modes, ctx?.activeMode, ctx?.registry.getEffectiveMode, ctx?.registry.actions),
+    [keymap, labels, descriptions, groupNames, groupOrder, ctx?.registry.actionRegistry, effectiveShowUnbound, ctx?.modes, ctx?.activeMode, ctx?.registry.getEffectiveMode, ctx?.registry.actions],
   )
 
   // Arrow group modifier-only recording: listen for keydown/keyup when editing
