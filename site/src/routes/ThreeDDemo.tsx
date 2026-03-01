@@ -48,7 +48,7 @@ function Viewer() {
 
   const [azimuth, setAzimuth] = useState(() => getStored('azimuth', DEFAULTS.azimuth))
   const azimuthRef = useRef(azimuth)
-  azimuthRef.current = azimuth
+  useEffect(() => { azimuthRef.current = azimuth }, [azimuth])
   const [elevation, setElevation] = useState(() => getStored('elevation', DEFAULTS.elevation))
   const [distance, setDistance] = useState(() => getStored('distance', DEFAULTS.distance))
   const [roll, setRoll] = useState(() => getStored('roll', DEFAULTS.roll))
