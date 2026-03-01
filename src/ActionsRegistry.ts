@@ -1,6 +1,7 @@
 import { createContext, useCallback, useMemo, useRef, useState } from 'react'
 import { dbg } from './debug'
-import type { ActionRegistry, BindingsExport } from './types'
+import type { ActionRegistry, BindingsExport, ModeCustomizations } from './types'
+import { EMPTY_MODE_CUSTOMIZATIONS } from './types'
 import type { ActionConfig } from './useAction'
 import type { HotkeyMap } from './useHotkeys'
 
@@ -45,6 +46,16 @@ export interface ActionsRegistryValue {
   exportBindings: () => BindingsExport
   /** Import binding customizations from JSON (replaces current customizations) */
   importBindings: (data: BindingsExport) => void
+  /** Mode customizations (user edits to mode membership) */
+  modeCustomizations: ModeCustomizations
+  /** Set mode customizations (persisted) */
+  setModeCustomizations: (update: ModeCustomizations | ((prev: ModeCustomizations) => ModeCustomizations)) => void
+  /** Get the effective mode for an action (considering customizations) */
+  getEffectiveMode: (actionId: string) => string | undefined
+  /** Add an action to a mode */
+  addActionToMode: (actionId: string, modeId: string) => void
+  /** Remove an action from its mode */
+  removeActionFromMode: (actionId: string, modeId: string) => void
 }
 
 export const ActionsRegistryContext = createContext<ActionsRegistryValue | null>(null)
@@ -87,6 +98,154 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
       return {}
     }
   })
+
+  // Mode customizations (persisted)
+  const [modeCustomizations, setModeCustomizationsRaw] = useState<ModeCustomizations>(() => {
+    if (!storageKey || typeof window === 'undefined') return EMPTY_MODE_CUSTOMIZATIONS
+    try {
+      const stored = localStorage.getItem(`${storageKey}-modes`)
+      return stored ? JSON.parse(stored) : EMPTY_MODE_CUSTOMIZATIONS
+    } catch {
+      return EMPTY_MODE_CUSTOMIZATIONS
+    }
+  })
+
+  const setModeCustomizations = useCallback((update: ModeCustomizations | ((prev: ModeCustomizations) => ModeCustomizations)) => {
+    setModeCustomizationsRaw(prev => {
+      const next = typeof update === 'function' ? update(prev) : update
+      if (storageKey && typeof window !== 'undefined') {
+        try {
+          const key = `${storageKey}-modes`
+          const isEmpty = Object.keys(next.additions).length === 0 &&
+            Object.keys(next.removals).length === 0 &&
+            Object.keys(next.userModes).length === 0
+          if (isEmpty) {
+            localStorage.removeItem(key)
+          } else {
+            localStorage.setItem(key, JSON.stringify(next))
+          }
+        } catch {
+          // Ignore storage errors
+        }
+      }
+      return next
+    })
+  }, [storageKey])
+
+  // Get the effective mode for an action (considering customizations)
+  const getEffectiveMode = useCallback((actionId: string): string | undefined => {
+    // 1. Check removals: if removed from its default mode, it's global
+    for (const [modeId, actionIds] of Object.entries(modeCustomizations.removals)) {
+      if (actionIds.includes(actionId)) return undefined
+    }
+    // 2. Check additions: user moved into a mode
+    for (const [modeId, actionIds] of Object.entries(modeCustomizations.additions)) {
+      if (actionIds.includes(actionId)) return modeId
+    }
+    // 3. Check user-created modes
+    for (const [modeId, config] of Object.entries(modeCustomizations.userModes)) {
+      if (config.actions.includes(actionId)) return modeId
+    }
+    // 4. Fall back to developer-defined mode
+    const action = actionsRef.current.get(actionId)
+    return action?.config.mode
+  }, [modeCustomizations])
+
+  // Add an action to a mode (handles arrow groups atomically)
+  const addActionToMode = useCallback((actionId: string, modeId: string) => {
+    // Collect all action IDs to move (arrow group = all 4 directions)
+    const action = actionsRef.current.get(actionId)
+    const groupId = action?.config.arrowGroup?.groupId
+    const actionIds = groupId
+      ? Array.from(actionsRef.current.entries())
+          .filter(([, a]) => a.config.arrowGroup?.groupId === groupId)
+          .map(([id]) => id)
+      : [actionId]
+
+    setModeCustomizations(prev => {
+      const next = { ...prev, additions: { ...prev.additions }, removals: { ...prev.removals }, userModes: { ...prev.userModes } }
+
+      for (const id of actionIds) {
+        const defaultMode = actionsRef.current.get(id)?.config.mode
+
+        // Remove from any other mode's additions
+        for (const [mid, ids] of Object.entries(next.additions)) {
+          if (mid !== modeId && ids.includes(id)) {
+            next.additions[mid] = ids.filter(a => a !== id)
+            if (next.additions[mid].length === 0) delete next.additions[mid]
+          }
+        }
+        // Remove from any user mode's actions
+        for (const [mid, config] of Object.entries(next.userModes)) {
+          if (mid !== modeId && config.actions.includes(id)) {
+            next.userModes[mid] = { ...config, actions: config.actions.filter(a => a !== id) }
+          }
+        }
+
+        if (modeId === defaultMode) {
+          // Moving back to default mode — remove from removals
+          const removals = next.removals[modeId]
+          if (removals?.includes(id)) {
+            next.removals[modeId] = removals.filter(a => a !== id)
+            if (next.removals[modeId].length === 0) delete next.removals[modeId]
+          }
+        } else if (next.userModes[modeId]) {
+          // Adding to a user-created mode
+          if (!next.userModes[modeId].actions.includes(id)) {
+            next.userModes[modeId] = { ...next.userModes[modeId], actions: [...next.userModes[modeId].actions, id] }
+          }
+          // If removing from its default mode, record that
+          if (defaultMode) {
+            next.removals[defaultMode] = [...(next.removals[defaultMode] ?? []), id]
+          }
+        } else {
+          // Adding to a developer-defined mode (not the default)
+          if (!next.additions[modeId]?.includes(id)) {
+            next.additions[modeId] = [...(next.additions[modeId] ?? []), id]
+          }
+          // If removing from its default mode, record that
+          if (defaultMode && defaultMode !== modeId) {
+            next.removals[defaultMode] = [...(next.removals[defaultMode] ?? []), id]
+          }
+        }
+      }
+      return next
+    })
+  }, [setModeCustomizations])
+
+  // Remove an action from its mode (handles arrow groups atomically)
+  const removeActionFromMode = useCallback((actionId: string, modeId: string) => {
+    const action = actionsRef.current.get(actionId)
+    const groupId = action?.config.arrowGroup?.groupId
+    const actionIds = groupId
+      ? Array.from(actionsRef.current.entries())
+          .filter(([, a]) => a.config.arrowGroup?.groupId === groupId)
+          .map(([id]) => id)
+      : [actionId]
+
+    setModeCustomizations(prev => {
+      const next = { ...prev, additions: { ...prev.additions }, removals: { ...prev.removals }, userModes: { ...prev.userModes } }
+
+      for (const id of actionIds) {
+        const defaultMode = actionsRef.current.get(id)?.config.mode
+
+        if (defaultMode === modeId) {
+          // Removing from default mode → record in removals
+          if (!next.removals[modeId]?.includes(id)) {
+            next.removals[modeId] = [...(next.removals[modeId] ?? []), id]
+          }
+        } else if (next.additions[modeId]?.includes(id)) {
+          // Removing from a user-added assignment
+          next.additions[modeId] = next.additions[modeId].filter(a => a !== id)
+          if (next.additions[modeId].length === 0) delete next.additions[modeId]
+        } else if (next.userModes[modeId]?.actions.includes(id)) {
+          // Removing from a user-created mode
+          next.userModes[modeId] = { ...next.userModes[modeId], actions: next.userModes[modeId].actions.filter(a => a !== id) }
+        }
+      }
+      return next
+    })
+  }, [setModeCustomizations])
 
   // Helper to check if a key→action matches a default binding
   const isDefaultBinding = useCallback((key: string, actionId: string): boolean => {
@@ -344,17 +503,22 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
   const resetOverrides = useCallback(() => {
     updateOverrides({})
     updateRemovedDefaults({})
-  }, [updateOverrides, updateRemovedDefaults])
+    setModeCustomizations(EMPTY_MODE_CUSTOMIZATIONS)
+  }, [updateOverrides, updateRemovedDefaults, setModeCustomizations])
 
   const exportBindings = useCallback((): BindingsExport => {
+    const hasModeCusts = Object.keys(modeCustomizations.additions).length > 0 ||
+      Object.keys(modeCustomizations.removals).length > 0 ||
+      Object.keys(modeCustomizations.userModes).length > 0
     return {
       version: EXPORT_VERSION,
       exportedAt: new Date().toISOString(),
       origin: typeof window !== 'undefined' ? window.location.origin : undefined,
       overrides,
       removedDefaults,
+      ...(hasModeCusts ? { modeCustomizations } : {}),
     }
-  }, [overrides, removedDefaults])
+  }, [overrides, removedDefaults, modeCustomizations])
 
   const importBindings = useCallback((data: BindingsExport) => {
     // Validate basic structure
@@ -388,7 +552,12 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
     // Apply the imported data (replace mode)
     updateOverrides(data.overrides)
     updateRemovedDefaults(data.removedDefaults)
-  }, [updateOverrides, updateRemovedDefaults])
+    if (data.modeCustomizations) {
+      setModeCustomizations(data.modeCustomizations)
+    } else {
+      setModeCustomizations(EMPTY_MODE_CUSTOMIZATIONS)
+    }
+  }, [updateOverrides, updateRemovedDefaults, setModeCustomizations])
 
   // Create a snapshot of the map for consumers
   const actions = useMemo(() => {
@@ -414,6 +583,11 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
     resetOverrides,
     exportBindings,
     importBindings,
+    modeCustomizations,
+    setModeCustomizations,
+    getEffectiveMode,
+    addActionToMode,
+    removeActionFromMode,
   }), [
     register,
     unregister,
@@ -431,5 +605,10 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
     resetOverrides,
     exportBindings,
     importBindings,
+    modeCustomizations,
+    setModeCustomizations,
+    getEffectiveMode,
+    addActionToMode,
+    removeActionFromMode,
   ])
 }

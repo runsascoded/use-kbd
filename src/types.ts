@@ -399,6 +399,43 @@ export interface OmnibarEndpointSyncConfig extends OmnibarEndpointConfigBase {
 export type OmnibarEndpointConfig = OmnibarEndpointAsyncConfig | OmnibarEndpointSyncConfig
 
 // ============================================================================
+// Mode customization types
+// ============================================================================
+
+/**
+ * User customizations to mode membership (stored as deltas from developer defaults).
+ */
+export interface ModeCustomizations {
+  /** Actions added to modes by the user (not part of developer defaults) */
+  additions: Record<string, string[]>  // modeId -> [actionId, ...]
+  /** Actions removed from their default mode by the user */
+  removals: Record<string, string[]>   // modeId -> [actionId, ...]
+  /** User-created modes */
+  userModes: Record<string, UserModeConfig>  // modeId -> config
+}
+
+/**
+ * Configuration for a user-created mode.
+ */
+export interface UserModeConfig {
+  /** Display label */
+  label: string
+  /** Accent color */
+  color?: string
+  /** Activation binding(s) for this mode */
+  bindings?: string[]
+  /** Actions assigned to this mode */
+  actions: string[]
+}
+
+/** Empty mode customizations (no changes from developer defaults) */
+export const EMPTY_MODE_CUSTOMIZATIONS: ModeCustomizations = {
+  additions: {},
+  removals: {},
+  userModes: {},
+}
+
+// ============================================================================
 // Bindings export/import types
 // ============================================================================
 
@@ -417,4 +454,6 @@ export interface BindingsExport {
   overrides: Record<string, string | string[]>
   /** Default bindings that were removed: action → keys (e.g., "nav:goto" → ["g"]) */
   removedDefaults: Record<string, string[]>
+  /** Mode membership customizations (additions, removals, user-created modes) */
+  modeCustomizations?: ModeCustomizations
 }
