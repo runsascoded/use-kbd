@@ -3,7 +3,7 @@ import { ActionsRegistryContext, useActionsRegistry } from './ActionsRegistry'
 import { dbg } from './debug'
 import { ModesRegistryContext, useModesRegistry } from './ModesRegistry'
 import { OmnibarEndpointsRegistryContext, useOmnibarEndpointsRegistry } from './OmnibarEndpointsRegistry'
-import { ACTION_MODE_PREFIX, DEFAULT_SEQUENCE_TIMEOUT } from './constants'
+import { ACTION_MODE_PREFIX, DEFAULT_BUILTIN_GROUP, DEFAULT_SEQUENCE_TIMEOUT } from './constants'
 import { useHotkeys } from './useHotkeys'
 import { findConflicts, getSequenceCompletions, searchActions } from './utils'
 import type { ActionsRegistryValue } from './ActionsRegistry'
@@ -21,6 +21,9 @@ export interface HotkeysConfig {
   /** Timeout in ms before a sequence auto-submits (default: Infinity, no timeout) */
   sequenceTimeout?: number
 
+  /** Group name for built-in actions: shortcuts modal, omnibar, key lookup (default: "Meta") */
+  builtinGroup?: string
+
   /** When true, keys with conflicts are disabled (default: true) */
   disableConflicts?: boolean
 
@@ -37,6 +40,8 @@ export interface HotkeysConfig {
 export interface HotkeysContextValue {
   /** Storage key used for persisting bindings (useful for export filename) */
   storageKey: string
+  /** Group name for built-in actions (shortcuts modal, omnibar, key lookup) */
+  builtinGroup: string
   /** The actions registry */
   registry: ActionsRegistryValue
   /** The omnibar endpoints registry */
@@ -111,6 +116,7 @@ const HotkeysContext = createContext<HotkeysContextValue | null>(null)
 
 const DEFAULT_CONFIG: Required<HotkeysConfig> = {
   storageKey: 'use-kbd',
+  builtinGroup: DEFAULT_BUILTIN_GROUP,
   sequenceTimeout: DEFAULT_SEQUENCE_TIMEOUT,
   disableConflicts: false,  // Keep conflicting bindings active; SeqM handles disambiguation
   minViewportWidth: false,  // Don't disable based on viewport; use enableOnTouch instead
@@ -480,6 +486,7 @@ export function HotkeysProvider({
 
   const value = useMemo<HotkeysContextValue>(() => ({
     storageKey: config.storageKey,
+    builtinGroup: config.builtinGroup,
     registry,
     endpointsRegistry,
     isEnabled,
@@ -516,6 +523,7 @@ export function HotkeysProvider({
     deactivateMode: modesRegistry.deactivateMode,
   }), [
     config.storageKey,
+    config.builtinGroup,
     registry,
     endpointsRegistry,
     isEnabled,

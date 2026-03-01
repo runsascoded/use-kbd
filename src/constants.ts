@@ -13,6 +13,12 @@ export const ACTION_OMNIBAR = '__hotkeys:omnibar'
 export const ACTION_LOOKUP = '__hotkeys:lookup'
 
 /**
+ * Default group name for built-in actions (shortcuts modal, omnibar, lookup).
+ * Override via `builtinGroup` in HotkeysConfig.
+ */
+export const DEFAULT_BUILTIN_GROUP = 'Meta'
+
+/**
  * Prefix for mode activation actions.
  * Mode activation actions are registered with ID `__mode:{modeId}`.
  */

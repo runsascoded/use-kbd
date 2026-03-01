@@ -39,6 +39,7 @@ export interface LookupModalProps {
  */
 export function LookupModal({ defaultBinding = 'meta+shift+k' }: LookupModalProps = {}) {
   const {
+    builtinGroup,
     isLookupOpen,
     lookupInitialKeys,
     closeLookup,
@@ -50,7 +51,7 @@ export function LookupModal({ defaultBinding = 'meta+shift+k' }: LookupModalProp
   // Register the lookup modal trigger action
   useAction(ACTION_LOOKUP, {
     label: 'Key lookup',
-    group: 'Global',
+    group: builtinGroup,
     defaultBindings: defaultBinding ? [defaultBinding] : [],
     handler: useCallback(() => toggleLookup(), [toggleLookup]),
   })

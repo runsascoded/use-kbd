@@ -1,5 +1,5 @@
 import { ComponentType, createContext, Fragment, MouseEvent, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { ACTION_MODAL, ACTION_MODE_PREFIX, DEFAULT_SEQUENCE_TIMEOUT } from './constants'
+import { ACTION_MODAL, ACTION_MODE_PREFIX, DEFAULT_BUILTIN_GROUP, DEFAULT_SEQUENCE_TIMEOUT } from './constants'
 import { dbg } from './debug'
 import { useMaybeHotkeysContext } from './HotkeysProvider'
 import { renderModifierIcons, renderKeyContent } from './KeyElements'
@@ -1432,7 +1432,7 @@ export function ShortcutsModal({
   // Register the shortcuts modal trigger action
   useAction(ACTION_MODAL, {
     label: 'Show shortcuts',
-    group: 'Global',
+    group: ctx?.builtinGroup ?? DEFAULT_BUILTIN_GROUP,
     defaultBindings: defaultBinding ? [defaultBinding] : [],
     protected: true, // Prevent users from removing the only way to edit shortcuts
     handler: useCallback(() => {

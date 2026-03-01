@@ -1,5 +1,5 @@
 import { Fragment, KeyboardEvent, MouseEvent, ReactNode, RefObject, useCallback, useEffect, useMemo, useRef } from 'react'
-import { ACTION_MODE_PREFIX, ACTION_OMNIBAR } from './constants'
+import { ACTION_MODE_PREFIX, ACTION_OMNIBAR, DEFAULT_BUILTIN_GROUP } from './constants'
 import { useMaybeHotkeysContext } from './HotkeysProvider'
 import { ModifierIcon } from './ModifierIcons'
 import { useAction } from './useAction'
@@ -204,7 +204,7 @@ export function Omnibar({
   // Register the omnibar trigger action (only works within HotkeysProvider)
   useAction(ACTION_OMNIBAR, {
     label: 'Command palette',
-    group: 'Global',
+    group: ctx?.builtinGroup ?? DEFAULT_BUILTIN_GROUP,
     defaultBindings: defaultBinding ? [defaultBinding] : [],
     handler: useCallback(() => ctx?.toggleOmnibar(), [ctx?.toggleOmnibar]),
   })
