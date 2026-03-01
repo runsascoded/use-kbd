@@ -86,6 +86,7 @@ function Dashboard() {
 - [awair.runsascoded.com] ([GitHub][awair-gh] · [usage][awair-usage] · [diff][awair-diff]) — Awair air quality dashboard
 - [jct.rbw.sh] ([GitHub][jct-gh] · [usage][jct-usage] · [diff][jct-diff]) — Jersey City 3D tax map
 - [voro.rbw.sh] ([GitHub][voro-gh] · [usage][voro-usage]) — Image Voronoi generator
+- [runsascoded.com/apvd] ([GitHub][apvd-gh] · [usage][apvd-usage]) — Area-Proportional Venn Diagrams
 
 [kbd.rbw.sh]: https://kbd.rbw.sh
 [ctbk.dev]: https://ctbk.dev
@@ -103,6 +104,9 @@ function Dashboard() {
 [voro.rbw.sh]: https://voro.rbw.sh
 [voro-gh]: https://github.com/runsascoded/ImageVoronoi
 [voro-usage]: https://github.com/search?q=repo%3Arunsascoded%2FImageVoronoi+use-kbd&type=code
+[runsascoded.com/apvd]: https://runsascoded.com/apvd
+[apvd-gh]: https://github.com/runsascoded/apvd
+[apvd-usage]: https://github.com/search?q=repo%3Arunsascoded%2Fapvd+use-kbd&type=code
 
 ### Comparison <a id="comparison"></a>
 
