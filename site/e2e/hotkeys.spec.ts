@@ -2526,4 +2526,98 @@ test.describe('3D Viewer Demo', () => {
 
     await page.keyboard.press('Escape')
   })
+
+  test('action triplet: slice shows as single combined row', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    await page.keyboard.press('?')
+    await page.waitForSelector('.kbd-modal', { timeout: 5000 })
+
+    // Slice along X / Y / Z should be a single triplet row
+    const tripletRow = page.locator('.kbd-action-triplet-row', { hasText: 'Slice along X / Y / Z' })
+    await expect(tripletRow).toBeVisible()
+
+    // Should have two "/" separators between binding groups
+    const seps = tripletRow.locator('.kbd-action-pair-sep')
+    await expect(seps).toHaveCount(2)
+
+    // Should NOT have individual "Slice along X / Y / Z a/b/c" rows
+    const viewGroup = page.locator('.kbd-group', { hasText: '3D: VIEW' })
+    await expect(viewGroup.locator('.kbd-action', { hasText: /^Slice along X \/ Y \/ Z a$/ })).not.toBeVisible()
+    await expect(viewGroup.locator('.kbd-action', { hasText: /^Slice along X \/ Y \/ Z b$/ })).not.toBeVisible()
+    await expect(viewGroup.locator('.kbd-action', { hasText: /^Slice along X \/ Y \/ Z c$/ })).not.toBeVisible()
+
+    await page.keyboard.press('Escape')
+  })
+
+  test('action triplet: slice keys toggle clipping', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    const sliceStatus = page.locator('[data-testid="slice-axis"]')
+    await expect(sliceStatus).toHaveText('Slice: off')
+
+    // Press X to slice along X
+    await page.keyboard.press('x')
+    await expect(sliceStatus).toHaveText('Slice: x')
+
+    // Press X again to toggle off
+    await page.keyboard.press('x')
+    await expect(sliceStatus).toHaveText('Slice: off')
+
+    // Press Y to slice along Y
+    await page.keyboard.press('y')
+    await expect(sliceStatus).toHaveText('Slice: y')
+
+    // Press Z to switch to Z
+    await page.keyboard.press('z')
+    await expect(sliceStatus).toHaveText('Slice: z')
+
+    // Press Z again to toggle off
+    await page.keyboard.press('z')
+    await expect(sliceStatus).toHaveText('Slice: off')
+  })
+})
+
+test.describe('Builtin Group and Sort Order', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.removeItem('use-kbd-demo')
+      localStorage.removeItem('use-kbd-demo-removed')
+    })
+    await page.goto('/')
+    await expect(page.locator('.kbd-speed-dial-primary')).toBeVisible()
+  })
+
+  test('builtin actions appear under "Meta" group (not "Global")', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    await page.keyboard.press('?')
+    await page.waitForSelector('.kbd-modal', { timeout: 5000 })
+
+    // "Meta" group should exist
+    const metaGroup = page.locator('.kbd-group', { hasText: 'META' })
+    await expect(metaGroup).toBeVisible()
+
+    // Builtin actions should be in the Meta group, not the Global group
+    await expect(metaGroup.locator('.kbd-action', { hasText: 'Show shortcuts' })).toBeVisible()
+    await expect(metaGroup.locator('.kbd-action', { hasText: 'Command palette' })).toBeVisible()
+    await expect(metaGroup.locator('.kbd-action', { hasText: 'Key lookup' })).toBeVisible()
+
+    await page.keyboard.press('Escape')
+  })
+
+  test('builtin actions display in order: Show shortcuts, Command palette, Key lookup', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    await page.keyboard.press('?')
+    await page.waitForSelector('.kbd-modal', { timeout: 5000 })
+
+    const metaGroup = page.locator('.kbd-group', { hasText: 'META' })
+    const labels = metaGroup.locator('.kbd-action-label')
+    const texts = await labels.allTextContents()
+
+    expect(texts).toEqual(['Show shortcuts', 'Command palette', 'Key lookup'])
+
+    await page.keyboard.press('Escape')
+  })
 })

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
-import { KbdModal, ModeIndicator, ShortcutsModal, useAction, useActionPair, useArrowGroup, useMode } from 'use-kbd'
+import { KbdModal, ModeIndicator, ShortcutsModal, useAction, useActionPair, useActionTriplet, useArrowGroup, useMode } from 'use-kbd'
 import 'use-kbd/styles.css'
 import { useTheme } from '../contexts/ThemeContext'
 
@@ -54,6 +54,7 @@ function Viewer() {
   const [roll, setRoll] = useState(() => getStored('roll', DEFAULTS.roll))
   const [target, setTarget] = useState(() => getStored('target', DEFAULTS.target))
   const [wireframe, setWireframe] = useState(() => getStored('wireframe', false))
+  const [sliceAxis, setSliceAxis] = useState<'x' | 'y' | 'z' | null>(() => getStored('sliceAxis', null))
 
   // Persist to sessionStorage
   useEffect(() => { sessionStorage.setItem(`${STORAGE_KEY}-azimuth`, JSON.stringify(azimuth)) }, [azimuth])
@@ -62,6 +63,7 @@ function Viewer() {
   useEffect(() => { sessionStorage.setItem(`${STORAGE_KEY}-roll`, JSON.stringify(roll)) }, [roll])
   useEffect(() => { sessionStorage.setItem(`${STORAGE_KEY}-target`, JSON.stringify(target)) }, [target])
   useEffect(() => { sessionStorage.setItem(`${STORAGE_KEY}-wireframe`, JSON.stringify(wireframe)) }, [wireframe])
+  useEffect(() => { sessionStorage.setItem(`${STORAGE_KEY}-sliceAxis`, JSON.stringify(sliceAxis)) }, [sliceAxis])
 
   // Initialize Three.js scene
   useEffect(() => {
@@ -69,6 +71,7 @@ function Viewer() {
     if (!container) return
 
     const renderer = new THREE.WebGLRenderer({ antialias: true })
+    renderer.localClippingEnabled = true
     renderer.setPixelRatio(window.devicePixelRatio)
     renderer.setSize(container.clientWidth, 500)
     container.appendChild(renderer.domElement)
@@ -140,11 +143,15 @@ function Viewer() {
       // Update background
       scene.background = new THREE.Color(bg)
 
-      // Update wireframe
+      // Update wireframe and clipping
       const cube = cubeRef.current
       if (cube) {
+        const clipPlane = sliceAxis === 'x' ? [new THREE.Plane(new THREE.Vector3(-1, 0, 0), 0)]
+          : sliceAxis === 'y' ? [new THREE.Plane(new THREE.Vector3(0, -1, 0), 0.75)]
+          : sliceAxis === 'z' ? [new THREE.Plane(new THREE.Vector3(0, 0, -1), 0)]
+          : []
         const mats = cube.material as THREE.MeshStandardMaterial[]
-        mats.forEach(m => { m.wireframe = wireframe })
+        mats.forEach(m => { m.wireframe = wireframe; m.clippingPlanes = clipPlane; m.clipShadows = true })
       }
 
       // Spherical to Cartesian
@@ -175,7 +182,7 @@ function Viewer() {
     }
     render()
     return () => cancelAnimationFrame(frameRef.current)
-  }, [azimuth, elevation, distance, roll, target, wireframe, bg])
+  }, [azimuth, elevation, distance, roll, target, wireframe, sliceAxis, bg])
 
   // Modes
   const orbitMode = useMode('view:orbit', {
@@ -314,6 +321,16 @@ function Viewer() {
     handler: useCallback(() => setWireframe(w => !w), []),
   })
 
+  useActionTriplet('view:slice', {
+    label: 'Slice along X / Y / Z',
+    group: '3D: View',
+    actions: [
+      { defaultBindings: ['x'], handler: useCallback(() => setSliceAxis(a => a === 'x' ? null : 'x'), []) },
+      { defaultBindings: ['y'], handler: useCallback(() => setSliceAxis(a => a === 'y' ? null : 'y'), []) },
+      { defaultBindings: ['z'], handler: useCallback(() => setSliceAxis(a => a === 'z' ? null : 'z'), []) },
+    ],
+  })
+
   // Mouse wheel: zoom (bare), pan (Shift), roll (Ctrl)
   useEffect(() => {
     const container = containerRef.current
@@ -352,6 +369,7 @@ function Viewer() {
           Target: ({target.x.toFixed(1)}, {target.y.toFixed(1)}, {target.z.toFixed(1)})
         </span>
         <span data-testid="wireframe">Wireframe: {wireframe ? 'on' : 'off'}</span>
+        <span data-testid="slice-axis">Slice: {sliceAxis ?? 'off'}</span>
       </div>
 
       <ModeIndicator position="bottom-left" />
