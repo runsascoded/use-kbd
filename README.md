@@ -6,7 +6,23 @@ Keyboard-navigation and -control for the web: omnibars, editable hotkeys, search
 
 Documentation & Demos: [kbd.rbw.sh]
 
-## Quick Start
+<!-- `toc` -->
+- [Quick Start](#quick-start)
+    - [Basic steps](#basic-steps)
+- [Motivation / Examples](#motivation)
+    - [Usage in the wild](#usage)
+    - [Comparison](#comparison)
+    - [Inspiration](#inspiration)
+- [Core Concepts](#concepts)
+- [Components](#components)
+- [Styling](#styling)
+- [Mobile Support](#mobile)
+- [Patterns](#patterns)
+- [Low-Level Hooks](#hooks)
+- [Debugging](#debugging)
+- [License](#license)
+
+## Quick Start <a id="quick-start"></a>
 
 ```bash
 npm install use-kbd  # or: pnpm add use-kbd
@@ -15,7 +31,7 @@ npm install use-kbd  # or: pnpm add use-kbd
 or install latest GitHub [`dist` branch] commit width [`pds`]:
 
 ```bash
-pds init runsascoded/use-kbd
+pds init -H runsascoded/use-kbd
 ```
 
 [`dist` branch]: ./tree/dist
@@ -52,7 +68,7 @@ function Dashboard() {
 }
 ```
 
-### Basic steps
+### Basic steps <a id="basic-steps"></a>
 
 1. **Drop-in UI components**:
    - `ShortcutsModal`: view/edit key-bindings
@@ -62,9 +78,9 @@ function Dashboard() {
 2. **Register functions as "actions"** with `useAction`
 3. **Easy theming** with CSS variables
 
-## Motivation / Examples
+## Motivation / Examples <a id="motivation"></a>
 
-### Usage in the wild
+### Usage in the wild <a id="usage"></a>
 
 - [ctbk.dev] ([GitHub][ctbk-gh] · [usage][ctbk-usage] · [diff][ctbk-diff]) — Citi Bike trip data explorer
 - [awair.runsascoded.com] ([GitHub][awair-gh] · [usage][awair-usage] · [diff][awair-diff]) — Awair air quality dashboard
@@ -88,7 +104,7 @@ function Dashboard() {
 [voro-gh]: https://github.com/runsascoded/ImageVoronoi
 [voro-usage]: https://github.com/search?q=repo%3Arunsascoded%2FImageVoronoi+use-kbd&type=code
 
-### Comparison
+### Comparison <a id="comparison"></a>
 
 Most web apps ship a static, read-only shortcuts list (at most). use-kbd provides a full keyboard UX layer:
 
@@ -117,14 +133,14 @@ Most web apps ship a static, read-only shortcuts list (at most). use-kbd provide
 
 GitHub's command palette (`⌘K`) is conceptually similar to use-kbd's omnibar, but disconnected from the shortcuts modal. Drive has a search bar (rare!), but it's filter-only and read-only. Gmail requires a Settings toggle before shortcuts work at all.
 
-### Inspiration
+### Inspiration <a id="inspiration"></a>
 
 - macOS and GDrive menu search
 - [Superhuman] omnibar
 - [Vimium] keyboard-driven browsing
 - Android searchable settings
 
-## Core Concepts
+## Core Concepts <a id="concepts"></a>
 
 ### Actions
 
@@ -396,7 +412,7 @@ Customize the footer with `footerContent`:
 
 Pass `footerContent={null}` to hide the footer entirely.
 
-## Components
+## Components <a id="components"></a>
 
 ### `<HotkeysProvider>`
 
@@ -484,7 +500,7 @@ Floating action button (FAB) with expandable secondary actions. Opens the omniba
 />
 ```
 
-## Styling
+## Styling <a id="styling"></a>
 
 Import the default styles:
 
@@ -508,7 +524,7 @@ Customize with CSS variables:
 
 Dark mode is automatically applied via `[data-theme="dark"]` or `.dark` selectors.
 
-## Mobile Support
+## Mobile Support <a id="mobile"></a>
 
 While keyboard shortcuts are primarily a desktop feature, use-kbd provides solid mobile UX out of the box. **[Try the demos on your phone →][kbd.rbw.sh]**
 
@@ -530,7 +546,7 @@ While keyboard shortcuts are primarily a desktop feature, use-kbd provides solid
 
 For apps that want keyboard shortcuts on desktop but still need the omnibar/search on mobile, this covers the common case without extra configuration.
 
-## Patterns
+## Patterns <a id="patterns"></a>
 
 ### ActionLink
 
@@ -597,7 +613,7 @@ Usage:
 
 Adapt for Next.js, TanStack Router, or other routers by swapping the router hooks.
 
-## Low-Level Hooks
+## Low-Level Hooks <a id="hooks"></a>
 
 For advanced use cases, the underlying hooks are also exported:
 
@@ -710,7 +726,7 @@ Register three related actions as a compact triplet. See [Action Triplets](#acti
 
 Wraps `useHotkeys` with localStorage persistence and conflict detection.
 
-## Debugging
+## Debugging <a id="debugging"></a>
 
 use-kbd uses the [`debug`] package for internal logging, controlled via `localStorage.debug`. Zero output by default—no config needed in downstream apps.
 
@@ -741,6 +757,6 @@ localStorage.debug = 'use-kbd:hotkeys'  // Only key handling
 [Superhuman]: https://superhuman.com
 [Vimium]: https://github.com/philc/vimium
 
-## License
+## License <a id="license"></a>
 
 MIT
