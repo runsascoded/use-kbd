@@ -138,7 +138,7 @@ test.describe('Global Features', () => {
 
     // Should show other navigation options but NOT "Data Table"
     const completions = page.locator('.kbd-sequence-completion')
-    await expect(completions).toHaveCount(4) // Home, Canvas, Calendar, + go to page N
+    await expect(completions).toHaveCount(5) // Home, Canvas, 3D Viewer, Calendar, + go to page N
 
     // Verify "Data Table" is not in the list (since we're on /table)
     await expect(page.locator('.kbd-sequence-completion', { hasText: 'Data Table' })).not.toBeVisible()
@@ -1765,17 +1765,18 @@ test.describe('Modes', () => {
     await page.keyboard.press('?')
     await page.waitForSelector('.kbd-modal', { timeout: 5000 })
 
-    // Should have a "Pan & Zoom" group with mode styling
-    const modeGroup = page.locator('.kbd-mode-group')
-    await expect(modeGroup).toBeVisible()
-    await expect(modeGroup.locator('.kbd-group-title')).toContainText('Pan & Zoom')
+    // Should have a modes section with Pan & Zoom mode entry
+    const modesSection = page.locator('.kbd-modes-section')
+    await expect(modesSection).toBeVisible()
+    const modeEntry = modesSection.locator('.kbd-modes-entry', { hasText: 'Pan & Zoom' })
+    await expect(modeEntry).toBeVisible()
 
-    // Should show activation binding in group title
-    await expect(modeGroup.locator('.kbd-mode-activation')).toBeVisible()
+    // Should show activation binding in header
+    await expect(modeEntry.locator('.kbd-modes-binding')).toBeVisible()
 
     // Should contain arrow group row for Pan and individual action for Zoom
-    await expect(modeGroup.locator('.kbd-arrow-group-row', { hasText: 'Pan' })).toBeVisible()
-    await expect(modeGroup.locator('.kbd-action', { hasText: 'Zoom in' })).toBeVisible()
+    await expect(modeEntry.locator('.kbd-arrow-group-row', { hasText: 'Pan' })).toBeVisible()
+    await expect(modeEntry.locator('.kbd-action', { hasText: 'Zoom in' })).toBeVisible()
 
     await page.keyboard.press('Escape')
   })
@@ -2064,6 +2065,443 @@ test.describe('Arrow Groups', () => {
     await page.waitForTimeout(300)
 
     await expect(page.locator('.kbd-omnibar-result-label', { hasText: 'Pan left' })).toBeVisible()
+
+    await page.keyboard.press('Escape')
+  })
+})
+
+test.describe('3D Viewer Demo', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.removeItem('use-kbd-demo')
+      localStorage.removeItem('use-kbd-demo-removed')
+      // Clear sessionStorage for 3D viewer state
+      Object.keys(sessionStorage).forEach(k => {
+        if (k.startsWith('use-kbd-3d')) sessionStorage.removeItem(k)
+      })
+    })
+    await page.goto('/3d')
+    await expect(page.locator('.kbd-speed-dial-primary')).toBeVisible()
+  })
+
+  test('global: bare arrows orbit', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    // Default azimuth is 45°
+    await expect(page.locator('[data-testid="camera-azimuth"]')).toContainText('45')
+
+    // Press ArrowRight → azimuth should increase by 10
+    await page.keyboard.press('ArrowRight')
+    await page.waitForTimeout(200)
+    await expect(page.locator('[data-testid="camera-azimuth"]')).toContainText('55')
+
+    // Press ArrowUp → elevation should increase by 10
+    await expect(page.locator('[data-testid="camera-elevation"]')).toContainText('30')
+    await page.keyboard.press('ArrowUp')
+    await page.waitForTimeout(200)
+    await expect(page.locator('[data-testid="camera-elevation"]')).toContainText('40')
+  })
+
+  test('global: Shift+arrows pan', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    // Default target is (0.0, 0.0, 0.0)
+    await expect(page.locator('[data-testid="camera-target"]')).toContainText('0.0, 0.0, 0.0')
+
+    // Shift+ArrowRight → target.x should increase
+    await page.keyboard.press('Shift+ArrowRight')
+    await page.waitForTimeout(200)
+    await expect(page.locator('[data-testid="camera-target"]')).toContainText('0.3, 0.0, 0.0')
+
+    // Shift+ArrowUp → target.y should increase
+    await page.keyboard.press('Shift+ArrowUp')
+    await page.waitForTimeout(200)
+    await expect(page.locator('[data-testid="camera-target"]')).toContainText('0.3, 0.3, 0.0')
+  })
+
+  test('global: Ctrl+Left/Right roll, Ctrl+Up/Down orbit', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    // Default roll is 0°
+    await expect(page.locator('[data-testid="camera-roll"]')).toContainText('roll=0')
+
+    // Ctrl+ArrowLeft → roll should decrease by 15
+    await page.keyboard.press('Control+ArrowLeft')
+    await page.waitForTimeout(200)
+    await expect(page.locator('[data-testid="camera-roll"]')).toContainText('roll=-15')
+
+    // Ctrl+ArrowRight → roll should increase by 15
+    await page.keyboard.press('Control+ArrowRight')
+    await page.waitForTimeout(200)
+    await expect(page.locator('[data-testid="camera-roll"]')).toContainText('roll=0')
+
+    // Ctrl+ArrowUp → elevation should increase by 10 (same as bare up)
+    await expect(page.locator('[data-testid="camera-elevation"]')).toContainText('30')
+    await page.keyboard.press('Control+ArrowUp')
+    await page.waitForTimeout(200)
+    await expect(page.locator('[data-testid="camera-elevation"]')).toContainText('40')
+
+    // Ctrl+ArrowDown → elevation should decrease by 10
+    await page.keyboard.press('Control+ArrowDown')
+    await page.waitForTimeout(200)
+    await expect(page.locator('[data-testid="camera-elevation"]')).toContainText('30')
+  })
+
+  test('orbit mode: arrow keys + vim keys rotate camera', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    // Activate orbit mode via o
+    await page.keyboard.press('o')
+    await page.waitForTimeout(200)
+
+    // ModeIndicator should show Orbit
+    await expect(page.locator('.kbd-mode-indicator')).toBeVisible()
+    await expect(page.locator('.kbd-mode-indicator')).toContainText('Orbit')
+
+    // Default azimuth is 45°
+    await expect(page.locator('[data-testid="camera-azimuth"]')).toContainText('45')
+
+    // Arrow keys orbit
+    await page.keyboard.press('ArrowRight')
+    await page.waitForTimeout(200)
+    await expect(page.locator('[data-testid="camera-azimuth"]')).toContainText('55')
+
+    // Vim keys also orbit
+    await page.keyboard.press('l')
+    await page.waitForTimeout(200)
+    await expect(page.locator('[data-testid="camera-azimuth"]')).toContainText('65')
+
+    // Vim up
+    await expect(page.locator('[data-testid="camera-elevation"]')).toContainText('30')
+    await page.keyboard.press('k')
+    await page.waitForTimeout(200)
+    await expect(page.locator('[data-testid="camera-elevation"]')).toContainText('40')
+
+    await page.keyboard.press('Escape')
+  })
+
+  test('orbit mode: Shift+arrows = fast orbit (2× step)', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    // Activate orbit mode
+    await page.keyboard.press('o')
+    await page.waitForTimeout(200)
+
+    // Default azimuth is 45°
+    await expect(page.locator('[data-testid="camera-azimuth"]')).toContainText('45')
+
+    // Shift+ArrowRight → azimuth should increase by 20 (2× step)
+    await page.keyboard.press('Shift+ArrowRight')
+    await page.waitForTimeout(200)
+    await expect(page.locator('[data-testid="camera-azimuth"]')).toContainText('65')
+
+    await page.keyboard.press('Escape')
+  })
+
+  test('pan mode: arrow keys + vim keys pan camera target', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    // Activate pan mode via p
+    await page.keyboard.press('p')
+    await page.waitForTimeout(200)
+
+    // ModeIndicator should show Pan
+    await expect(page.locator('.kbd-mode-indicator')).toBeVisible()
+    await expect(page.locator('.kbd-mode-indicator')).toContainText('Pan')
+
+    // Default target is (0.0, 0.0, 0.0)
+    await expect(page.locator('[data-testid="camera-target"]')).toContainText('0.0, 0.0, 0.0')
+
+    // Arrow keys pan
+    await page.keyboard.press('ArrowRight')
+    await page.waitForTimeout(200)
+    await expect(page.locator('[data-testid="camera-target"]')).toContainText('0.3, 0.0, 0.0')
+
+    // Vim keys also pan
+    await page.keyboard.press('l')
+    await page.waitForTimeout(200)
+    await expect(page.locator('[data-testid="camera-target"]')).toContainText('0.6, 0.0, 0.0')
+
+    await page.keyboard.press('Escape')
+  })
+
+  test('pan mode: Shift+arrows = fast pan (2× step)', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    // Activate pan mode
+    await page.keyboard.press('p')
+    await page.waitForTimeout(200)
+
+    // Default target is (0.0, 0.0, 0.0)
+    await expect(page.locator('[data-testid="camera-target"]')).toContainText('0.0, 0.0, 0.0')
+
+    // Shift+ArrowRight → target.x should increase by 0.6 (2× step)
+    await page.keyboard.press('Shift+ArrowRight')
+    await page.waitForTimeout(200)
+    await expect(page.locator('[data-testid="camera-target"]')).toContainText('0.6, 0.0, 0.0')
+
+    await page.keyboard.press('Escape')
+  })
+
+  test('mode switching: orbit → pan → escape', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    // Activate orbit mode
+    await page.keyboard.press('o')
+    await page.waitForTimeout(200)
+    await expect(page.locator('.kbd-mode-indicator')).toContainText('Orbit')
+
+    // Switch to pan mode
+    await page.keyboard.press('p')
+    await page.waitForTimeout(200)
+    await expect(page.locator('.kbd-mode-indicator')).toContainText('Pan')
+
+    // Escape exits mode
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(200)
+    await expect(page.locator('.kbd-mode-indicator')).not.toBeVisible()
+
+    // Arrow keys still orbit outside mode (global arrow group)
+    await expect(page.locator('[data-testid="camera-azimuth"]')).toContainText('45')
+    await page.keyboard.press('ArrowRight')
+    await page.waitForTimeout(200)
+    await expect(page.locator('[data-testid="camera-azimuth"]')).toContainText('55')
+  })
+
+  test('zoom works globally (not mode-scoped)', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    // Default distance is 5.0
+    await expect(page.locator('[data-testid="camera-distance"]')).toContainText('5.0')
+
+    // Press = to zoom in (no mode needed)
+    await page.keyboard.press('=')
+    await page.waitForTimeout(200)
+    await expect(page.locator('[data-testid="camera-distance"]')).toContainText('4.0')
+
+    // Press - to zoom out
+    await page.keyboard.press('-')
+    await page.waitForTimeout(200)
+    await expect(page.locator('[data-testid="camera-distance"]')).toContainText('5.0')
+
+    // Press 0 to reset
+    await page.keyboard.press('=')
+    await page.waitForTimeout(100)
+    await page.keyboard.press('=')
+    await page.waitForTimeout(100)
+    await page.keyboard.press('0')
+    await page.waitForTimeout(200)
+    await expect(page.locator('[data-testid="camera-distance"]')).toContainText('5.0')
+  })
+
+  test('wireframe toggle', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    await expect(page.locator('[data-testid="wireframe"]')).toContainText('off')
+
+    await page.keyboard.press('f')
+    await page.waitForTimeout(200)
+    await expect(page.locator('[data-testid="wireframe"]')).toContainText('on')
+
+    await page.keyboard.press('f')
+    await page.waitForTimeout(200)
+    await expect(page.locator('[data-testid="wireframe"]')).toContainText('off')
+  })
+
+  test('shortcuts modal shows mode groups with arrow groups', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    await page.keyboard.press('?')
+    await page.waitForSelector('.kbd-modal', { timeout: 5000 })
+
+    // Modes section should have entries for Orbit and Pan
+    const modesSection = page.locator('.kbd-modes-section')
+    await expect(modesSection).toBeVisible()
+    const modeEntries = modesSection.locator('.kbd-modes-entry')
+    await expect(modeEntries).toHaveCount(2)
+
+    // Orbit entry should have 2 arrow group rows (orbit + fast orbit)
+    const orbitEntry = modesSection.locator('.kbd-modes-entry', { hasText: 'Orbit' })
+    await expect(orbitEntry).toBeVisible()
+    await expect(orbitEntry.locator('.kbd-modes-binding')).toBeVisible()
+    await expect(orbitEntry.locator('.kbd-arrow-group-row')).toHaveCount(2)
+
+    // Pan entry should have 2 arrow group rows (pan + fast pan)
+    const panEntry = modesSection.locator('.kbd-modes-entry', { hasText: /^Pan/ })
+    await expect(panEntry).toBeVisible()
+    await expect(panEntry.locator('.kbd-modes-binding')).toBeVisible()
+    await expect(panEntry.locator('.kbd-arrow-group-row')).toHaveCount(2)
+
+    // No false cross-mode conflicts: arrow bindings should not have .conflict class
+    const conflictKbds = modesSection.locator('.kbd-arrow-group-binding.conflict')
+    await expect(conflictKbds).toHaveCount(0)
+
+    await page.keyboard.press('Escape')
+  })
+
+  test('modes section shows in shortcuts modal with bindings', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    await page.keyboard.press('?')
+    await page.waitForSelector('.kbd-modal', { timeout: 5000 })
+
+    // Modes section should be visible
+    const modesSection = page.locator('.kbd-modes-section')
+    await expect(modesSection).toBeVisible()
+
+    // Should show "Modes" title
+    await expect(modesSection.locator('.kbd-modes-title')).toContainText('Modes')
+
+    // Should show Orbit and Pan mode entries
+    await expect(modesSection.locator('.kbd-modes-entry')).toHaveCount(2)
+    await expect(modesSection.locator('.kbd-modes-label', { hasText: 'Orbit' })).toBeVisible()
+    await expect(modesSection.locator('.kbd-modes-label', { hasText: 'Pan' })).toBeVisible()
+
+    // Mode action rows should contain editable shortcut elements
+    const actionRows = modesSection.locator('.kbd-modes-action-row')
+    const rowCount = await actionRows.count()
+    expect(rowCount).toBeGreaterThan(0)
+
+    // Should have kbd elements (from renderShortcutEntry)
+    const kbdCount = await modesSection.locator('.kbd-modes-action-row .kbd-kbd').count()
+    expect(kbdCount).toBeGreaterThan(0)
+
+    await page.keyboard.press('Escape')
+  })
+
+  test('can remove action from mode via modes section', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    await page.keyboard.press('?')
+    await page.waitForSelector('.kbd-modal', { timeout: 5000 })
+
+    const modesSection = page.locator('.kbd-modes-section')
+    const orbitEntry = modesSection.locator('.kbd-modes-entry', { hasText: 'Orbit' })
+    await expect(orbitEntry).toBeVisible()
+
+    // Get initial action count in Orbit mode
+    const initialCount = await orbitEntry.locator('.kbd-modes-action-row').count()
+    expect(initialCount).toBeGreaterThan(0)
+
+    // Hover to reveal remove button, then click it
+    const firstAction = orbitEntry.locator('.kbd-modes-action-row').first()
+    await firstAction.hover()
+    await firstAction.locator('.kbd-modes-remove').click()
+    await page.waitForTimeout(300)
+
+    // Action count should have decreased
+    const newCount = await orbitEntry.locator('.kbd-modes-action-row').count()
+    expect(newCount).toBeLessThan(initialCount)
+
+    await page.keyboard.press('Escape')
+  })
+
+  test('can add global action to mode via modes section', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    await page.keyboard.press('?')
+    await page.waitForSelector('.kbd-modal', { timeout: 5000 })
+
+    const modesSection = page.locator('.kbd-modes-section')
+    const orbitEntry = modesSection.locator('.kbd-modes-entry', { hasText: 'Orbit' })
+
+    // Get initial action count
+    const initialCount = await orbitEntry.locator('.kbd-modes-action-row').count()
+
+    // Click "+ Add action..."
+    await orbitEntry.locator('.kbd-modes-add-btn').click()
+    await page.waitForTimeout(200)
+
+    // Search panel should appear
+    await expect(orbitEntry.locator('.kbd-modes-search')).toBeVisible()
+
+    // Type to search for a global action
+    await orbitEntry.locator('.kbd-modes-search').fill('zoom')
+    await page.waitForTimeout(200)
+
+    // Should see search results
+    const results = orbitEntry.locator('.kbd-modes-search-item')
+    const count = await results.count()
+    expect(count).toBeGreaterThan(0)
+
+    // Click the first result to add it
+    await results.first().click()
+    await page.waitForTimeout(300)
+
+    // Action count should have increased
+    const newCount = await orbitEntry.locator('.kbd-modes-action-row').count()
+    expect(newCount).toBeGreaterThan(initialCount)
+
+    await page.keyboard.press('Escape')
+  })
+
+  test('mode customizations persist across page reloads', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    // Open modal and add an action to Orbit mode
+    await page.keyboard.press('?')
+    await page.waitForSelector('.kbd-modal', { timeout: 5000 })
+
+    const modesSection = page.locator('.kbd-modes-section')
+    const orbitEntry = modesSection.locator('.kbd-modes-entry', { hasText: 'Orbit' })
+    const initialCount = await orbitEntry.locator('.kbd-modes-action-row').count()
+
+    // Add zoom-in to orbit mode
+    await orbitEntry.locator('.kbd-modes-add-btn').click()
+    await page.waitForTimeout(200)
+    await orbitEntry.locator('.kbd-modes-search').fill('zoom in')
+    await page.waitForTimeout(200)
+    await orbitEntry.locator('.kbd-modes-search-item').first().click()
+    await page.waitForTimeout(300)
+
+    const afterAddCount = await orbitEntry.locator('.kbd-modes-action-row').count()
+    expect(afterAddCount).toBeGreaterThan(initialCount)
+
+    // Reload page
+    await page.keyboard.press('Escape')
+    await page.reload()
+    await expect(page.locator('.kbd-speed-dial-primary')).toBeVisible()
+
+    // Re-open modal and verify customization persisted
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+    await page.keyboard.press('?')
+    await page.waitForSelector('.kbd-modal', { timeout: 5000 })
+
+    const reloadedOrbitEntry = page.locator('.kbd-modes-section .kbd-modes-entry', { hasText: 'Orbit' })
+    const reloadedCount = await reloadedOrbitEntry.locator('.kbd-modes-action-row').count()
+    expect(reloadedCount).toBe(afterAddCount)
+
+    await page.keyboard.press('Escape')
+  })
+
+  test('reset clears mode customizations', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    // First, make a customization
+    await page.keyboard.press('?')
+    await page.waitForSelector('.kbd-modal', { timeout: 5000 })
+
+    const modesSection = page.locator('.kbd-modes-section')
+    const orbitEntry = modesSection.locator('.kbd-modes-entry', { hasText: 'Orbit' })
+    const initialCount = await orbitEntry.locator('.kbd-modes-action-row').count()
+
+    // Add an action
+    await orbitEntry.locator('.kbd-modes-add-btn').click()
+    await page.waitForTimeout(200)
+    await orbitEntry.locator('.kbd-modes-search').fill('zoom in')
+    await page.waitForTimeout(200)
+    await orbitEntry.locator('.kbd-modes-search-item').first().click()
+    await page.waitForTimeout(300)
+
+    // Click Reset button in footer
+    const resetBtn = page.locator('.kbd-footer-btn', { hasText: 'Reset' })
+    await expect(resetBtn).toBeEnabled()
+    await resetBtn.click()
+    await page.waitForTimeout(300)
+
+    // Mode should be back to original count
+    const resetCount = await orbitEntry.locator('.kbd-modes-action-row').count()
+    expect(resetCount).toBe(initialCount)
 
     await page.keyboard.press('Escape')
   })
