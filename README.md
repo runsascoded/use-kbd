@@ -2,39 +2,24 @@
 
 [![npm version](https://img.shields.io/npm/v/use-kbd.svg)](https://www.npmjs.com/package/use-kbd)
 
-Keyboard-navigation and -control for the web: omnibars, editable hotkeys, search, modes/sequences
+Keyboard-navigation and -control for the web: omnibars, editable hotkeys, search, modes/sequences.
 
-**[📖 Documentation & Demos →][kbd.rbw.sh]**
-
-## Used By
-
-- [ctbk.dev] ([GitHub][ctbk-gh] · [usage][ctbk-usage] · [diff][ctbk-diff]) — Citi Bike trip data explorer
-- [awair.runsascoded.com] ([GitHub][awair-gh] · [usage][awair-usage] · [diff][awair-diff]) — Awair air quality dashboard
-- [jct.rbw.sh] ([GitHub][jct-gh] · [usage][jct-usage] · [diff][jct-diff]) — Jersey City 3D tax map
-- [voro.rbw.sh] ([GitHub][voro-gh] · [usage][voro-usage]) — Image Voronoi generator
-
-[kbd.rbw.sh]: https://kbd.rbw.sh
-[ctbk.dev]: https://ctbk.dev
-[ctbk-gh]: https://github.com/hudcostreets/ctbk.dev
-[ctbk-diff]: https://github.com/hudcostreets/ctbk.dev/compare/pre-use-kbd...use-kbd-demo
-[ctbk-usage]: https://github.com/search?q=repo%3Ahudcostreets%2Fctbk.dev+use-kbd&type=code
-[awair.runsascoded.com]: https://awair.runsascoded.com
-[awair-gh]: https://github.com/runsascoded/awair
-[awair-diff]: https://github.com/runsascoded/awair/compare/pre-use-kbd...use-kbd-demo
-[awair-usage]: https://github.com/search?q=repo%3Arunsascoded%2Fawair+use-kbd&type=code
-[jct.rbw.sh]: https://jct.rbw.sh
-[jct-gh]: https://github.com/neighbor-ryan/jc-taxes
-[jct-diff]: https://github.com/neighbor-ryan/jc-taxes/compare/pre-use-kbd...use-kbd-demo
-[jct-usage]: https://github.com/search?q=repo%3Arunsascoded%2Fjc-taxes+use-kbd&type=code
-[voro.rbw.sh]: https://voro.rbw.sh
-[voro-gh]: https://github.com/runsascoded/ImageVoronoi
-[voro-usage]: https://github.com/search?q=repo%3Arunsascoded%2FImageVoronoi+use-kbd&type=code
+Documentation & Demos: [kbd.rbw.sh]
 
 ## Quick Start
 
 ```bash
 npm install use-kbd  # or: pnpm add use-kbd
 ```
+
+or install latest GitHub [`dist` branch] commit width [`pds`]:
+
+```bash
+pds init runsascoded/use-kbd
+```
+
+[`dist` branch]: ./tree/dist
+[`pds`]: https://github.com/runsascoded/pnpm-dep-source
 
 ```tsx
 import { HotkeysProvider, ShortcutsModal, Omnibar, LookupModal, SequenceModal, useAction } from 'use-kbd'
@@ -76,6 +61,68 @@ function Dashboard() {
    - `SequenceModal`: autocomplete multi-key sequences
 2. **Register functions as "actions"** with `useAction`
 3. **Easy theming** with CSS variables
+
+## Motivation / Examples
+
+### Usage in the wild
+
+- [ctbk.dev] ([GitHub][ctbk-gh] · [usage][ctbk-usage] · [diff][ctbk-diff]) — Citi Bike trip data explorer
+- [awair.runsascoded.com] ([GitHub][awair-gh] · [usage][awair-usage] · [diff][awair-diff]) — Awair air quality dashboard
+- [jct.rbw.sh] ([GitHub][jct-gh] · [usage][jct-usage] · [diff][jct-diff]) — Jersey City 3D tax map
+- [voro.rbw.sh] ([GitHub][voro-gh] · [usage][voro-usage]) — Image Voronoi generator
+
+[kbd.rbw.sh]: https://kbd.rbw.sh
+[ctbk.dev]: https://ctbk.dev
+[ctbk-gh]: https://github.com/hudcostreets/ctbk.dev
+[ctbk-diff]: https://github.com/hudcostreets/ctbk.dev/compare/pre-use-kbd...use-kbd-demo
+[ctbk-usage]: https://github.com/search?q=repo%3Ahudcostreets%2Fctbk.dev+use-kbd&type=code
+[awair.runsascoded.com]: https://awair.runsascoded.com
+[awair-gh]: https://github.com/runsascoded/awair
+[awair-diff]: https://github.com/runsascoded/awair/compare/pre-use-kbd...use-kbd-demo
+[awair-usage]: https://github.com/search?q=repo%3Arunsascoded%2Fawair+use-kbd&type=code
+[jct.rbw.sh]: https://jct.rbw.sh
+[jct-gh]: https://github.com/neighbor-ryan/jc-taxes
+[jct-diff]: https://github.com/neighbor-ryan/jc-taxes/compare/pre-use-kbd...use-kbd-demo
+[jct-usage]: https://github.com/search?q=repo%3Arunsascoded%2Fjc-taxes+use-kbd&type=code
+[voro.rbw.sh]: https://voro.rbw.sh
+[voro-gh]: https://github.com/runsascoded/ImageVoronoi
+[voro-usage]: https://github.com/search?q=repo%3Arunsascoded%2FImageVoronoi+use-kbd&type=code
+
+### Comparison
+
+Most web apps ship a static, read-only shortcuts list (at most). use-kbd provides a full keyboard UX layer:
+
+<table>
+<tr>
+<td><a href="img/gmail-kbd.png"><img src="img/gmail-kbd.png" width="280" alt="Gmail keyboard shortcuts" /></a></td>
+<td><a href="img/github-kbd.png"><img src="img/github-kbd.png" width="280" alt="GitHub keyboard shortcuts" /></a></td>
+<td><a href="img/drive-kbd.png"><img src="img/drive-kbd.png" width="280" alt="Google Drive keyboard shortcuts" /></a></td>
+</tr>
+</table>
+
+| Feature | <img src="img/gmail-favicon.png" width="16" height="16" /> Gmail | <img src="img/github-favicon.png" width="16" height="16" /> GitHub | <img src="img/drive-favicon.png" width="16" height="16" /> Drive | <img src="img/use-kbd-favicon.svg" width="16" height="16" /> use-kbd |
+|---|---|---|---|---|
+| View shortcuts | 📄 flat | 📊 grouped | 📊 grouped | ✅ grouped, collapsible |
+| Edit bindings | ❌ | ❌ | ❌ | ✅ click-to-edit |
+| Search / filter | ❌ | ❌ | 🔍 filter only | ✅ fuzzy omnibar |
+| Command palette | ❌ | ⚡ separate | ❌ | ✅ integrated |
+| Sequences | ✅ `g i` | ✅ `G` `C` | ❌ | ✅ + live preview |
+| Conflict detection | ❌ | ❌ | ❌ | ✅ real-time |
+| Import / Export | ❌ | ❌ | ❌ | ✅ JSON |
+| Modes | ❌ | ❌ | ❌ | ✅ editable groups |
+| Arrow groups | ❌ | ❌ | ❌ | ✅ compact rows |
+| Action pairs / triplets | ❌ | ❌ | ❌ | ✅ collapsed with `/` |
+| Digit placeholders | ❌ | ❌ | ❌ | ✅ `\d` `\d+` `\f` |
+| Multiple bindings | ➖ some | ➖ "or" | ➖ some | ✅ click `+` to add |
+
+GitHub's command palette (`⌘K`) is conceptually similar to use-kbd's omnibar, but disconnected from the shortcuts modal. Drive has a search bar (rare!), but it's filter-only and read-only. Gmail requires a Settings toggle before shortcuts work at all.
+
+### Inspiration
+
+- macOS and GDrive menu search
+- [Superhuman] omnibar
+- [Vimium] keyboard-driven browsing
+- Android searchable settings
 
 ## Core Concepts
 
@@ -690,13 +737,6 @@ localStorage.debug = 'use-kbd:hotkeys'  // Only key handling
 ```
 
 [`debug`]: https://www.npmjs.com/package/debug
-
-## Inspiration
-
-- macOS and GDrive menu search
-- [Superhuman] omnibar
-- [Vimium] keyboard-driven browsing
-- Android searchable settings
 
 [Superhuman]: https://superhuman.com
 [Vimium]: https://github.com/philc/vimium

@@ -72,6 +72,8 @@ Collect screenshots of other apps' keyboard shortcuts UIs to contrast with `use-
 - Gmail requires a Settings toggle to enable shortcuts at all; use-kbd shortcuts are always active.
 - None of these support customization without going to a separate settings page or external documentation.
 
-## File Locations
+## Status
 
-- Screenshots: `gmail-kbd.png`, `github-kbd.png`, `drive-kbd.png` (project root, move to `docs/screenshots/competitors/` when ready)
+- Screenshots at `docs/screenshots/{gmail,github,drive}-kbd.png`
+- Comparison table added to README.md
+- More products could still be captured (see "Still To Capture" above)
