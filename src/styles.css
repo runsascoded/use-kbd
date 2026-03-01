@@ -266,6 +266,14 @@
   gap: 1px;
 }
 
+/* === Action Pair Row === */
+.kbd-action-pair-sep {
+  color: var(--kbd-text-secondary);
+  margin: 0 4px;
+  font-size: 12px;
+  opacity: 0.5;
+}
+
 /* === Kbd element === */
 .kbd-kbd {
   position: relative;
@@ -419,8 +427,8 @@
 /* === Remove binding button === */
 .kbd-remove-btn {
   position: absolute;
-  top: -6px;
-  right: -6px;
+  top: -7px;
+  right: -7px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -428,9 +436,9 @@
   border: none;
   border-radius: 50%;
   padding: 0;
-  width: 16px;
-  height: 16px;
-  font-size: 12px;
+  width: 13px;
+  height: 13px;
+  font-size: 10px;
   font-weight: bold;
   line-height: 1;
   color: #fff;
@@ -465,6 +473,60 @@
 
   .kbd-remove-btn:active {
     background: #b91c1c;
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* === Add binding inline button (bottom-right of kbd) === */
+.kbd-add-inline-btn {
+  position: absolute;
+  bottom: -7px;
+  right: -7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--kbd-success, #16a34a);
+  border: none;
+  border-radius: 50%;
+  padding: 0;
+  width: 13px;
+  height: 13px;
+  font-size: 10px;
+  font-weight: bold;
+  line-height: 1;
+  color: #fff;
+  cursor: pointer;
+  opacity: 0;
+  transform: scale(0.8);
+  transition:
+    opacity var(--kbd-transition),
+    transform var(--kbd-transition),
+    background var(--kbd-transition);
+}
+
+/* Show on hover (desktop) */
+@media (hover: hover) {
+  .kbd-kbd:hover .kbd-add-inline-btn,
+  .kbd-kbd:focus-within .kbd-add-inline-btn {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  .kbd-add-inline-btn:hover {
+    background: #15803d;
+  }
+}
+
+/* Touch devices */
+@media (hover: none) {
+  .kbd-kbd.editable .kbd-add-inline-btn {
+    opacity: 0.7;
+    transform: scale(0.9);
+  }
+
+  .kbd-add-inline-btn:active {
+    background: #15803d;
     opacity: 1;
     transform: scale(1);
   }
@@ -1247,6 +1309,173 @@
   display: none;
 }
 
+/* === Modes Section (in ShortcutsModal) === */
+
+.kbd-modes-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--kbd-border);
+}
+
+.kbd-modes-title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--kbd-text-secondary);
+  margin: 0 0 12px;
+  padding: 0 12px;
+}
+
+.kbd-modes-entry {
+  margin-bottom: 12px;
+  border-left: 3px solid var(--kbd-mode-color, var(--kbd-border));
+  padding-left: 12px;
+}
+
+.kbd-modes-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.kbd-modes-label {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.kbd-modes-binding {
+  font-size: 11px;
+  padding: 1px 4px;
+}
+
+.kbd-modes-color {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.kbd-modes-shortcuts {
+  margin: 0;
+  padding: 0;
+}
+
+.kbd-modes-action-row {
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+
+.kbd-modes-action-row > .kbd-action,
+.kbd-modes-action-row > .kbd-arrow-group-row,
+.kbd-modes-action-row > .kbd-action-pair-row {
+  flex: 1;
+  min-width: 0;
+}
+
+.kbd-modes-action-row:hover {
+  background-color: var(--kbd-bg-secondary);
+  border-radius: var(--kbd-radius-sm);
+}
+
+.kbd-modes-empty {
+  color: var(--kbd-text-secondary);
+  font-style: italic;
+  font-size: 12px;
+  padding: 3px 8px;
+}
+
+.kbd-modes-remove {
+  background: none;
+  border: none;
+  color: var(--kbd-text-secondary);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 4px;
+  opacity: 0;
+  transition: opacity 150ms ease;
+  flex-shrink: 0;
+}
+
+.kbd-modes-action-row:hover .kbd-modes-remove {
+  opacity: 1;
+}
+
+.kbd-modes-remove:hover {
+  color: var(--kbd-danger, #ef4444);
+}
+
+.kbd-modes-add-btn {
+  background: none;
+  border: none;
+  color: var(--kbd-text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 4px 8px;
+  opacity: 0.7;
+  transition: opacity 150ms ease;
+}
+
+.kbd-modes-add-btn:hover {
+  opacity: 1;
+  color: var(--kbd-accent);
+}
+
+.kbd-modes-add-panel {
+  padding: 4px 0;
+}
+
+.kbd-modes-search {
+  width: 100%;
+  padding: 4px 8px;
+  font-size: 12px;
+  border: 1px solid var(--kbd-border);
+  border-radius: var(--kbd-radius-sm);
+  background-color: var(--kbd-bg);
+  color: var(--kbd-text);
+  outline: none;
+  box-sizing: border-box;
+}
+
+.kbd-modes-search:focus {
+  border-color: var(--kbd-accent);
+}
+
+.kbd-modes-search-results {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.kbd-modes-search-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--kbd-text);
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: var(--kbd-radius-sm);
+}
+
+.kbd-modes-search-item:hover,
+.kbd-modes-search-item.selected {
+  background-color: var(--kbd-bg-secondary);
+}
+
+.kbd-modes-no-results {
+  color: var(--kbd-text-secondary);
+  font-size: 12px;
+  font-style: italic;
+  padding: 4px 8px;
+}
+
 /* === SpeedDial FAB === */
 :root {
   --kbd-speed-dial-size: 48px;
@@ -1367,6 +1596,32 @@
 .kbd-speed-dial-action:hover {
   background-color: var(--kbd-bg-secondary);
   transform: scale(1.08);
+}
+
+/* Badge chevron mode: compact overlapping badge on primary button edge */
+.kbd-speed-dial-badge-mode {
+  gap: 0;
+}
+
+.kbd-speed-dial-chevron.kbd-speed-dial-badge {
+  width: 20px;
+  height: 20px;
+  font-size: 11px;
+  margin-bottom: -10px;
+  z-index: 1;
+  opacity: 0.5;
+  border-width: 1px;
+  box-shadow: none;
+}
+
+.kbd-speed-dial-chevron.kbd-speed-dial-badge:hover {
+  opacity: 1;
+}
+
+.kbd-speed-dial-chevron.kbd-speed-dial-badge.kbd-speed-dial-sticky {
+  width: 20px;
+  height: 20px;
+  font-size: 11px;
 }
 
 @keyframes kbd-speed-dial-pop-in {

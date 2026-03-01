@@ -20,6 +20,11 @@ function isDigitPlaceholder(elem) {
 function countPlaceholders(seq) {
   return seq.filter(isDigitPlaceholder).length;
 }
+var EMPTY_MODE_CUSTOMIZATIONS = {
+  additions: {},
+  removals: {},
+  userModes: {}
+};
 function createTwoColumnRenderer(config) {
   const { headers, getRows } = config;
   const [labelHeader, leftHeader, rightHeader] = headers;
@@ -79,6 +84,116 @@ function useActionsRegistry(options = {}) {
       return {};
     }
   });
+  const [modeCustomizations, setModeCustomizationsRaw] = react.useState(() => {
+    if (!storageKey || typeof window === "undefined") return EMPTY_MODE_CUSTOMIZATIONS;
+    try {
+      const stored = localStorage.getItem(`${storageKey}-modes`);
+      return stored ? JSON.parse(stored) : EMPTY_MODE_CUSTOMIZATIONS;
+    } catch {
+      return EMPTY_MODE_CUSTOMIZATIONS;
+    }
+  });
+  const setModeCustomizations = react.useCallback((update) => {
+    setModeCustomizationsRaw((prev) => {
+      const next = typeof update === "function" ? update(prev) : update;
+      if (storageKey && typeof window !== "undefined") {
+        try {
+          const key = `${storageKey}-modes`;
+          const isEmpty = Object.keys(next.additions).length === 0 && Object.keys(next.removals).length === 0 && Object.keys(next.userModes).length === 0;
+          if (isEmpty) {
+            localStorage.removeItem(key);
+          } else {
+            localStorage.setItem(key, JSON.stringify(next));
+          }
+        } catch {
+        }
+      }
+      return next;
+    });
+  }, [storageKey]);
+  const getEffectiveMode = react.useCallback((actionId) => {
+    for (const [modeId, actionIds] of Object.entries(modeCustomizations.removals)) {
+      if (actionIds.includes(actionId)) return void 0;
+    }
+    for (const [modeId, actionIds] of Object.entries(modeCustomizations.additions)) {
+      if (actionIds.includes(actionId)) return modeId;
+    }
+    for (const [modeId, config] of Object.entries(modeCustomizations.userModes)) {
+      if (config.actions.includes(actionId)) return modeId;
+    }
+    const action = actionsRef.current.get(actionId);
+    return action?.config.mode;
+  }, [modeCustomizations]);
+  const addActionToMode = react.useCallback((actionId, modeId) => {
+    const action = actionsRef.current.get(actionId);
+    const groupId = action?.config.arrowGroup?.groupId;
+    const pairId = action?.config.actionPair?.pairId;
+    const tripletId = action?.config.actionTriplet?.tripletId;
+    const actionIds = groupId ? Array.from(actionsRef.current.entries()).filter(([, a]) => a.config.arrowGroup?.groupId === groupId).map(([id]) => id) : pairId ? Array.from(actionsRef.current.entries()).filter(([, a]) => a.config.actionPair?.pairId === pairId).map(([id]) => id) : tripletId ? Array.from(actionsRef.current.entries()).filter(([, a]) => a.config.actionTriplet?.tripletId === tripletId).map(([id]) => id) : [actionId];
+    setModeCustomizations((prev) => {
+      const next = { ...prev, additions: { ...prev.additions }, removals: { ...prev.removals }, userModes: { ...prev.userModes } };
+      for (const id of actionIds) {
+        const defaultMode = actionsRef.current.get(id)?.config.mode;
+        for (const [mid, ids] of Object.entries(next.additions)) {
+          if (mid !== modeId && ids.includes(id)) {
+            next.additions[mid] = ids.filter((a) => a !== id);
+            if (next.additions[mid].length === 0) delete next.additions[mid];
+          }
+        }
+        for (const [mid, config] of Object.entries(next.userModes)) {
+          if (mid !== modeId && config.actions.includes(id)) {
+            next.userModes[mid] = { ...config, actions: config.actions.filter((a) => a !== id) };
+          }
+        }
+        if (modeId === defaultMode) {
+          const removals = next.removals[modeId];
+          if (removals?.includes(id)) {
+            next.removals[modeId] = removals.filter((a) => a !== id);
+            if (next.removals[modeId].length === 0) delete next.removals[modeId];
+          }
+        } else if (next.userModes[modeId]) {
+          if (!next.userModes[modeId].actions.includes(id)) {
+            next.userModes[modeId] = { ...next.userModes[modeId], actions: [...next.userModes[modeId].actions, id] };
+          }
+          if (defaultMode) {
+            next.removals[defaultMode] = [...next.removals[defaultMode] ?? [], id];
+          }
+        } else {
+          if (!next.additions[modeId]?.includes(id)) {
+            next.additions[modeId] = [...next.additions[modeId] ?? [], id];
+          }
+          if (defaultMode && defaultMode !== modeId) {
+            next.removals[defaultMode] = [...next.removals[defaultMode] ?? [], id];
+          }
+        }
+      }
+      return next;
+    });
+  }, [setModeCustomizations]);
+  const removeActionFromMode = react.useCallback((actionId, modeId) => {
+    const action = actionsRef.current.get(actionId);
+    const groupId = action?.config.arrowGroup?.groupId;
+    const pairId = action?.config.actionPair?.pairId;
+    const tripletId = action?.config.actionTriplet?.tripletId;
+    const actionIds = groupId ? Array.from(actionsRef.current.entries()).filter(([, a]) => a.config.arrowGroup?.groupId === groupId).map(([id]) => id) : pairId ? Array.from(actionsRef.current.entries()).filter(([, a]) => a.config.actionPair?.pairId === pairId).map(([id]) => id) : tripletId ? Array.from(actionsRef.current.entries()).filter(([, a]) => a.config.actionTriplet?.tripletId === tripletId).map(([id]) => id) : [actionId];
+    setModeCustomizations((prev) => {
+      const next = { ...prev, additions: { ...prev.additions }, removals: { ...prev.removals }, userModes: { ...prev.userModes } };
+      for (const id of actionIds) {
+        const defaultMode = actionsRef.current.get(id)?.config.mode;
+        if (defaultMode === modeId) {
+          if (!next.removals[modeId]?.includes(id)) {
+            next.removals[modeId] = [...next.removals[modeId] ?? [], id];
+          }
+        } else if (next.additions[modeId]?.includes(id)) {
+          next.additions[modeId] = next.additions[modeId].filter((a) => a !== id);
+          if (next.additions[modeId].length === 0) delete next.additions[modeId];
+        } else if (next.userModes[modeId]?.actions.includes(id)) {
+          next.userModes[modeId] = { ...next.userModes[modeId], actions: next.userModes[modeId].actions.filter((a) => a !== id) };
+        }
+      }
+      return next;
+    });
+  }, [setModeCustomizations]);
   const isDefaultBinding = react.useCallback((key, actionId) => {
     const action = actionsRef.current.get(actionId);
     return action?.config.defaultBindings?.includes(key) ?? false;
@@ -206,7 +321,10 @@ function useActionsRegistry(options = {}) {
         hideFromModal: config.hideFromModal,
         enabled: config.enabled,
         protected: config.protected,
-        arrowGroup: config.arrowGroup
+        arrowGroup: config.arrowGroup,
+        actionPair: config.actionPair,
+        actionTriplet: config.actionTriplet,
+        sortOrder: config.sortOrder
       };
     }
     return registry;
@@ -277,16 +395,19 @@ function useActionsRegistry(options = {}) {
   const resetOverrides = react.useCallback(() => {
     updateOverrides({});
     updateRemovedDefaults({});
-  }, [updateOverrides, updateRemovedDefaults]);
+    setModeCustomizations(EMPTY_MODE_CUSTOMIZATIONS);
+  }, [updateOverrides, updateRemovedDefaults, setModeCustomizations]);
   const exportBindings = react.useCallback(() => {
+    const hasModeCusts = Object.keys(modeCustomizations.additions).length > 0 || Object.keys(modeCustomizations.removals).length > 0 || Object.keys(modeCustomizations.userModes).length > 0;
     return {
       version: EXPORT_VERSION,
       exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
       origin: typeof window !== "undefined" ? window.location.origin : void 0,
       overrides,
-      removedDefaults
+      removedDefaults,
+      ...hasModeCusts ? { modeCustomizations } : {}
     };
-  }, [overrides, removedDefaults]);
+  }, [overrides, removedDefaults, modeCustomizations]);
   const importBindings = react.useCallback((data) => {
     if (!data || typeof data !== "object") {
       throw new Error("Invalid import data: expected an object");
@@ -312,7 +433,12 @@ function useActionsRegistry(options = {}) {
     }
     updateOverrides(data.overrides);
     updateRemovedDefaults(data.removedDefaults);
-  }, [updateOverrides, updateRemovedDefaults]);
+    if (data.modeCustomizations) {
+      setModeCustomizations(data.modeCustomizations);
+    } else {
+      setModeCustomizations(EMPTY_MODE_CUSTOMIZATIONS);
+    }
+  }, [updateOverrides, updateRemovedDefaults, setModeCustomizations]);
   const actions = react.useMemo(() => {
     return new Map(actionsRef.current);
   }, [actionsVersion]);
@@ -332,7 +458,12 @@ function useActionsRegistry(options = {}) {
     removeBinding,
     resetOverrides,
     exportBindings,
-    importBindings
+    importBindings,
+    modeCustomizations,
+    setModeCustomizations,
+    getEffectiveMode,
+    addActionToMode,
+    removeActionFromMode
   }), [
     register,
     unregister,
@@ -349,7 +480,12 @@ function useActionsRegistry(options = {}) {
     removeBinding,
     resetOverrides,
     exportBindings,
-    importBindings
+    importBindings,
+    modeCustomizations,
+    setModeCustomizations,
+    getEffectiveMode,
+    addActionToMode,
+    removeActionFromMode
   ]);
 }
 var ModesRegistryContext = react.createContext(null);
@@ -498,6 +634,7 @@ var DEFAULT_SEQUENCE_TIMEOUT = Infinity;
 var ACTION_MODAL = "__hotkeys:modal";
 var ACTION_OMNIBAR = "__hotkeys:omnibar";
 var ACTION_LOOKUP = "__hotkeys:lookup";
+var DEFAULT_BUILTIN_GROUP = "Meta";
 var ACTION_MODE_PREFIX = "__mode:";
 
 // src/utils.ts
@@ -914,7 +1051,7 @@ function keySeqsCouldConflict(a, b) {
   }
   return true;
 }
-function findConflicts(keymap) {
+function findConflicts(keymap, getEffectiveMode) {
   const conflicts = /* @__PURE__ */ new Map();
   const entries = Object.entries(keymap).map(([key, actionOrActions]) => ({
     key,
@@ -929,13 +1066,38 @@ function findConflicts(keymap) {
   }
   for (const [key, actions] of keyToActions) {
     if (actions.length > 1) {
-      conflicts.set(key, actions);
+      if (getEffectiveMode) {
+        const scopeGroups = /* @__PURE__ */ new Map();
+        for (const action of actions) {
+          const scope = getEffectiveMode(action);
+          const group = scopeGroups.get(scope) ?? [];
+          group.push(action);
+          scopeGroups.set(scope, group);
+        }
+        for (const group of scopeGroups.values()) {
+          if (group.length > 1) {
+            conflicts.set(key, group);
+          }
+        }
+      } else {
+        conflicts.set(key, actions);
+      }
     }
   }
+  const anySharedScope = (aActions, bActions) => {
+    if (!getEffectiveMode) return true;
+    for (const a of aActions) {
+      for (const b of bActions) {
+        if (getEffectiveMode(a) === getEffectiveMode(b)) return true;
+      }
+    }
+    return false;
+  };
   for (let i = 0; i < entries.length; i++) {
     for (let j = i + 1; j < entries.length; j++) {
       const a = entries[i];
       const b = entries[j];
+      if (!anySharedScope(a.actions, b.actions)) continue;
       if (keySeqsCouldConflict(a.keySeq, b.keySeq) && a.key !== b.key) {
         const existingA = conflicts.get(a.key) ?? [];
         if (!existingA.includes(`conflicts with: ${b.key}`)) {
@@ -1818,6 +1980,7 @@ function useHotkeys(keymap, handlers, options = {}) {
 var HotkeysContext = react.createContext(null);
 var DEFAULT_CONFIG = {
   storageKey: "use-kbd",
+  builtinGroup: DEFAULT_BUILTIN_GROUP,
   sequenceTimeout: DEFAULT_SEQUENCE_TIMEOUT,
   disableConflicts: false,
   // Keep conflicting bindings active; SeqM handles disambiguation
@@ -1836,6 +1999,26 @@ function HotkeysProvider({
   const registry = useActionsRegistry({ storageKey: config.storageKey });
   const modesRegistry = useModesRegistry();
   const endpointsRegistry = useOmnibarEndpointsRegistry();
+  const userModes = registry.modeCustomizations.userModes;
+  react.useEffect(() => {
+    const ids = [];
+    for (const [id, config2] of Object.entries(userModes)) {
+      modesRegistry.register(id, {
+        label: config2.label,
+        color: config2.color,
+        defaultBindings: config2.bindings ?? [],
+        toggle: true,
+        escapeExits: true,
+        passthrough: true
+      });
+      ids.push(id);
+    }
+    return () => {
+      for (const id of ids) {
+        modesRegistry.unregister(id);
+      }
+    };
+  }, [userModes, modesRegistry]);
   const [isEnabled, setIsEnabled] = react.useState(true);
   react.useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1946,7 +2129,7 @@ function HotkeysProvider({
     });
   }, [recentsStorageKey]);
   const keymap = registry.keymap;
-  const conflicts = react.useMemo(() => findConflicts(keymap), [keymap]);
+  const conflicts = react.useMemo(() => findConflicts(keymap, registry.getEffectiveMode), [keymap, registry.getEffectiveMode]);
   const hasConflicts2 = conflicts.size > 0;
   const { activeMode } = modesRegistry;
   const effectiveKeymap = react.useMemo(() => {
@@ -1965,8 +2148,7 @@ function HotkeysProvider({
     for (const [key, actionOrActions] of Object.entries(baseKeymap)) {
       const actions = Array.isArray(actionOrActions) ? actionOrActions : [actionOrActions];
       const filtered = actions.filter((id) => {
-        const action = registry.actions.get(id);
-        const actionMode = action?.config.mode;
+        const actionMode = registry.getEffectiveMode(id);
         if (!actionMode) return true;
         if (actionMode === activeMode) return true;
         if (id.startsWith(ACTION_MODE_PREFIX)) return true;
@@ -1974,7 +2156,7 @@ function HotkeysProvider({
       });
       if (filtered.length === 0) continue;
       if (activeMode && activeModeConfig?.passthrough !== false) {
-        const modeActions = filtered.filter((id) => registry.actions.get(id)?.config.mode === activeMode);
+        const modeActions = filtered.filter((id) => registry.getEffectiveMode(id) === activeMode);
         if (modeActions.length > 0) {
           result[key] = modeActions.length === 1 ? modeActions[0] : modeActions;
           continue;
@@ -2026,8 +2208,7 @@ function HotkeysProvider({
     [keymap, registry.actionRegistry]
   );
   const executeAction = react.useCallback((id, captures) => {
-    const action = registry.actions.get(id);
-    const actionMode = action?.config.mode;
+    const actionMode = registry.getEffectiveMode(id);
     if (actionMode && modesRegistry.activeMode !== actionMode) {
       modesRegistry.activateMode(actionMode);
     }
@@ -2036,6 +2217,7 @@ function HotkeysProvider({
   }, [registry, trackRecentAction, modesRegistry]);
   const value = react.useMemo(() => ({
     storageKey: config.storageKey,
+    builtinGroup: config.builtinGroup,
     registry,
     endpointsRegistry,
     isEnabled,
@@ -2072,6 +2254,7 @@ function HotkeysProvider({
     deactivateMode: modesRegistry.deactivateMode
   }), [
     config.storageKey,
+    config.builtinGroup,
     registry,
     endpointsRegistry,
     isEnabled,
@@ -2149,7 +2332,10 @@ function useAction(id, config) {
     config.priority,
     config.hideFromModal,
     config.protected,
-    JSON.stringify(config.arrowGroup)
+    JSON.stringify(config.arrowGroup),
+    JSON.stringify(config.actionPair),
+    JSON.stringify(config.actionTriplet),
+    config.sortOrder
   ]);
 }
 function useActions(actions) {
@@ -2194,7 +2380,10 @@ function useActions(actions) {
         c.priority,
         c.hideFromModal,
         c.protected,
-        c.arrowGroup
+        c.arrowGroup,
+        c.actionPair,
+        c.actionTriplet,
+        c.sortOrder
       ])
     )
   ]);
@@ -2251,6 +2440,105 @@ function useArrowGroup(id, config) {
     // handlers excluded — refs handle staleness in useActions
   ]);
   useActions(actions);
+}
+function useActionPair(id, config) {
+  const {
+    label,
+    group,
+    mode,
+    description,
+    actions: [actionA, actionB],
+    enabled,
+    keywords
+  } = config;
+  const actionConfigs = react.useMemo(() => {
+    const result = {};
+    const makeConfig = (entry, index) => ({
+      label: `${label} ${index === 0 ? "a" : "b"}`,
+      group,
+      mode,
+      description,
+      defaultBindings: entry.defaultBindings,
+      keywords: [
+        ...keywords ?? [],
+        ...entry.keywords ?? []
+      ],
+      handler: entry.handler,
+      enabled: entry.enabled ?? enabled,
+      actionPair: { pairId: id, index }
+    });
+    result[`${id}-a`] = makeConfig(actionA, 0);
+    result[`${id}-b`] = makeConfig(actionB, 1);
+    return result;
+  }, [
+    id,
+    label,
+    group,
+    mode,
+    description,
+    JSON.stringify(keywords),
+    JSON.stringify(actionA.defaultBindings),
+    JSON.stringify(actionA.keywords),
+    actionA.enabled,
+    JSON.stringify(actionB.defaultBindings),
+    JSON.stringify(actionB.keywords),
+    actionB.enabled,
+    enabled
+    // handlers excluded — refs handle staleness in useActions
+  ]);
+  useActions(actionConfigs);
+}
+var SUFFIXES = ["a", "b", "c"];
+function useActionTriplet(id, config) {
+  const {
+    label,
+    group,
+    mode,
+    description,
+    actions: [actionA, actionB, actionC],
+    enabled,
+    keywords
+  } = config;
+  const actionConfigs = react.useMemo(() => {
+    const result = {};
+    const makeConfig = (entry, index) => ({
+      label: `${label} ${SUFFIXES[index]}`,
+      group,
+      mode,
+      description,
+      defaultBindings: entry.defaultBindings,
+      keywords: [
+        ...keywords ?? [],
+        ...entry.keywords ?? []
+      ],
+      handler: entry.handler,
+      enabled: entry.enabled ?? enabled,
+      actionTriplet: { tripletId: id, index }
+    });
+    result[`${id}-a`] = makeConfig(actionA, 0);
+    result[`${id}-b`] = makeConfig(actionB, 1);
+    result[`${id}-c`] = makeConfig(actionC, 2);
+    return result;
+  }, [
+    id,
+    label,
+    group,
+    mode,
+    description,
+    JSON.stringify(keywords),
+    JSON.stringify(actionA.defaultBindings),
+    JSON.stringify(actionA.keywords),
+    actionA.enabled,
+    JSON.stringify(actionB.defaultBindings),
+    JSON.stringify(actionB.keywords),
+    actionB.enabled,
+    JSON.stringify(actionC.defaultBindings),
+    JSON.stringify(actionC.keywords),
+    actionC.enabled,
+    enabled
+    // handlers excluded — refs handle staleness in useActions
+  ]);
+  useActions(actionConfigs);
 }
 function useMode(id, config) {
   const registry = react.useContext(ModesRegistryContext);
@@ -3373,6 +3661,75 @@ function Tab({ className, style }) {
     }
   );
 }
+var compactStyle = {
+  width: "1.4em",
+  height: "1.4em",
+  verticalAlign: "middle"
+};
+function ArrowsMove({ className, style }) {
+  return /* @__PURE__ */ jsxRuntime.jsxs(
+    "svg",
+    {
+      className,
+      style: { ...compactStyle, ...style },
+      viewBox: "0 0 24 24",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: "2.5",
+      strokeLinecap: "round",
+      strokeLinejoin: "round",
+      children: [
+        /* @__PURE__ */ jsxRuntime.jsx("line", { x1: "3", y1: "12", x2: "21", y2: "12" }),
+        /* @__PURE__ */ jsxRuntime.jsx("polyline", { points: "18 9 21 12 18 15" }),
+        /* @__PURE__ */ jsxRuntime.jsx("polyline", { points: "6 9 3 12 6 15" }),
+        /* @__PURE__ */ jsxRuntime.jsx("line", { x1: "12", y1: "3", x2: "12", y2: "21" }),
+        /* @__PURE__ */ jsxRuntime.jsx("polyline", { points: "9 6 12 3 15 6" }),
+        /* @__PURE__ */ jsxRuntime.jsx("polyline", { points: "9 18 12 21 15 18" })
+      ]
+    }
+  );
+}
+function ArrowsDpad({ className, style }) {
+  return /* @__PURE__ */ jsxRuntime.jsxs(
+    "svg",
+    {
+      className,
+      style: { ...compactStyle, ...style },
+      viewBox: "0 0 24 24",
+      fill: "currentColor",
+      stroke: "none",
+      children: [
+        /* @__PURE__ */ jsxRuntime.jsx("polygon", { points: "12,2 8,9 16,9" }),
+        /* @__PURE__ */ jsxRuntime.jsx("polygon", { points: "12,22 8,15 16,15" }),
+        /* @__PURE__ */ jsxRuntime.jsx("polygon", { points: "2,12 9,8 9,16" }),
+        /* @__PURE__ */ jsxRuntime.jsx("polygon", { points: "22,12 15,8 15,16" })
+      ]
+    }
+  );
+}
+function ArrowsDouble({ className, style }) {
+  return /* @__PURE__ */ jsxRuntime.jsxs(
+    "svg",
+    {
+      className,
+      style: { ...compactStyle, ...style },
+      viewBox: "0 0 24 24",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: "2.5",
+      strokeLinecap: "round",
+      strokeLinejoin: "round",
+      children: [
+        /* @__PURE__ */ jsxRuntime.jsx("line", { x1: "3", y1: "12", x2: "21", y2: "12" }),
+        /* @__PURE__ */ jsxRuntime.jsx("polyline", { points: "18 9 21 12 18 15" }),
+        /* @__PURE__ */ jsxRuntime.jsx("polyline", { points: "6 9 3 12 6 15" }),
+        /* @__PURE__ */ jsxRuntime.jsx("line", { x1: "12", y1: "3", x2: "12", y2: "21" }),
+        /* @__PURE__ */ jsxRuntime.jsx("polyline", { points: "9 6 12 3 15 6" }),
+        /* @__PURE__ */ jsxRuntime.jsx("polyline", { points: "9 18 12 21 15 18" })
+      ]
+    }
+  );
+}
 function getKeyIcon(key) {
   switch (key.toLowerCase()) {
     case "arrowup":
@@ -3834,6 +4191,7 @@ function KeybindingEditor({
 }
 function LookupModal({ defaultBinding = "meta+shift+k" } = {}) {
   const {
+    builtinGroup,
     isLookupOpen,
     lookupInitialKeys,
     closeLookup,
@@ -3843,7 +4201,8 @@ function LookupModal({ defaultBinding = "meta+shift+k" } = {}) {
   } = useHotkeysContext();
   useAction(ACTION_LOOKUP, {
     label: "Key lookup",
-    group: "Global",
+    group: builtinGroup,
+    sortOrder: 2,
     defaultBindings: defaultBinding ? [defaultBinding] : [],
     handler: react.useCallback(() => toggleLookup(), [toggleLookup])
   });
@@ -4018,12 +4377,12 @@ function LookupModal({ defaultBinding = "meta+shift+k" } = {}) {
         setPendingKeys((prev) => prev.slice(0, -1));
         return;
       }
-      if (e.key === "ArrowDown") {
+      if (e.key === "ArrowDown" && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
         e.preventDefault();
         setSelectedIndex((prev) => Math.min(prev + 1, filteredBindings.length - 1));
         return;
       }
-      if (e.key === "ArrowUp") {
+      if (e.key === "ArrowUp" && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
         e.preventDefault();
         setSelectedIndex((prev) => Math.max(prev - 1, 0));
         return;
@@ -4322,7 +4681,8 @@ function SpeedDial({
   longPressDuration = 400,
   primaryIcon,
   ariaLabel = "Open command palette",
-  className
+  className,
+  chevronMode = "separate"
 }) {
   const ctx = useMaybeHotkeysContext();
   const [isSticky, setIsSticky] = react.useState(false);
@@ -4395,9 +4755,11 @@ function SpeedDial({
   const right = position?.right ?? 20;
   const containerClasses = ["kbd-speed-dial"];
   if (isExpanded) containerClasses.push("kbd-speed-dial-expanded");
+  if (chevronMode === "badge") containerClasses.push("kbd-speed-dial-badge-mode");
   if (className) containerClasses.push(className);
   const chevronClasses = ["kbd-speed-dial-chevron"];
   if (isSticky) chevronClasses.push("kbd-speed-dial-sticky");
+  if (chevronMode === "badge") chevronClasses.push("kbd-speed-dial-badge");
   const builtinActions = [];
   if (showShortcuts) {
     builtinActions.push({
@@ -4432,7 +4794,7 @@ function SpeedDial({
             children: primaryIcon ?? /* @__PURE__ */ jsxRuntime.jsx(SearchIcon2, { className: "kbd-speed-dial-icon" })
           }
         ),
-        /* @__PURE__ */ jsxRuntime.jsx(
+        chevronMode !== "none" && /* @__PURE__ */ jsxRuntime.jsx(
           "button",
           {
             type: "button",
@@ -4524,7 +4886,8 @@ function Omnibar({
   const keymap = keymapProp ?? ctx?.registry.keymap ?? {};
   useAction(ACTION_OMNIBAR, {
     label: "Command palette",
-    group: "Global",
+    group: ctx?.builtinGroup ?? DEFAULT_BUILTIN_GROUP,
+    sortOrder: 1,
     defaultBindings: defaultBinding ? [defaultBinding] : [],
     handler: react.useCallback(() => ctx?.toggleOmnibar(), [ctx?.toggleOmnibar])
   });
@@ -4999,13 +5362,13 @@ function parseActionId(actionId) {
   }
   return { group: "General", name: actionId };
 }
-function organizeShortcuts(keymap, labels, descriptions, groupNames, groupOrder, actionRegistry, showUnbound = true, modesMap, activeMode) {
+function organizeShortcuts(keymap, labels, descriptions, groupNames, groupOrder, actionRegistry, showUnbound = true, modesMap, activeMode, getEffectiveMode, registeredActions) {
   const actionBindings = getActionBindings(keymap);
   const groupMap = /* @__PURE__ */ new Map();
   const includedActions = /* @__PURE__ */ new Set();
   const getGroupName = (actionId) => {
     let groupKey;
-    const actionMode = actionRegistry?.[actionId]?.mode;
+    const actionMode = getEffectiveMode ? getEffectiveMode(actionId) : actionRegistry?.[actionId]?.mode;
     if (actionMode && modesMap) {
       const mode = modesMap.get(actionMode);
       if (mode) return mode.config.label;
@@ -5019,7 +5382,7 @@ function organizeShortcuts(keymap, labels, descriptions, groupNames, groupOrder,
     return groupNames?.[groupKey] ?? groupKey;
   };
   const getModeForAction = (actionId) => {
-    const actionMode = actionRegistry?.[actionId]?.mode;
+    const actionMode = getEffectiveMode ? getEffectiveMode(actionId) : actionRegistry?.[actionId]?.mode;
     if (!actionMode || !modesMap) return void 0;
     const mode = modesMap.get(actionMode);
     if (!mode) return void 0;
@@ -5067,11 +5430,18 @@ function organizeShortcuts(keymap, labels, descriptions, groupNames, groupOrder,
       });
     }
   }
+  const getSortKey = (entry) => {
+    const actionId = entry.type === "action" ? entry.actionId : entry.type === "arrowGroup" ? entry.actionIds.left : entry.actionIds[0];
+    const order = actionRegistry?.[actionId]?.sortOrder ?? 0;
+    const registeredAt = registeredActions?.get(actionId)?.registeredAt ?? 0;
+    return { order, registeredAt };
+  };
   for (const group of groupMap.values()) {
     group.shortcuts.sort((a, b) => {
-      const aId = a.type === "action" ? a.actionId : a.groupId;
-      const bId = b.type === "action" ? b.actionId : b.groupId;
-      return aId.localeCompare(bId);
+      const ak = getSortKey(a);
+      const bk = getSortKey(b);
+      if (ak.order !== bk.order) return ak.order - bk.order;
+      return ak.registeredAt - bk.registeredAt;
     });
   }
   if (actionRegistry) {
@@ -5140,8 +5510,106 @@ function organizeShortcuts(keymap, labels, descriptions, groupNames, groupOrder,
         toInsert.sort((a, b) => b.index - a.index);
         for (const { entry } of toInsert) {
           let insertIdx = group.shortcuts.findIndex((s) => {
-            const sId = s.type === "action" ? s.actionId : s.groupId;
+            const sId = s.type === "action" ? s.actionId : s.type === "arrowGroup" ? s.groupId : s.type === "actionPair" ? s.pairId : s.tripletId;
             return sId.localeCompare(entry.groupId) > 0;
+          });
+          if (insertIdx === -1) insertIdx = group.shortcuts.length;
+          group.shortcuts.splice(insertIdx, 0, entry);
+        }
+      }
+    }
+    for (const group of groupMap.values()) {
+      const pairs = /* @__PURE__ */ new Map();
+      for (const entry of group.shortcuts) {
+        if (entry.type !== "action") continue;
+        const ap = actionRegistry[entry.actionId]?.actionPair;
+        if (!ap) continue;
+        if (!pairs.has(ap.pairId)) {
+          pairs.set(ap.pairId, { entries: [], indices: /* @__PURE__ */ new Set() });
+        }
+        const p = pairs.get(ap.pairId);
+        p.entries.push(entry);
+        p.indices.add(ap.index);
+      }
+      const toRemovePair = /* @__PURE__ */ new Set();
+      const toInsertPair = [];
+      for (const [pairId, { entries, indices }] of pairs) {
+        if (indices.size !== 2) continue;
+        entries.sort((a, b) => {
+          const ai = actionRegistry[a.actionId].actionPair.index;
+          const bi = actionRegistry[b.actionId].actionPair.index;
+          return ai - bi;
+        });
+        const label = entries[0].label.replace(/\s+[ab]$/i, "");
+        toInsertPair.push({
+          type: "actionPair",
+          pairId,
+          label,
+          description: entries[0].description,
+          actionIds: [entries[0].actionId, entries[1].actionId],
+          bindings: [entries[0].bindings, entries[1].bindings]
+        });
+        for (const entry of entries) {
+          toRemovePair.add(entry.actionId);
+        }
+      }
+      if (toRemovePair.size > 0) {
+        group.shortcuts = group.shortcuts.filter(
+          (s) => s.type !== "action" || !toRemovePair.has(s.actionId)
+        );
+        for (const entry of toInsertPair) {
+          let insertIdx = group.shortcuts.findIndex((s) => {
+            const sId = s.type === "action" ? s.actionId : s.type === "arrowGroup" ? s.groupId : s.type === "actionPair" ? s.pairId : s.tripletId;
+            return sId.localeCompare(entry.pairId) > 0;
+          });
+          if (insertIdx === -1) insertIdx = group.shortcuts.length;
+          group.shortcuts.splice(insertIdx, 0, entry);
+        }
+      }
+    }
+    for (const group of groupMap.values()) {
+      const triplets = /* @__PURE__ */ new Map();
+      for (const entry of group.shortcuts) {
+        if (entry.type !== "action") continue;
+        const at = actionRegistry[entry.actionId]?.actionTriplet;
+        if (!at) continue;
+        if (!triplets.has(at.tripletId)) {
+          triplets.set(at.tripletId, { entries: [], indices: /* @__PURE__ */ new Set() });
+        }
+        const t = triplets.get(at.tripletId);
+        t.entries.push(entry);
+        t.indices.add(at.index);
+      }
+      const toRemoveTriplet = /* @__PURE__ */ new Set();
+      const toInsertTriplet = [];
+      for (const [tripletId, { entries, indices }] of triplets) {
+        if (indices.size !== 3) continue;
+        entries.sort((a, b) => {
+          const ai = actionRegistry[a.actionId].actionTriplet.index;
+          const bi = actionRegistry[b.actionId].actionTriplet.index;
+          return ai - bi;
+        });
+        const label = entries[0].label.replace(/\s+[abc]$/i, "");
+        toInsertTriplet.push({
+          type: "actionTriplet",
+          tripletId,
+          label,
+          description: entries[0].description,
+          actionIds: [entries[0].actionId, entries[1].actionId, entries[2].actionId],
+          bindings: [entries[0].bindings, entries[1].bindings, entries[2].bindings]
+        });
+        for (const entry of entries) {
+          toRemoveTriplet.add(entry.actionId);
+        }
+      }
+      if (toRemoveTriplet.size > 0) {
+        group.shortcuts = group.shortcuts.filter(
+          (s) => s.type !== "action" || !toRemoveTriplet.has(s.actionId)
+        );
+        for (const entry of toInsertTriplet) {
+          let insertIdx = group.shortcuts.findIndex((s) => {
+            const sId = s.type === "action" ? s.actionId : s.type === "arrowGroup" ? s.groupId : s.type === "actionPair" ? s.pairId : s.tripletId;
+            return sId.localeCompare(entry.tripletId) > 0;
           });
           if (insertIdx === -1) insertIdx = group.shortcuts.length;
           group.shortcuts.splice(insertIdx, 0, entry);
@@ -5202,6 +5670,7 @@ function BindingDisplay2({
   isDefault,
   onEdit,
   onRemove,
+  onAdd,
   pendingKeys,
   activeKeys,
   timeoutDuration = DEFAULT_SEQUENCE_TIMEOUT
@@ -5274,6 +5743,18 @@ function BindingDisplay2({
         "aria-label": "Remove binding",
         children: "\xD7"
       }
+    ),
+    editable && onAdd && /* @__PURE__ */ jsxRuntime.jsx(
+      "button",
+      {
+        className: "kbd-add-inline-btn",
+        onClick: (e) => {
+          e.stopPropagation();
+          onAdd();
+        },
+        "aria-label": "Add binding",
+        children: "+"
+      }
     )
   ] });
 }
@@ -5295,19 +5776,40 @@ function ArrowGroupRow({
   onStartEditing,
   renderExtraBindings,
   arrowGroupEditState,
-  arrowGroupActiveKeys
+  arrowGroupActiveKeys,
+  conflicts,
+  ArrowIconComponent
 }) {
   const isEditing = arrowGroupEditState?.groupId === entry.groupId;
   const modifiers = parseModifierPrefix(entry.modifierPrefix);
   const hasModifiers = modifiers.ctrl || modifiers.alt || modifiers.shift || modifiers.meta;
+  const arrowKeys = {
+    left: "arrowleft",
+    right: "arrowright",
+    up: "arrowup",
+    down: "arrowdown"
+  };
+  const hasConflict = DIRECTION_ORDER.some((dir) => {
+    const binding = `${entry.modifierPrefix}${arrowKeys[dir]}`;
+    return conflicts.has(binding);
+  });
   const hasExtras = DIRECTION_ORDER.some((d) => (entry.extraBindings[d]?.length ?? 0) > 0);
+  const renderArrows = () => {
+    if (ArrowIconComponent) {
+      return /* @__PURE__ */ jsxRuntime.jsx(ArrowIconComponent, { className: "kbd-key-icon kbd-arrow-group-compact" });
+    }
+    return /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-arrow-group-arrows", children: DIRECTION_ORDER.map((dir) => {
+      const Icon = DIRECTION_ICONS[dir];
+      return /* @__PURE__ */ jsxRuntime.jsx(Icon, { className: "kbd-key-icon" }, dir);
+    }) });
+  };
   return /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "kbd-action kbd-arrow-group-row", "data-arrow-group": entry.groupId, children: [
     entry.description ? /* @__PURE__ */ jsxRuntime.jsx(Tooltip, { title: entry.description, children: /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-action-label", children: entry.label }) }) : /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-action-label", children: entry.label }),
     /* @__PURE__ */ jsxRuntime.jsxs("span", { className: "kbd-action-bindings", children: [
       /* @__PURE__ */ jsxRuntime.jsx(
         "kbd",
         {
-          className: `kbd-kbd kbd-arrow-group-binding${editable ? " editable" : ""}${isEditing ? " editing" : ""}`,
+          className: `kbd-kbd kbd-arrow-group-binding${editable ? " editable" : ""}${isEditing ? " editing" : ""}${hasConflict ? " conflict" : ""}`,
           onClick: editable ? () => onStartEditing(entry.groupId) : void 0,
           tabIndex: editable ? 0 : void 0,
           onKeyDown: editable ? (e) => {
@@ -5317,24 +5819,12 @@ function ArrowGroupRow({
             }
           } : void 0,
           children: isEditing ? /* @__PURE__ */ jsxRuntime.jsxs(jsxRuntime.Fragment, { children: [
-            arrowGroupActiveKeys && (arrowGroupActiveKeys.modifiers.ctrl || arrowGroupActiveKeys.modifiers.alt || arrowGroupActiveKeys.modifiers.shift || arrowGroupActiveKeys.modifiers.meta) ? /* @__PURE__ */ jsxRuntime.jsxs(jsxRuntime.Fragment, { children: [
-              renderModifierIcons(arrowGroupActiveKeys.modifiers),
-              /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-arrow-group-plus", children: "+" })
-            ] }) : null,
-            /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-arrow-group-arrows", children: DIRECTION_ORDER.map((dir) => {
-              const Icon = DIRECTION_ICONS[dir];
-              return /* @__PURE__ */ jsxRuntime.jsx(Icon, { className: "kbd-key-icon" }, dir);
-            }) }),
+            arrowGroupActiveKeys && (arrowGroupActiveKeys.modifiers.ctrl || arrowGroupActiveKeys.modifiers.alt || arrowGroupActiveKeys.modifiers.shift || arrowGroupActiveKeys.modifiers.meta) ? /* @__PURE__ */ jsxRuntime.jsx(jsxRuntime.Fragment, { children: renderModifierIcons(arrowGroupActiveKeys.modifiers) }) : null,
+            renderArrows(),
             /* @__PURE__ */ jsxRuntime.jsx("span", { children: "..." })
           ] }) : /* @__PURE__ */ jsxRuntime.jsxs(jsxRuntime.Fragment, { children: [
-            hasModifiers && /* @__PURE__ */ jsxRuntime.jsxs(jsxRuntime.Fragment, { children: [
-              renderModifierIcons(modifiers),
-              /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-arrow-group-plus", children: "+" })
-            ] }),
-            /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-arrow-group-arrows", children: DIRECTION_ORDER.map((dir) => {
-              const Icon = DIRECTION_ICONS[dir];
-              return /* @__PURE__ */ jsxRuntime.jsx(Icon, { className: "kbd-key-icon" }, dir);
-            }) })
+            hasModifiers && /* @__PURE__ */ jsxRuntime.jsx(jsxRuntime.Fragment, { children: renderModifierIcons(modifiers) }),
+            renderArrows()
           ] })
         }
       ),
@@ -5344,6 +5834,168 @@ function ArrowGroupRow({
         return /* @__PURE__ */ jsxRuntime.jsx(react.Fragment, { children: renderExtraBindings(entry.actionIds[dir], extras) }, dir);
       })
     ] })
+  ] });
+}
+function ActionPairRow({
+  entry,
+  renderCell,
+  TooltipComponent: Tooltip
+}) {
+  return /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "kbd-action kbd-action-pair-row", "data-action-pair": entry.pairId, children: [
+    entry.description ? /* @__PURE__ */ jsxRuntime.jsx(Tooltip, { title: entry.description, children: /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-action-label", children: entry.label }) }) : /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-action-label", children: entry.label }),
+    /* @__PURE__ */ jsxRuntime.jsxs("span", { className: "kbd-action-bindings", children: [
+      renderCell(entry.actionIds[0], entry.bindings[0]),
+      /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-action-pair-sep", children: "/" }),
+      renderCell(entry.actionIds[1], entry.bindings[1])
+    ] })
+  ] });
+}
+function ActionTripletRow({
+  entry,
+  renderCell,
+  TooltipComponent: Tooltip
+}) {
+  return /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "kbd-action kbd-action-triplet-row", "data-action-triplet": entry.tripletId, children: [
+    entry.description ? /* @__PURE__ */ jsxRuntime.jsx(Tooltip, { title: entry.description, children: /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-action-label", children: entry.label }) }) : /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-action-label", children: entry.label }),
+    /* @__PURE__ */ jsxRuntime.jsxs("span", { className: "kbd-action-bindings", children: [
+      renderCell(entry.actionIds[0], entry.bindings[0]),
+      /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-action-pair-sep", children: "/" }),
+      renderCell(entry.actionIds[1], entry.bindings[1]),
+      /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-action-pair-sep", children: "/" }),
+      renderCell(entry.actionIds[2], entry.bindings[2])
+    ] })
+  ] });
+}
+function ModesSection({ modeGroups, editable, registry, actionRegistry, renderShortcutEntry }) {
+  const [addingToMode, setAddingToMode] = react.useState(null);
+  const [searchQuery, setSearchQuery] = react.useState("");
+  const [selectedIndex, setSelectedIndex] = react.useState(-1);
+  const searchInputRef = react.useRef(null);
+  const { getEffectiveMode, addActionToMode, removeActionFromMode } = registry;
+  react.useEffect(() => {
+    if (addingToMode && searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
+  }, [addingToMode]);
+  const globalActions = react.useMemo(() => {
+    return Object.entries(actionRegistry).filter(([id, action]) => {
+      if (id.startsWith(ACTION_MODE_PREFIX)) return false;
+      if (action.hideFromModal) return false;
+      return !getEffectiveMode(id);
+    }).map(([id, action]) => ({ id, label: action.label }));
+  }, [actionRegistry, getEffectiveMode]);
+  const filteredGlobalActions = react.useMemo(() => {
+    if (!searchQuery) return globalActions;
+    const q = searchQuery.toLowerCase();
+    return globalActions.filter(
+      (a) => a.id.toLowerCase().includes(q) || a.label.toLowerCase().includes(q)
+    );
+  }, [globalActions, searchQuery]);
+  react.useEffect(() => {
+    setSelectedIndex(-1);
+  }, [filteredGlobalActions]);
+  const addAction = react.useCallback((actionId, modeId) => {
+    addActionToMode(actionId, modeId);
+    setAddingToMode(null);
+    setSearchQuery("");
+    setSelectedIndex(-1);
+  }, [addActionToMode]);
+  return /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "kbd-modes-section", children: [
+    /* @__PURE__ */ jsxRuntime.jsx("h3", { className: "kbd-modes-title", children: "Modes" }),
+    modeGroups.map((group) => {
+      const mode = group.mode;
+      return /* @__PURE__ */ jsxRuntime.jsxs(
+        "div",
+        {
+          className: "kbd-modes-entry",
+          style: mode.color ? { "--kbd-mode-color": mode.color } : void 0,
+          children: [
+            /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "kbd-modes-header", children: [
+              /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-modes-label", style: mode.color ? { color: mode.color } : void 0, children: group.name }),
+              mode.activationBindings.map((binding) => /* @__PURE__ */ jsxRuntime.jsx("kbd", { className: "kbd-kbd kbd-modes-binding", children: parseKeySeq(binding).map((elem, i) => /* @__PURE__ */ jsxRuntime.jsxs(react.Fragment, { children: [
+                i > 0 && /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-sequence-sep", children: " " }),
+                /* @__PURE__ */ jsxRuntime.jsx(SeqElemDisplay2, { elem })
+              ] }, i)) }, binding)),
+              mode.color && /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-modes-color", style: { backgroundColor: mode.color } })
+            ] }),
+            /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "kbd-modes-shortcuts", children: [
+              group.shortcuts.map((entry) => {
+                const entryKey = entry.type === "action" ? entry.actionId : entry.type === "arrowGroup" ? entry.groupId : entry.type === "actionPair" ? entry.pairId : entry.tripletId;
+                const actionIdForRemove = entry.type === "action" ? entry.actionId : entry.type === "arrowGroup" ? entry.actionIds.left : entry.actionIds[0];
+                const entryLabel = entry.label;
+                return /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "kbd-modes-action-row", children: [
+                  renderShortcutEntry(entry),
+                  editable && /* @__PURE__ */ jsxRuntime.jsx(
+                    "button",
+                    {
+                      className: "kbd-modes-remove",
+                      onClick: () => removeActionFromMode(actionIdForRemove, mode.id),
+                      "aria-label": `Remove ${entryLabel} from ${group.name}`,
+                      title: "Remove from mode",
+                      children: "\xD7"
+                    }
+                  )
+                ] }, entryKey);
+              }),
+              group.shortcuts.length === 0 && /* @__PURE__ */ jsxRuntime.jsx("div", { className: "kbd-modes-empty", children: "No actions" })
+            ] }),
+            editable && (addingToMode === mode.id ? /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "kbd-modes-add-panel", children: [
+              /* @__PURE__ */ jsxRuntime.jsx(
+                "input",
+                {
+                  ref: searchInputRef,
+                  type: "text",
+                  className: "kbd-modes-search",
+                  placeholder: "Search actions...",
+                  value: searchQuery,
+                  onChange: (e) => setSearchQuery(e.target.value),
+                  onKeyDown: (e) => {
+                    const items = filteredGlobalActions.slice(0, 8);
+                    if (e.key === "Escape") {
+                      setAddingToMode(null);
+                      setSearchQuery("");
+                      setSelectedIndex(-1);
+                    } else if (e.key === "ArrowDown") {
+                      e.preventDefault();
+                      setSelectedIndex((prev) => Math.min(prev + 1, items.length - 1));
+                    } else if (e.key === "ArrowUp") {
+                      e.preventDefault();
+                      setSelectedIndex((prev) => Math.max(prev - 1, -1));
+                    } else if (e.key === "Enter" && selectedIndex >= 0 && selectedIndex < items.length) {
+                      e.preventDefault();
+                      addAction(items[selectedIndex].id, mode.id);
+                    }
+                  }
+                }
+              ),
+              /* @__PURE__ */ jsxRuntime.jsxs("ul", { className: "kbd-modes-search-results", children: [
+                filteredGlobalActions.slice(0, 8).map((action, i) => /* @__PURE__ */ jsxRuntime.jsx("li", { children: /* @__PURE__ */ jsxRuntime.jsx(
+                  "button",
+                  {
+                    className: `kbd-modes-search-item${i === selectedIndex ? " selected" : ""}`,
+                    onClick: () => addAction(action.id, mode.id),
+                    children: action.label
+                  }
+                ) }, action.id)),
+                filteredGlobalActions.length === 0 && /* @__PURE__ */ jsxRuntime.jsx("li", { className: "kbd-modes-no-results", children: "No global actions found" })
+              ] })
+            ] }) : /* @__PURE__ */ jsxRuntime.jsx(
+              "button",
+              {
+                className: "kbd-modes-add-btn",
+                onClick: () => {
+                  setAddingToMode(mode.id);
+                  setSearchQuery("");
+                  setSelectedIndex(-1);
+                },
+                children: "+ Add action..."
+              }
+            ))
+          ]
+        },
+        group.name
+      );
+    })
   ] });
 }
 function ShortcutsModal({
@@ -5372,9 +6024,26 @@ function ShortcutsModal({
   hint,
   showUnbound,
   TooltipComponent: TooltipComponentProp = DefaultTooltip,
+  arrowIcon: arrowIconProp,
   footerContent
 }) {
   const ctx = useMaybeHotkeysContext();
+  const ArrowIconComponent = react.useMemo(() => {
+    if (!arrowIconProp) return null;
+    if (typeof arrowIconProp === "string") {
+      switch (arrowIconProp) {
+        case "move":
+          return ArrowsMove;
+        case "dpad":
+          return ArrowsDpad;
+        case "double":
+          return ArrowsDouble;
+        default:
+          return null;
+      }
+    }
+    return arrowIconProp;
+  }, [arrowIconProp]);
   const [isTouchDevice, setIsTouchDevice] = react.useState(false);
   react.useEffect(() => {
     if (typeof window === "undefined") return;
@@ -5432,7 +6101,8 @@ function ShortcutsModal({
   } : void 0);
   const importInputRef = react.useRef(null);
   const [importError, setImportError] = react.useState(null);
-  const hasCustomizations = ctx ? Object.keys(ctx.registry.overrides).length > 0 || Object.keys(ctx.registry.removedDefaults).length > 0 : false;
+  const modeCusts = ctx?.registry.modeCustomizations;
+  const hasCustomizations = ctx ? Object.keys(ctx.registry.overrides).length > 0 || Object.keys(ctx.registry.removedDefaults).length > 0 || modeCusts && (Object.keys(modeCusts.additions).length > 0 || Object.keys(modeCusts.removals).length > 0 || Object.keys(modeCusts.userModes).length > 0) : false;
   const handleExport = onExport ?? (ctx ? () => {
     const data = ctx.registry.exportBindings();
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
@@ -5471,6 +6141,7 @@ function ShortcutsModal({
   const [editingAction, setEditingAction] = react.useState(null);
   const [editingKey, setEditingKey] = react.useState(null);
   const [addingAction, setAddingAction] = react.useState(null);
+  const [addAfterKey, setAddAfterKey] = react.useState(null);
   const [pendingConflict, setPendingConflict] = react.useState(null);
   const [hasPendingConflictState, setHasPendingConflictState] = react.useState(false);
   const [arrowGroupEditState, setArrowGroupEditState] = react.useState(null);
@@ -5479,18 +6150,21 @@ function ShortcutsModal({
   const editingActionRef = react.useRef(null);
   const editingKeyRef = react.useRef(null);
   const addingActionRef = react.useRef(null);
+  const addAfterKeyRef = react.useRef(null);
   const setIsEditingBindingRef = react.useRef(ctx?.setIsEditingBinding);
   setIsEditingBindingRef.current = ctx?.setIsEditingBinding;
-  const conflicts = react.useMemo(() => findConflicts(keymap), [keymap]);
+  const conflicts = react.useMemo(() => findConflicts(keymap, ctx?.registry.getEffectiveMode), [keymap, ctx?.registry.getEffectiveMode]);
   const actionBindings = react.useMemo(() => getActionBindings(keymap), [keymap]);
   const close = react.useCallback(() => {
     setInternalIsOpen(false);
     setEditingAction(null);
     setEditingKey(null);
     setAddingAction(null);
+    setAddAfterKey(null);
     editingActionRef.current = null;
     editingKeyRef.current = null;
     addingActionRef.current = null;
+    addAfterKeyRef.current = null;
     setPendingConflict(null);
     arrowGroupEditRef.current = null;
     setArrowGroupEditState(null);
@@ -5503,8 +6177,9 @@ function ShortcutsModal({
   }, [onCloseProp, ctx]);
   useAction(ACTION_MODAL, {
     label: "Show shortcuts",
-    group: "Global",
+    group: ctx?.builtinGroup ?? DEFAULT_BUILTIN_GROUP,
     defaultBindings: defaultBinding ? [defaultBinding] : [],
+    sortOrder: 0,
     protected: true,
     // Prevent users from removing the only way to edit shortcuts
     handler: react.useCallback(() => {
@@ -5564,9 +6239,11 @@ function ShortcutsModal({
         editingActionRef.current = null;
         editingKeyRef.current = null;
         addingActionRef.current = null;
+        addAfterKeyRef.current = null;
         setEditingAction(null);
         setEditingKey(null);
         setAddingAction(null);
+        setAddAfterKey(null);
         setIsEditingBindingRef.current?.(false);
       },
       [checkConflict, handleBindingChange, handleBindingAdd]
@@ -5575,9 +6252,11 @@ function ShortcutsModal({
       editingActionRef.current = null;
       editingKeyRef.current = null;
       addingActionRef.current = null;
+      addAfterKeyRef.current = null;
       setEditingAction(null);
       setEditingKey(null);
       setAddingAction(null);
+      setAddAfterKey(null);
       setPendingConflict(null);
       setIsEditingBindingRef.current?.(false);
     }, []),
@@ -5625,9 +6304,27 @@ function ShortcutsModal({
       editingActionRef.current = null;
       editingKeyRef.current = null;
       addingActionRef.current = action;
+      addAfterKeyRef.current = null;
       setEditingAction(null);
       setEditingKey(null);
       setAddingAction(action);
+      setAddAfterKey(null);
+      setPendingConflict(null);
+      ctx?.setIsEditingBinding(true);
+      startRecording();
+    },
+    [startRecording, ctx?.setIsEditingBinding]
+  );
+  const startAddingAfter = react.useCallback(
+    (action, afterKey) => {
+      editingActionRef.current = null;
+      editingKeyRef.current = null;
+      addingActionRef.current = action;
+      addAfterKeyRef.current = afterKey;
+      setEditingAction(null);
+      setEditingKey(null);
+      setAddingAction(action);
+      setAddAfterKey(afterKey);
       setPendingConflict(null);
       ctx?.setIsEditingBinding(true);
       startRecording();
@@ -5650,9 +6347,11 @@ function ShortcutsModal({
     editingActionRef.current = null;
     editingKeyRef.current = null;
     addingActionRef.current = null;
+    addAfterKeyRef.current = null;
     setEditingAction(null);
     setEditingKey(null);
     setAddingAction(null);
+    setAddAfterKey(null);
     setPendingConflict(null);
     ctx?.setIsEditingBinding(false);
   }, [cancel, ctx?.setIsEditingBinding]);
@@ -5745,6 +6444,7 @@ function ShortcutsModal({
             startEditingBinding(actionId, key);
           },
           onRemove: editable && showRemove && !isProtected ? () => removeBinding(actionId, key) : void 0,
+          onAdd: editable && multipleBindings ? () => startAddingAfter(actionId, key) : void 0,
           pendingKeys,
           activeKeys,
           timeoutDuration: pendingConflictInfo.hasConflict ? Infinity : sequenceTimeout
@@ -5752,7 +6452,7 @@ function ShortcutsModal({
         key
       );
     },
-    [editingAction, editingKey, addingAction, conflicts, defaults, editable, startEditingBinding, removeBinding, pendingKeys, activeKeys, isRecording, cancel, handleBindingAdd, handleBindingChange, sequenceTimeout, pendingConflictInfo, ctx?.registry.actionRegistry]
+    [editingAction, editingKey, addingAction, conflicts, defaults, editable, startEditingBinding, startAddingAfter, removeBinding, pendingKeys, activeKeys, isRecording, cancel, handleBindingAdd, handleBindingChange, sequenceTimeout, pendingConflictInfo, multipleBindings, ctx?.registry.actionRegistry]
   );
   const renderAddButton = react.useCallback(
     (actionId) => {
@@ -5799,13 +6499,38 @@ function ShortcutsModal({
   );
   const renderCell = react.useCallback(
     (actionId, keys) => {
-      const showAddButton = editable && (multipleBindings || keys.length === 0);
+      const isAddingThis = addingAction === actionId;
+      const showStandaloneAdd = editable && keys.length === 0;
       return /* @__PURE__ */ jsxRuntime.jsxs("span", { className: "kbd-action-bindings", children: [
-        keys.map((key) => /* @__PURE__ */ jsxRuntime.jsx(react.Fragment, { children: renderEditableKbd(actionId, key, true) }, key)),
-        showAddButton && renderAddButton(actionId)
+        keys.map((key) => /* @__PURE__ */ jsxRuntime.jsxs(react.Fragment, { children: [
+          renderEditableKbd(actionId, key, true),
+          isAddingThis && addAfterKey === key && /* @__PURE__ */ jsxRuntime.jsx(
+            BindingDisplay2,
+            {
+              binding: "",
+              isEditing: true,
+              isPendingConflict: pendingConflictInfo.hasConflict,
+              pendingKeys,
+              activeKeys,
+              timeoutDuration: pendingConflictInfo.hasConflict ? Infinity : sequenceTimeout
+            }
+          )
+        ] }, key)),
+        isAddingThis && addAfterKey === null && /* @__PURE__ */ jsxRuntime.jsx(
+          BindingDisplay2,
+          {
+            binding: "",
+            isEditing: true,
+            isPendingConflict: pendingConflictInfo.hasConflict,
+            pendingKeys,
+            activeKeys,
+            timeoutDuration: pendingConflictInfo.hasConflict ? Infinity : sequenceTimeout
+          }
+        ),
+        showStandaloneAdd && !isAddingThis && renderAddButton(actionId)
       ] });
     },
-    [renderEditableKbd, renderAddButton, editable, multipleBindings]
+    [renderEditableKbd, renderAddButton, editable, addingAction, addAfterKey, pendingKeys, activeKeys, sequenceTimeout, pendingConflictInfo]
   );
   const groupRendererProps = react.useMemo(() => ({
     renderCell,
@@ -5871,14 +6596,15 @@ function ShortcutsModal({
       if (target.closest(".kbd-kbd.editing")) return;
       if (target.closest(".kbd-kbd.editable")) return;
       if (target.closest(".kbd-add-btn")) return;
+      if (target.closest(".kbd-add-inline-btn")) return;
       cancelEditing();
     },
     [editingAction, addingAction, cancelEditing, arrowGroupEditState, cancelArrowGroupEditing]
   );
   const effectiveShowUnbound = showUnbound ?? editable;
   const shortcutGroups = react.useMemo(
-    () => organizeShortcuts(keymap, labels, descriptions, groupNames, groupOrder, ctx?.registry.actionRegistry, effectiveShowUnbound, ctx?.modes, ctx?.activeMode),
-    [keymap, labels, descriptions, groupNames, groupOrder, ctx?.registry.actionRegistry, effectiveShowUnbound, ctx?.modes, ctx?.activeMode]
+    () => organizeShortcuts(keymap, labels, descriptions, groupNames, groupOrder, ctx?.registry.actionRegistry, effectiveShowUnbound, ctx?.modes, ctx?.activeMode, ctx?.registry.getEffectiveMode, ctx?.registry.actions),
+    [keymap, labels, descriptions, groupNames, groupOrder, ctx?.registry.actionRegistry, effectiveShowUnbound, ctx?.modes, ctx?.activeMode, ctx?.registry.getEffectiveMode, ctx?.registry.actions]
   );
   react.useEffect(() => {
     if (!arrowGroupEditState) return;
@@ -5979,33 +6705,58 @@ function ShortcutsModal({
       reset
     }) });
   }
+  const renderShortcutEntry = (entry) => {
+    if (entry.type === "arrowGroup") {
+      return /* @__PURE__ */ jsxRuntime.jsx(
+        ArrowGroupRow,
+        {
+          entry,
+          editable,
+          TooltipComponent: TooltipComponentProp,
+          onStartEditing: startArrowGroupEditing,
+          renderExtraBindings: (actionId2, bindings2) => /* @__PURE__ */ jsxRuntime.jsx(jsxRuntime.Fragment, { children: bindings2.map((key) => renderEditableKbd(actionId2, key, true)) }),
+          arrowGroupEditState,
+          arrowGroupActiveKeys,
+          conflicts,
+          ArrowIconComponent
+        },
+        entry.groupId
+      );
+    }
+    if (entry.type === "actionPair") {
+      return /* @__PURE__ */ jsxRuntime.jsx(
+        ActionPairRow,
+        {
+          entry,
+          renderCell,
+          TooltipComponent: TooltipComponentProp
+        },
+        entry.pairId
+      );
+    }
+    if (entry.type === "actionTriplet") {
+      return /* @__PURE__ */ jsxRuntime.jsx(
+        ActionTripletRow,
+        {
+          entry,
+          renderCell,
+          TooltipComponent: TooltipComponentProp
+        },
+        entry.tripletId
+      );
+    }
+    const { actionId, label, description, bindings } = entry;
+    return /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "kbd-action", children: [
+      description ? /* @__PURE__ */ jsxRuntime.jsx(TooltipComponentProp, { title: description, children: /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-action-label", children: label }) }) : /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-action-label", children: label }),
+      renderCell(actionId, bindings)
+    ] }, actionId);
+  };
   const renderGroup = (group) => {
     const customRenderer = groupRenderers?.[group.name];
     if (customRenderer) {
       return customRenderer({ group, ...groupRendererProps });
     }
-    return group.shortcuts.map((entry) => {
-      if (entry.type === "arrowGroup") {
-        return /* @__PURE__ */ jsxRuntime.jsx(
-          ArrowGroupRow,
-          {
-            entry,
-            editable,
-            TooltipComponent: TooltipComponentProp,
-            onStartEditing: startArrowGroupEditing,
-            renderExtraBindings: (actionId2, bindings2) => /* @__PURE__ */ jsxRuntime.jsx(jsxRuntime.Fragment, { children: bindings2.map((key) => renderEditableKbd(actionId2, key, true)) }),
-            arrowGroupEditState,
-            arrowGroupActiveKeys
-          },
-          entry.groupId
-        );
-      }
-      const { actionId, label, description, bindings } = entry;
-      return /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "kbd-action", children: [
-        description ? /* @__PURE__ */ jsxRuntime.jsx(TooltipComponentProp, { title: description, children: /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-action-label", children: label }) }) : /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-action-label", children: label }),
-        renderCell(actionId, bindings)
-      ] }, actionId);
-    });
+    return group.shortcuts.map(renderShortcutEntry);
   };
   return /* @__PURE__ */ jsxRuntime.jsx(TooltipContext.Provider, { value: TooltipComponentProp, children: /* @__PURE__ */ jsxRuntime.jsx("div", { className: backdropClassName, onClick: handleBackdropClick, children: /* @__PURE__ */ jsxRuntime.jsxs("div", { className: modalClassName, role: "dialog", "aria-modal": "true", "aria-label": "Keyboard shortcuts", onClick: handleModalClick, children: [
     /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "kbd-modal-header", children: [
@@ -6017,24 +6768,31 @@ function ShortcutsModal({
       /* @__PURE__ */ jsxRuntime.jsx("span", { children: importError }),
       /* @__PURE__ */ jsxRuntime.jsx("button", { onClick: () => setImportError(null), "aria-label": "Dismiss error", children: "\xD7" })
     ] }),
-    shortcutGroups.map((group) => /* @__PURE__ */ jsxRuntime.jsxs(
+    shortcutGroups.filter((g) => !g.mode).map((group) => /* @__PURE__ */ jsxRuntime.jsxs(
       "div",
       {
-        className: `kbd-group${group.mode ? " kbd-mode-group" : ""}`,
-        style: group.mode?.color ? { "--kbd-mode-color": group.mode.color } : void 0,
+        className: "kbd-group",
         children: [
-          /* @__PURE__ */ jsxRuntime.jsxs("h3", { className: "kbd-group-title", children: [
-            group.name,
-            group.mode?.activationBindings?.map((binding) => /* @__PURE__ */ jsxRuntime.jsx("kbd", { className: "kbd-kbd kbd-mode-activation", children: parseKeySeq(binding).map((elem, i) => /* @__PURE__ */ jsxRuntime.jsxs(react.Fragment, { children: [
-              i > 0 && /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-sequence-sep", children: " " }),
-              /* @__PURE__ */ jsxRuntime.jsx(SeqElemDisplay2, { elem })
-            ] }, i)) }, binding))
-          ] }),
+          /* @__PURE__ */ jsxRuntime.jsx("h3", { className: "kbd-group-title", children: group.name }),
           renderGroup(group)
         ]
       },
       group.name
     )),
+    ctx && ctx.modes.size > 0 && (() => {
+      const modeGroups = shortcutGroups.filter((g) => g.mode);
+      if (modeGroups.length === 0) return null;
+      return /* @__PURE__ */ jsxRuntime.jsx(
+        ModesSection,
+        {
+          modeGroups,
+          editable,
+          registry: ctx.registry,
+          actionRegistry: ctx.registry.actionRegistry,
+          renderShortcutEntry
+        }
+      );
+    })(),
     editable && (handleExport || handleImport || handleReset) && (footerContent !== null && (footerContent ? footerContent({
       exportBindings: hasCustomizations ? handleExport : void 0,
       importBindings: handleImport ? () => importInputRef.current?.click() : void 0,
@@ -6146,9 +6904,13 @@ exports.ACTION_MODE_PREFIX = ACTION_MODE_PREFIX;
 exports.ACTION_OMNIBAR = ACTION_OMNIBAR;
 exports.ActionsRegistryContext = ActionsRegistryContext;
 exports.Alt = Alt;
+exports.ArrowsDouble = ArrowsDouble;
+exports.ArrowsDpad = ArrowsDpad;
+exports.ArrowsMove = ArrowsMove;
 exports.Backspace = Backspace;
 exports.Command = Command;
 exports.Ctrl = Ctrl;
+exports.DEFAULT_BUILTIN_GROUP = DEFAULT_BUILTIN_GROUP;
 exports.DEFAULT_SEQUENCE_TIMEOUT = DEFAULT_SEQUENCE_TIMEOUT;
 exports.DIGITS_PLACEHOLDER = DIGITS_PLACEHOLDER;
 exports.DIGIT_PLACEHOLDER = DIGIT_PLACEHOLDER;
@@ -6212,6 +6974,8 @@ exports.parseKeySeq = parseKeySeq;
 exports.parseQueryNumbers = parseQueryNumbers;
 exports.searchActions = searchActions;
 exports.useAction = useAction;
+exports.useActionPair = useActionPair;
+exports.useActionTriplet = useActionTriplet;
 exports.useActions = useActions;
 exports.useActionsRegistry = useActionsRegistry;
 exports.useArrowGroup = useArrowGroup;

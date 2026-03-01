@@ -1,5 +1,5 @@
 import * as react from 'react';
-import { ReactNode, ComponentType, RefObject, KeyboardEvent as KeyboardEvent$1, SVGProps, CSSProperties } from 'react';
+import { ReactNode, CSSProperties, ComponentType, RefObject, KeyboardEvent as KeyboardEvent$1, SVGProps } from 'react';
 import * as react_jsx_runtime from 'react/jsx-runtime';
 
 /**
@@ -174,6 +174,18 @@ interface ActionDefinition {
         groupId: string;
         direction: Direction;
     };
+    /** Action pair metadata (set by useActionPair) */
+    actionPair?: {
+        pairId: string;
+        index: 0 | 1;
+    };
+    /** Action triplet metadata (set by useActionTriplet) */
+    actionTriplet?: {
+        tripletId: string;
+        index: 0 | 1 | 2;
+    };
+    /** Sort order within group in ShortcutsModal (default: 0, lower = earlier; registration order breaks ties) */
+    sortOrder?: number;
 }
 /** Cardinal direction for arrow key groups */
 type Direction = 'left' | 'right' | 'up' | 'down';
@@ -375,6 +387,30 @@ interface OmnibarEndpointSyncConfig extends OmnibarEndpointConfigBase {
  */
 type OmnibarEndpointConfig = OmnibarEndpointAsyncConfig | OmnibarEndpointSyncConfig;
 /**
+ * User customizations to mode membership (stored as deltas from developer defaults).
+ */
+interface ModeCustomizations {
+    /** Actions added to modes by the user (not part of developer defaults) */
+    additions: Record<string, string[]>;
+    /** Actions removed from their default mode by the user */
+    removals: Record<string, string[]>;
+    /** User-created modes */
+    userModes: Record<string, UserModeConfig>;
+}
+/**
+ * Configuration for a user-created mode.
+ */
+interface UserModeConfig {
+    /** Display label */
+    label: string;
+    /** Accent color */
+    color?: string;
+    /** Activation binding(s) for this mode */
+    bindings?: string[];
+    /** Actions assigned to this mode */
+    actions: string[];
+}
+/**
  * Exported bindings format for import/export functionality.
  * Contains user customizations (overrides and removed defaults).
  */
@@ -389,6 +425,8 @@ interface BindingsExport {
     overrides: Record<string, string | string[]>;
     /** Default bindings that were removed: action → keys (e.g., "nav:goto" → ["g"]) */
     removedDefaults: Record<string, string[]>;
+    /** Mode membership customizations (additions, removals, user-created modes) */
+    modeCustomizations?: ModeCustomizations;
 }
 
 /**
@@ -755,6 +793,32 @@ interface BindingInfo {
  */
 declare function KeybindingEditor({ keymap, defaults, descriptions, onChange, onReset, className, children, }: KeybindingEditorProps): react_jsx_runtime.JSX.Element;
 
+interface KeyIconProps {
+    className?: string;
+    style?: CSSProperties;
+}
+/** Arrow Up icon (↑) */
+declare function Up({ className, style }: KeyIconProps): react_jsx_runtime.JSX.Element;
+/** Arrow Down icon (↓) */
+declare function Down({ className, style }: KeyIconProps): react_jsx_runtime.JSX.Element;
+/** Arrow Left icon (←) */
+declare function Left({ className, style }: KeyIconProps): react_jsx_runtime.JSX.Element;
+/** Arrow Right icon (→) */
+declare function Right({ className, style }: KeyIconProps): react_jsx_runtime.JSX.Element;
+/** Enter/Return icon (↵) */
+declare function Enter({ className, style }: KeyIconProps): react_jsx_runtime.JSX.Element;
+/** Backspace icon (⌫) */
+declare function Backspace({ className, style }: KeyIconProps): react_jsx_runtime.JSX.Element;
+/** Compact 4-way move icon (cross shape with arrow points) */
+declare function ArrowsMove({ className, style }: KeyIconProps): react_jsx_runtime.JSX.Element;
+/** Compact D-pad icon (four filled triangular arrowheads) */
+declare function ArrowsDpad({ className, style }: KeyIconProps): react_jsx_runtime.JSX.Element;
+/** Compact double-headed arrows icon (horizontal + vertical) */
+declare function ArrowsDouble({ className, style }: KeyIconProps): react_jsx_runtime.JSX.Element;
+type KeyIconType = 'arrowup' | 'arrowdown' | 'arrowleft' | 'arrowright' | 'enter' | 'backspace' | 'tab';
+/** Get the icon component for a key, or null if no icon exists */
+declare function getKeyIcon(key: string): ComponentType<KeyIconProps> | null;
+
 /**
  * Props for a tooltip wrapper component.
  * Compatible with MUI Tooltip and similar libraries.
@@ -789,7 +853,25 @@ interface ArrowGroupShortcut {
     /** Extra per-direction bindings (non-arrow, e.g., vim keys) */
     extraBindings: Partial<Record<Direction, string[]>>;
 }
-type ShortcutEntry = ActionShortcut | ArrowGroupShortcut;
+/** An action pair shortcut entry (collapsed from 2 inverse actions) */
+interface ActionPairShortcut {
+    type: 'actionPair';
+    pairId: string;
+    label: string;
+    description?: string;
+    actionIds: [string, string];
+    bindings: [string[], string[]];
+}
+/** An action triplet shortcut entry (collapsed from 3 related actions) */
+interface ActionTripletShortcut {
+    type: 'actionTriplet';
+    tripletId: string;
+    label: string;
+    description?: string;
+    actionIds: [string, string, string];
+    bindings: [string[], string[], string[]];
+}
+type ShortcutEntry = ActionShortcut | ArrowGroupShortcut | ActionPairShortcut | ActionTripletShortcut;
 interface ShortcutGroup {
     name: string;
     shortcuts: ShortcutEntry[];
@@ -909,6 +991,12 @@ interface ShortcutsModalProps {
      */
     TooltipComponent?: TooltipComponent;
     /**
+     * Compact arrow icon for arrow group rows.
+     * Built-in options: 'move' (default), 'dpad', 'double'.
+     * Or pass a custom component with KeyIconProps.
+     */
+    arrowIcon?: 'move' | 'dpad' | 'double' | ComponentType<KeyIconProps>;
+    /**
      * Custom footer content. Return `null` to hide the default footer.
      * Receives default footer actions for composition.
      */
@@ -934,43 +1022,7 @@ interface ShortcutsModalRenderProps {
     removeBinding: (action: string, key: string) => void;
     reset: () => void;
 }
-/**
- * Modal for displaying all keyboard shortcuts, organized by group.
- *
- * Opens by default with `?` key. Shows all registered actions and their bindings,
- * grouped by category (e.g., "Navigation", "Edit", "Global").
- *
- * Features:
- * - **Editable bindings**: Click any shortcut to rebind it (when `editable` is true)
- * - **Conflict detection**: Warns when a binding conflicts with existing shortcuts
- * - **Custom group renderers**: Use `groupRenderers` for custom layouts (e.g., two-column for fwd/back pairs)
- * - **Persistence**: Integrates with HotkeysProvider's localStorage persistence
- *
- * Unlike Omnibar (search-first) or LookupModal (type keys to filter), ShortcutsModal
- * shows everything at once in a browsable, organized view.
- *
- * Styled via CSS custom properties: --kbd-bg, --kbd-text, --kbd-kbd-bg, etc.
- *
- * @example
- * ```tsx
- * // Basic usage with HotkeysProvider (recommended)
- * <HotkeysProvider>
- *   <App />
- *   <ShortcutsModal editable />
- * </HotkeysProvider>
- *
- * // Standalone with explicit props
- * <ShortcutsModal
- *   keymap={keymap}
- *   defaults={DEFAULT_KEYMAP}
- *   labels={labels}
- *   editable
- *   onBindingChange={(action, oldKey, newKey) => updateBinding(action, newKey)}
- *   onBindingRemove={(action, key) => removeBinding(action, key)}
- * />
- * ```
- */
-declare function ShortcutsModal({ keymap: keymapProp, defaults: defaultsProp, labels: labelsProp, descriptions: descriptionsProp, groups: groupNamesProp, groupOrder, groupRenderers, isOpen: isOpenProp, onClose: onCloseProp, defaultBinding, editable: editableProp, onBindingChange, onBindingAdd, onBindingRemove, onReset, onExport, onImport, multipleBindings, children, backdropClassName, modalClassName, title, hint, showUnbound, TooltipComponent: TooltipComponentProp, footerContent, }: ShortcutsModalProps): react_jsx_runtime.JSX.Element | null;
+declare function ShortcutsModal({ keymap: keymapProp, defaults: defaultsProp, labels: labelsProp, descriptions: descriptionsProp, groups: groupNamesProp, groupOrder, groupRenderers, isOpen: isOpenProp, onClose: onCloseProp, defaultBinding, editable: editableProp, onBindingChange, onBindingAdd, onBindingRemove, onReset, onExport, onImport, multipleBindings, children, backdropClassName, modalClassName, title, hint, showUnbound, TooltipComponent: TooltipComponentProp, arrowIcon: arrowIconProp, footerContent, }: ShortcutsModalProps): react_jsx_runtime.JSX.Element | null;
 
 /**
  * Configuration for a row in a two-column table
@@ -1252,9 +1304,13 @@ interface KeyConflict {
  * - Prefix: one hotkey is a prefix of another (e.g., "2" and "2 w")
  *
  * @param keymap - HotkeyMap to check for conflicts
+ * @param getEffectiveMode - Optional function to get the mode scope of an action.
+ *   When provided, two actions on the same key only conflict if they share the
+ *   same scope (both global/undefined, or both in the same mode ID).
+ *   Cross-scope overlap (e.g., global vs mode-scoped) is intentional shadowing.
  * @returns Map of key -> actions[] for keys with conflicts
  */
-declare function findConflicts(keymap: Record<string, string | string[]>): Map<string, string[]>;
+declare function findConflicts(keymap: Record<string, string | string[]>, getEffectiveMode?: (actionId: string) => string | undefined): Map<string, string[]>;
 /**
  * Check if a keymap has any conflicts
  */
@@ -1388,6 +1444,18 @@ interface ActionConfig {
         groupId: string;
         direction: Direction;
     };
+    /** Action pair metadata (set by useActionPair) */
+    actionPair?: {
+        pairId: string;
+        index: 0 | 1;
+    };
+    /** Action triplet metadata (set by useActionTriplet) */
+    actionTriplet?: {
+        tripletId: string;
+        index: 0 | 1 | 2;
+    };
+    /** Sort order within group in ShortcutsModal (default: 0, lower = earlier; registration order breaks ties) */
+    sortOrder?: number;
 }
 /**
  * Register an action with the hotkeys system.
@@ -1468,6 +1536,16 @@ interface ActionsRegistryValue {
     exportBindings: () => BindingsExport;
     /** Import binding customizations from JSON (replaces current customizations) */
     importBindings: (data: BindingsExport) => void;
+    /** Mode customizations (user edits to mode membership) */
+    modeCustomizations: ModeCustomizations;
+    /** Set mode customizations (persisted) */
+    setModeCustomizations: (update: ModeCustomizations | ((prev: ModeCustomizations) => ModeCustomizations)) => void;
+    /** Get the effective mode for an action (considering customizations) */
+    getEffectiveMode: (actionId: string) => string | undefined;
+    /** Add an action to a mode */
+    addActionToMode: (actionId: string, modeId: string) => void;
+    /** Remove an action from its mode */
+    removeActionFromMode: (actionId: string, modeId: string) => void;
 }
 declare const ActionsRegistryContext: react.Context<ActionsRegistryValue | null>;
 interface UseActionsRegistryOptions {
@@ -1511,6 +1589,8 @@ interface HotkeysConfig {
     storageKey?: string;
     /** Timeout in ms before a sequence auto-submits (default: Infinity, no timeout) */
     sequenceTimeout?: number;
+    /** Group name for built-in actions: shortcuts modal, omnibar, key lookup (default: "Meta") */
+    builtinGroup?: string;
     /** When true, keys with conflicts are disabled (default: true) */
     disableConflicts?: boolean;
     /** Minimum viewport width to enable hotkeys (default: false = no viewport restriction) */
@@ -1524,6 +1604,8 @@ interface HotkeysConfig {
 interface HotkeysContextValue {
     /** Storage key used for persisting bindings (useful for export filename) */
     storageKey: string;
+    /** Group name for built-in actions (shortcuts modal, omnibar, key lookup) */
+    builtinGroup: string;
     /** The actions registry */
     registry: ActionsRegistryValue;
     /** The omnibar endpoints registry */
@@ -1675,6 +1757,81 @@ interface ArrowGroupConfig {
  * ```
  */
 declare function useArrowGroup(id: string, config: ArrowGroupConfig): void;
+
+interface ActionPairEntry {
+    defaultBindings?: string[];
+    handler: ActionHandler;
+    keywords?: string[];
+    enabled?: boolean;
+}
+interface ActionPairConfig {
+    label: string;
+    group?: string;
+    mode?: string;
+    description?: string;
+    actions: [ActionPairEntry, ActionPairEntry];
+    enabled?: boolean;
+    keywords?: string[];
+}
+/**
+ * Register two inverse actions as a pair, displayed as a single compact row
+ * in ShortcutsModal.
+ *
+ * Creates actions `{id}-a` and `{id}-b`, each with their own bindings and
+ * handler. The pair is collapsed into a single row with a `/` separator
+ * between the two binding groups.
+ *
+ * @example
+ * ```tsx
+ * useActionPair('view:zoom', {
+ *   label: 'Zoom in / out',
+ *   group: '3D: View',
+ *   actions: [
+ *     { defaultBindings: ['='], handler: zoomIn },
+ *     { defaultBindings: ['-'], handler: zoomOut },
+ *   ],
+ * })
+ * ```
+ */
+declare function useActionPair(id: string, config: ActionPairConfig): void;
+
+interface ActionTripletEntry {
+    defaultBindings?: string[];
+    handler: ActionHandler;
+    keywords?: string[];
+    enabled?: boolean;
+}
+interface ActionTripletConfig {
+    label: string;
+    group?: string;
+    mode?: string;
+    description?: string;
+    actions: [ActionTripletEntry, ActionTripletEntry, ActionTripletEntry];
+    enabled?: boolean;
+    keywords?: string[];
+}
+/**
+ * Register three related actions as a triplet, displayed as a single compact
+ * row in ShortcutsModal.
+ *
+ * Creates actions `{id}-a`, `{id}-b`, and `{id}-c`, each with their own
+ * bindings and handler. The triplet is collapsed into a single row with `/`
+ * separators between the three binding groups.
+ *
+ * @example
+ * ```tsx
+ * useActionTriplet('slice', {
+ *   label: 'Slice along X / Y / Z',
+ *   group: '3D: Edit',
+ *   actions: [
+ *     { defaultBindings: ['x'], handler: sliceX },
+ *     { defaultBindings: ['y'], handler: sliceY },
+ *     { defaultBindings: ['z'], handler: sliceZ },
+ *   ],
+ * })
+ * ```
+ */
+declare function useActionTriplet(id: string, config: ActionTripletConfig): void;
 
 /**
  * Register a keyboard mode (sticky shortcut scope).
@@ -2050,8 +2207,15 @@ interface SpeedDialProps {
     ariaLabel?: string;
     /** Custom CSS class for the container */
     className?: string;
+    /**
+     * How to display the expand/collapse chevron:
+     * - 'separate' (default): standalone button above the primary button
+     * - 'badge': small overlapping badge on the primary button's top edge
+     * - 'none': no chevron; expand via hover/long-press only
+     */
+    chevronMode?: 'separate' | 'badge' | 'none';
 }
-declare function SpeedDial({ actions, showShortcuts, position, longPressDuration, primaryIcon, ariaLabel, className, }: SpeedDialProps): react_jsx_runtime.JSX.Element | null;
+declare function SpeedDial({ actions, showShortcuts, position, longPressDuration, primaryIcon, ariaLabel, className, chevronMode, }: SpeedDialProps): react_jsx_runtime.JSX.Element | null;
 
 interface SearchTriggerProps {
     /**
@@ -2144,26 +2308,6 @@ declare const ModifierIcon: react.ForwardRefExoticComponent<Omit<ModifierIconPro
     modifier: ModifierType;
 }, "ref"> & react.RefAttributes<SVGSVGElement>>;
 
-interface KeyIconProps {
-    className?: string;
-    style?: CSSProperties;
-}
-/** Arrow Up icon (↑) */
-declare function Up({ className, style }: KeyIconProps): react_jsx_runtime.JSX.Element;
-/** Arrow Down icon (↓) */
-declare function Down({ className, style }: KeyIconProps): react_jsx_runtime.JSX.Element;
-/** Arrow Left icon (←) */
-declare function Left({ className, style }: KeyIconProps): react_jsx_runtime.JSX.Element;
-/** Arrow Right icon (→) */
-declare function Right({ className, style }: KeyIconProps): react_jsx_runtime.JSX.Element;
-/** Enter/Return icon (↵) */
-declare function Enter({ className, style }: KeyIconProps): react_jsx_runtime.JSX.Element;
-/** Backspace icon (⌫) */
-declare function Backspace({ className, style }: KeyIconProps): react_jsx_runtime.JSX.Element;
-type KeyIconType = 'arrowup' | 'arrowdown' | 'arrowleft' | 'arrowright' | 'enter' | 'backspace' | 'tab';
-/** Get the icon component for a key, or null if no icon exists */
-declare function getKeyIcon(key: string): ComponentType<KeyIconProps> | null;
-
 /**
  * Default timeout for key sequences (no timeout).
  * Set to a finite number (ms) to auto-submit sequences after that duration.
@@ -2177,9 +2321,14 @@ declare const ACTION_MODAL = "__hotkeys:modal";
 declare const ACTION_OMNIBAR = "__hotkeys:omnibar";
 declare const ACTION_LOOKUP = "__hotkeys:lookup";
 /**
+ * Default group name for built-in actions (shortcuts modal, omnibar, lookup).
+ * Override via `builtinGroup` in HotkeysConfig.
+ */
+declare const DEFAULT_BUILTIN_GROUP = "Meta";
+/**
  * Prefix for mode activation actions.
  * Mode activation actions are registered with ID `__mode:{modeId}`.
  */
 declare const ACTION_MODE_PREFIX = "__mode:";
 
-export { ACTION_LOOKUP, ACTION_MODAL, ACTION_MODE_PREFIX, ACTION_OMNIBAR, type ActionConfig, type ActionDefinition, type ActionHandler, type ActionRegistry, type ActionSearchResult, type ActionShortcut, ActionsRegistryContext, type ActionsRegistryValue, Alt, type ArrowGroupConfig, type ArrowGroupShortcut, Backspace, type BindingInfo, type BindingsExport, Command, Ctrl, DEFAULT_SEQUENCE_TIMEOUT, DIGITS_PLACEHOLDER, DIGIT_PLACEHOLDER, type Direction, Down, type EndpointPagination, type EndpointPaginationInfo, type EndpointPaginationMode, type EndpointQueryResult, type EndpointResponse, Enter, FLOAT_PLACEHOLDER, type FuzzyMatchResult, type GroupRenderer, type GroupRendererProps, type HandlerMap, type HotkeyHandler, type HotkeyMap, type HotkeySequence, type HotkeysConfig, type HotkeysContextValue, HotkeysProvider, type HotkeysProviderProps, Kbd, KbdLookup, KbdModal, KbdOmnibar, type KbdProps, Kbds, Key, type KeyCombination, type KeyCombinationDisplay, type KeyConflict, type KeyIconProps, type KeyIconType, type KeySeq, KeybindingEditor, type KeybindingEditorProps, type KeybindingEditorRenderProps, Left, LookupModal, MobileFAB, type MobileFABProps, type ModeConfig, ModeIndicator, type ModeIndicatorPosition, type ModeIndicatorProps, type ModeState, ModesRegistryContext, type ModesRegistryValue, ModifierIcon, type ModifierIconProps, type ModifierName, type ModifierType, type Modifiers, Omnibar, type OmnibarActionEntry, type OmnibarEndpointAsyncConfig, type OmnibarEndpointConfig, type OmnibarEndpointConfigBase, type OmnibarEndpointSyncConfig, OmnibarEndpointsRegistryContext, type OmnibarEndpointsRegistryValue, type OmnibarEntry, type OmnibarEntryBase, type OmnibarLinkEntry, type OmnibarProps, type OmnibarRenderProps, Option, type PendingAction, type RecordHotkeyOptions, type RecordHotkeyResult, type RegisteredAction, type RegisteredEndpoint, type RegisteredMode, type RemoteOmnibarResult, Right, SearchIcon, SearchTrigger, type SearchTriggerProps, type SeqElem, type SeqElemState, type SeqMatchState, type SequenceCompletion, SequenceModal, Shift, type ShortcutEntry, type ShortcutGroup, ShortcutsModal, type ShortcutsModalProps, type ShortcutsModalRenderProps, SpeedDial, type SpeedDialAction, type SpeedDialProps, type TooltipComponent, type TooltipProps, type TwoColumnConfig, type TwoColumnRow, Up, type UseEditableHotkeysOptions, type UseEditableHotkeysResult, type UseHotkeysOptions, type UseHotkeysResult, type UseOmnibarOptions, type UseOmnibarResult, type UseParamEntryOptions, type UseParamEntryReturn, bindingHasPlaceholders, countPlaceholders, createTwoColumnRenderer, extractCaptures, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, formatKeySeq, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasAnyPlaceholderBindings, hasConflicts, hasDigitPlaceholders, hotkeySequenceToKeySeq, isDigitPlaceholder, isMac, isModifierKey, isPlaceholderSentinel, isSequence, isShiftedSymbol, keySeqToHotkeySequence, normalizeKey, parseHotkeyString, parseKeySeq, parseQueryNumbers, searchActions, useAction, useActions, useActionsRegistry, useArrowGroup, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useMode, useModesRegistry, useOmnibar, useOmnibarEndpoint, useOmnibarEndpointsRegistry, useParamEntry, useRecordHotkey };
+export { ACTION_LOOKUP, ACTION_MODAL, ACTION_MODE_PREFIX, ACTION_OMNIBAR, type ActionConfig, type ActionDefinition, type ActionHandler, type ActionPairConfig, type ActionPairEntry, type ActionPairShortcut, type ActionRegistry, type ActionSearchResult, type ActionShortcut, type ActionTripletConfig, type ActionTripletEntry, type ActionTripletShortcut, ActionsRegistryContext, type ActionsRegistryValue, Alt, type ArrowGroupConfig, type ArrowGroupShortcut, ArrowsDouble, ArrowsDpad, ArrowsMove, Backspace, type BindingInfo, type BindingsExport, Command, Ctrl, DEFAULT_BUILTIN_GROUP, DEFAULT_SEQUENCE_TIMEOUT, DIGITS_PLACEHOLDER, DIGIT_PLACEHOLDER, type Direction, Down, type EndpointPagination, type EndpointPaginationInfo, type EndpointPaginationMode, type EndpointQueryResult, type EndpointResponse, Enter, FLOAT_PLACEHOLDER, type FuzzyMatchResult, type GroupRenderer, type GroupRendererProps, type HandlerMap, type HotkeyHandler, type HotkeyMap, type HotkeySequence, type HotkeysConfig, type HotkeysContextValue, HotkeysProvider, type HotkeysProviderProps, Kbd, KbdLookup, KbdModal, KbdOmnibar, type KbdProps, Kbds, Key, type KeyCombination, type KeyCombinationDisplay, type KeyConflict, type KeyIconProps, type KeyIconType, type KeySeq, KeybindingEditor, type KeybindingEditorProps, type KeybindingEditorRenderProps, Left, LookupModal, MobileFAB, type MobileFABProps, type ModeConfig, type ModeCustomizations, ModeIndicator, type ModeIndicatorPosition, type ModeIndicatorProps, type ModeState, ModesRegistryContext, type ModesRegistryValue, ModifierIcon, type ModifierIconProps, type ModifierName, type ModifierType, type Modifiers, Omnibar, type OmnibarActionEntry, type OmnibarEndpointAsyncConfig, type OmnibarEndpointConfig, type OmnibarEndpointConfigBase, type OmnibarEndpointSyncConfig, OmnibarEndpointsRegistryContext, type OmnibarEndpointsRegistryValue, type OmnibarEntry, type OmnibarEntryBase, type OmnibarLinkEntry, type OmnibarProps, type OmnibarRenderProps, Option, type PendingAction, type RecordHotkeyOptions, type RecordHotkeyResult, type RegisteredAction, type RegisteredEndpoint, type RegisteredMode, type RemoteOmnibarResult, Right, SearchIcon, SearchTrigger, type SearchTriggerProps, type SeqElem, type SeqElemState, type SeqMatchState, type SequenceCompletion, SequenceModal, Shift, type ShortcutEntry, type ShortcutGroup, ShortcutsModal, type ShortcutsModalProps, type ShortcutsModalRenderProps, SpeedDial, type SpeedDialAction, type SpeedDialProps, type TooltipComponent, type TooltipProps, type TwoColumnConfig, type TwoColumnRow, Up, type UseEditableHotkeysOptions, type UseEditableHotkeysResult, type UseHotkeysOptions, type UseHotkeysResult, type UseOmnibarOptions, type UseOmnibarResult, type UseParamEntryOptions, type UseParamEntryReturn, type UserModeConfig, bindingHasPlaceholders, countPlaceholders, createTwoColumnRenderer, extractCaptures, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, formatKeySeq, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasAnyPlaceholderBindings, hasConflicts, hasDigitPlaceholders, hotkeySequenceToKeySeq, isDigitPlaceholder, isMac, isModifierKey, isPlaceholderSentinel, isSequence, isShiftedSymbol, keySeqToHotkeySequence, normalizeKey, parseHotkeyString, parseKeySeq, parseQueryNumbers, searchActions, useAction, useActionPair, useActionTriplet, useActions, useActionsRegistry, useArrowGroup, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useMode, useModesRegistry, useOmnibar, useOmnibarEndpoint, useOmnibarEndpointsRegistry, useParamEntry, useRecordHotkey };
