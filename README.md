@@ -118,6 +118,60 @@ useAction('app:shortcuts', {
 })
 ```
 
+Control display order within a group with `sortOrder` (lower values appear first; default `0`, ties broken by registration order):
+
+```tsx
+useAction('app:shortcuts', {
+  label: 'Show shortcuts',
+  sortOrder: 0,   // Appears first
+  // ...
+})
+useAction('app:omnibar', {
+  label: 'Command palette',
+  sortOrder: 1,   // Appears second
+  // ...
+})
+```
+
+### Action Pairs
+
+Collapse two inverse actions into a single compact row in `ShortcutsModal` with `useActionPair`:
+
+```tsx
+import { useActionPair } from 'use-kbd'
+
+useActionPair('view:zoom', {
+  label: 'Zoom in / out',
+  group: 'View',
+  actions: [
+    { defaultBindings: ['='], handler: () => zoomIn() },
+    { defaultBindings: ['-'], handler: () => zoomOut() },
+  ],
+})
+```
+
+Creates `view:zoom-a` and `view:zoom-b` actions, displayed as one row: `Zoom in / out    [=] / [-]`
+
+### Action Triplets
+
+Same pattern for three related actions with `useActionTriplet`:
+
+```tsx
+import { useActionTriplet } from 'use-kbd'
+
+useActionTriplet('view:slice', {
+  label: 'Slice along X / Y / Z',
+  group: 'View',
+  actions: [
+    { defaultBindings: ['x'], handler: () => sliceX() },
+    { defaultBindings: ['y'], handler: () => sliceY() },
+    { defaultBindings: ['z'], handler: () => sliceZ() },
+  ],
+})
+```
+
+Creates `view:slice-a`, `-b`, `-c` actions, displayed as: `Slice along X / Y / Z    [X] / [Y] / [Z]`
+
 ### Sequences
 
 Multi-key sequences like Vim's `g g` (go to top) are supported:
@@ -307,6 +361,7 @@ Wrap your app to enable the hotkeys system:
   sequenceTimeout: Infinity,  // ms before sequence times out (default: no timeout)
   disableConflicts: false,    // Disable keys with multiple actions (default: false)
   enableOnTouch: false,       // Enable hotkeys on touch devices (default: false)
+  builtinGroup: 'Meta',       // Group name for built-in actions (default: 'Meta')
 }}>
   {children}
 </HotkeysProvider>
@@ -595,6 +650,14 @@ useOmnibarEndpoint('filters', {
   }),
 })
 ```
+
+### `useActionPair(id, config)`
+
+Register two inverse actions as a compact pair. See [Action Pairs](#action-pairs).
+
+### `useActionTriplet(id, config)`
+
+Register three related actions as a compact triplet. See [Action Triplets](#action-triplets).
 
 ### `useEditableHotkeys(defaults, handlers, options?)`
 
