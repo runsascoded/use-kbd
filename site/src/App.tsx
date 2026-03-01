@@ -14,6 +14,7 @@ import { Home } from './routes/Home'
 import { TableDemo } from './routes/TableDemo'
 import { CanvasDemo } from './routes/CanvasDemo'
 import { CalendarDemo } from './routes/CalendarDemo'
+import { ThreeDDemo } from './routes/ThreeDDemo'
 
 function AppNav() {
   const location = useLocation()
@@ -49,6 +50,16 @@ function AppNav() {
         defaultBinding="g c"
       >
         Canvas
+      </ActionLink>
+      <ActionLink
+        to="/3d"
+        className={location.pathname === '/3d' ? 'active' : ''}
+        label="3D Viewer"
+        group="Navigation"
+        keywords={['viewer', 'cube', '3d', 'orbit', 'pan']}
+        defaultBinding="g 3"
+      >
+        3D
       </ActionLink>
       <ActionLink
         to="/calendar"
@@ -99,6 +110,7 @@ function AppContent() {
           <Route path="/" element={<Home />} />
           <Route path="/table" element={<TableDemo />} />
           <Route path="/canvas" element={<CanvasDemo />} />
+          <Route path="/3d" element={<ThreeDDemo />} />
           <Route path="/calendar" element={<CalendarDemo />} />
         </Routes>
       </main>

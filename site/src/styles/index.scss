@@ -15,4 +15,5 @@
 @use 'shared';
 @use 'table';
 @use 'canvas';
+@use '3d' as viewer;
 @use 'calendar';

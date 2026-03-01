@@ -1,0 +1,47 @@
+// 3D Viewer Demo styles
+// Demonstrates: orbit/pan modes, arrow groups, mode indicators
+
+.route-3d {
+  .kbd-modal {
+    max-width: 400px;
+  }
+
+  .kbd-action {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  .kbd-group-title {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}
+
+.viewer-app {
+  max-width: 900px;
+}
+
+.viewer-container {
+  width: 100%;
+  height: 500px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  margin: 1rem 0 0.5rem;
+
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+}
+
+.viewer-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-family: monospace;
+  font-size: 13px;
+  padding: 8px 0;
+  color: var(--text-secondary);
+}
