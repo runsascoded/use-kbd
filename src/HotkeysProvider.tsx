@@ -172,6 +172,28 @@ export function HotkeysProvider({
   // Create the omnibar endpoints registry
   const endpointsRegistry = useOmnibarEndpointsRegistry()
 
+  // Register user-created modes dynamically
+  const userModes = registry.modeCustomizations.userModes
+  useEffect(() => {
+    const ids: string[] = []
+    for (const [id, config] of Object.entries(userModes)) {
+      modesRegistry.register(id, {
+        label: config.label,
+        color: config.color,
+        defaultBindings: config.bindings ?? [],
+        toggle: true,
+        escapeExits: true,
+        passthrough: true,
+      })
+      ids.push(id)
+    }
+    return () => {
+      for (const id of ids) {
+        modesRegistry.unregister(id)
+      }
+    }
+  }, [userModes, modesRegistry])
+
   // Check if hotkeys should be enabled
   const [isEnabled, setIsEnabled] = useState(true)
 
@@ -340,8 +362,8 @@ export function HotkeysProvider({
   // Use registry keymap directly
   const keymap = registry.keymap
 
-  // Compute conflicts
-  const conflicts = useMemo(() => findConflicts(keymap), [keymap])
+  // Compute conflicts (mode-aware: cross-scope overlaps are intentional shadowing)
+  const conflicts = useMemo(() => findConflicts(keymap, registry.getEffectiveMode), [keymap, registry.getEffectiveMode])
   const hasConflicts = conflicts.size > 0
 
   // Mode-aware effective keymap
@@ -367,8 +389,7 @@ export function HotkeysProvider({
     for (const [key, actionOrActions] of Object.entries(baseKeymap)) {
       const actions = Array.isArray(actionOrActions) ? actionOrActions : [actionOrActions]
       const filtered = actions.filter(id => {
-        const action = registry.actions.get(id)
-        const actionMode = action?.config.mode
+        const actionMode = registry.getEffectiveMode(id)
         if (!actionMode) return true                          // global: always include
         if (actionMode === activeMode) return true            // active mode: include
         if (id.startsWith(ACTION_MODE_PREFIX)) return true    // mode activators: always
@@ -378,7 +399,7 @@ export function HotkeysProvider({
 
       // If mode action shadows global on same key, keep only mode action
       if (activeMode && activeModeConfig?.passthrough !== false) {
-        const modeActions = filtered.filter(id => registry.actions.get(id)?.config.mode === activeMode)
+        const modeActions = filtered.filter(id => registry.getEffectiveMode(id) === activeMode)
         if (modeActions.length > 0) {
           result[key] = modeActions.length === 1 ? modeActions[0] : modeActions
           continue
@@ -449,8 +470,7 @@ export function HotkeysProvider({
 
   // Wrap execute to track recents + auto-activate mode for mode-scoped actions
   const executeAction = useCallback((id: string, captures?: number[]) => {
-    const action = registry.actions.get(id)
-    const actionMode = action?.config.mode
+    const actionMode = registry.getEffectiveMode(id)
     if (actionMode && modesRegistry.activeMode !== actionMode) {
       modesRegistry.activateMode(actionMode)
     }

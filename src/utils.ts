@@ -650,9 +650,16 @@ function keySeqsCouldConflict(a: KeySeq, b: KeySeq): boolean {
  * - Prefix: one hotkey is a prefix of another (e.g., "2" and "2 w")
  *
  * @param keymap - HotkeyMap to check for conflicts
+ * @param getEffectiveMode - Optional function to get the mode scope of an action.
+ *   When provided, two actions on the same key only conflict if they share the
+ *   same scope (both global/undefined, or both in the same mode ID).
+ *   Cross-scope overlap (e.g., global vs mode-scoped) is intentional shadowing.
  * @returns Map of key -> actions[] for keys with conflicts
  */
-export function findConflicts(keymap: Record<string, string | string[]>): Map<string, string[]> {
+export function findConflicts(
+  keymap: Record<string, string | string[]>,
+  getEffectiveMode?: (actionId: string) => string | undefined,
+): Map<string, string[]> {
   const conflicts = new Map<string, string[]>()
 
   // Parse all hotkeys into sequences for comparison
@@ -663,6 +670,12 @@ export function findConflicts(keymap: Record<string, string | string[]>): Map<st
     actions: Array.isArray(actionOrActions) ? actionOrActions : [actionOrActions],
   }))
 
+  // Helper: check if two actions share the same mode scope
+  const sameScope = (a: string, b: string): boolean => {
+    if (!getEffectiveMode) return true
+    return getEffectiveMode(a) === getEffectiveMode(b)
+  }
+
   // Check for duplicate keys (multiple actions on same key)
   const keyToActions = new Map<string, string[]>()
   for (const { key, actions } of entries) {
@@ -671,8 +684,35 @@ export function findConflicts(keymap: Record<string, string | string[]>): Map<st
   }
   for (const [key, actions] of keyToActions) {
     if (actions.length > 1) {
-      conflicts.set(key, actions)
+      // With mode awareness, only flag actions that share the same scope
+      if (getEffectiveMode) {
+        const scopeGroups = new Map<string | undefined, string[]>()
+        for (const action of actions) {
+          const scope = getEffectiveMode(action)
+          const group = scopeGroups.get(scope) ?? []
+          group.push(action)
+          scopeGroups.set(scope, group)
+        }
+        for (const group of scopeGroups.values()) {
+          if (group.length > 1) {
+            conflicts.set(key, group)
+          }
+        }
+      } else {
+        conflicts.set(key, actions)
+      }
     }
+  }
+
+  // Helper: check if any action pair across two entries shares mode scope
+  const anySharedScope = (aActions: string[], bActions: string[]): boolean => {
+    if (!getEffectiveMode) return true
+    for (const a of aActions) {
+      for (const b of bActions) {
+        if (getEffectiveMode(a) === getEffectiveMode(b)) return true
+      }
+    }
+    return false
   }
 
   // Check for pattern conflicts and prefix conflicts
@@ -680,6 +720,9 @@ export function findConflicts(keymap: Record<string, string | string[]>): Map<st
     for (let j = i + 1; j < entries.length; j++) {
       const a = entries[i]
       const b = entries[j]
+
+      // Skip cross-scope pairs (intentional mode shadowing, not conflict)
+      if (!anySharedScope(a.actions, b.actions)) continue
 
       // Check for exact conflict (including digit patterns)
       if (keySeqsCouldConflict(a.keySeq, b.keySeq) && a.key !== b.key) {
