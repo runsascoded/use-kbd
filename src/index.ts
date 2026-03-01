@@ -12,6 +12,7 @@ export type {
   KeyCombinationDisplay,
   KeySeq,
   ModeConfig,
+  ModeCustomizations,
   ModeState,
   Modifiers,
   OmnibarActionEntry,
@@ -26,6 +27,7 @@ export type {
   RecordHotkeyResult,
   RegisteredMode,
   SeqElem,
+  UserModeConfig,
   SeqElemState,
   SeqMatchState,
   SequenceCompletion,
@@ -112,6 +114,9 @@ export {
   Right,
   Enter,
   Backspace,
+  ArrowsMove,
+  ArrowsDpad,
+  ArrowsDouble,
   getKeyIcon,
 } from './KeyIcons'
 export type { KeyIconProps, KeyIconType } from './KeyIcons'

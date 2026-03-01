@@ -3,11 +3,13 @@ import { ACTION_MODAL, ACTION_MODE_PREFIX, DEFAULT_SEQUENCE_TIMEOUT } from './co
 import { dbg } from './debug'
 import { useMaybeHotkeysContext } from './HotkeysProvider'
 import { renderModifierIcons, renderKeyContent } from './KeyElements'
-import { Left, Right, Up, Down } from './KeyIcons'
+import { Left, Right, Up, Down, ArrowsMove, ArrowsDpad, ArrowsDouble } from './KeyIcons'
+import type { KeyIconProps } from './KeyIcons'
 import { useAction } from './useAction'
 import { useHotkeys } from './useHotkeys'
 import { useRecordHotkey } from './useRecordHotkey'
 import { findConflicts, formatCombination, getActionBindings, parseHotkeyString, parseKeySeq } from './utils'
+import type { ActionsRegistryValue } from './ActionsRegistry'
 import type { ActionRegistry, Direction, HotkeySequence, KeyCombination, KeyCombinationDisplay, Modifiers, RegisteredMode, SeqElem } from './types'
 import type { HotkeyMap } from './useHotkeys'
 
@@ -212,6 +214,12 @@ export interface ShortcutsModalProps {
    */
   TooltipComponent?: TooltipComponent
   /**
+   * Compact arrow icon for arrow group rows.
+   * Built-in options: 'move' (default), 'dpad', 'double'.
+   * Or pass a custom component with KeyIconProps.
+   */
+  arrowIcon?: 'move' | 'dpad' | 'double' | ComponentType<KeyIconProps>
+  /**
    * Custom footer content. Return `null` to hide the default footer.
    * Receives default footer actions for composition.
    */
@@ -265,6 +273,7 @@ function organizeShortcuts(
   showUnbound = true,
   modesMap?: Map<string, RegisteredMode>,
   activeMode?: string | null,
+  getEffectiveMode?: (actionId: string) => string | undefined,
 ): ShortcutGroup[] {
   // Build action -> bindings map
   const actionBindings = getActionBindings(keymap)
@@ -276,7 +285,7 @@ function organizeShortcuts(
     let groupKey: string
 
     // For mode-scoped actions, use mode label as group name
-    const actionMode = actionRegistry?.[actionId]?.mode
+    const actionMode = getEffectiveMode ? getEffectiveMode(actionId) : actionRegistry?.[actionId]?.mode
     if (actionMode && modesMap) {
       const mode = modesMap.get(actionMode)
       if (mode) return mode.config.label
@@ -297,7 +306,7 @@ function organizeShortcuts(
 
   // Helper to get mode metadata for a group
   const getModeForAction = (actionId: string): ShortcutGroup['mode'] => {
-    const actionMode = actionRegistry?.[actionId]?.mode
+    const actionMode = getEffectiveMode ? getEffectiveMode(actionId) : actionRegistry?.[actionId]?.mode
     if (!actionMode || !modesMap) return undefined
     const mode = modesMap.get(actionMode)
     if (!mode) return undefined
@@ -681,6 +690,8 @@ function ArrowGroupRow({
   renderExtraBindings,
   arrowGroupEditState,
   arrowGroupActiveKeys,
+  conflicts,
+  ArrowIconComponent,
 }: {
   entry: ArrowGroupShortcut
   editable: boolean
@@ -689,13 +700,40 @@ function ArrowGroupRow({
   renderExtraBindings: (actionId: string, bindings: string[]) => ReactNode
   arrowGroupEditState: { groupId: string } | null
   arrowGroupActiveKeys: KeyCombination | null
+  conflicts: Map<string, string[]>
+  ArrowIconComponent: ComponentType<KeyIconProps> | null
 }) {
   const isEditing = arrowGroupEditState?.groupId === entry.groupId
   const modifiers = parseModifierPrefix(entry.modifierPrefix)
   const hasModifiers = modifiers.ctrl || modifiers.alt || modifiers.shift || modifiers.meta
 
+  // Check if any arrow binding is conflicted
+  const arrowKeys: Record<Direction, string> = {
+    left: 'arrowleft', right: 'arrowright',
+    up: 'arrowup', down: 'arrowdown',
+  }
+  const hasConflict = DIRECTION_ORDER.some(dir => {
+    const binding = `${entry.modifierPrefix}${arrowKeys[dir]}`
+    return conflicts.has(binding)
+  })
+
   // Collect extra bindings across all directions
   const hasExtras = DIRECTION_ORDER.some(d => (entry.extraBindings[d]?.length ?? 0) > 0)
+
+  // Render arrows: compact icon or 4 individual icons
+  const renderArrows = () => {
+    if (ArrowIconComponent) {
+      return <ArrowIconComponent className="kbd-key-icon kbd-arrow-group-compact" />
+    }
+    return (
+      <span className="kbd-arrow-group-arrows">
+        {DIRECTION_ORDER.map(dir => {
+          const Icon = DIRECTION_ICONS[dir]
+          return <Icon key={dir} className="kbd-key-icon" />
+        })}
+      </span>
+    )
+  }
 
   return (
     <div className="kbd-action kbd-arrow-group-row" data-arrow-group={entry.groupId}>
@@ -708,7 +746,7 @@ function ArrowGroupRow({
       )}
       <span className="kbd-action-bindings">
         <kbd
-          className={`kbd-kbd kbd-arrow-group-binding${editable ? ' editable' : ''}${isEditing ? ' editing' : ''}`}
+          className={`kbd-kbd kbd-arrow-group-binding${editable ? ' editable' : ''}${isEditing ? ' editing' : ''}${hasConflict ? ' conflict' : ''}`}
           onClick={editable ? () => onStartEditing(entry.groupId) : undefined}
           tabIndex={editable ? 0 : undefined}
           onKeyDown={editable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onStartEditing(entry.groupId) } } : undefined}
@@ -718,15 +756,9 @@ function ArrowGroupRow({
               {arrowGroupActiveKeys && (arrowGroupActiveKeys.modifiers.ctrl || arrowGroupActiveKeys.modifiers.alt || arrowGroupActiveKeys.modifiers.shift || arrowGroupActiveKeys.modifiers.meta) ? (
                 <>
                   {renderModifierIcons(arrowGroupActiveKeys.modifiers)}
-                  <span className="kbd-arrow-group-plus">+</span>
                 </>
               ) : null}
-              <span className="kbd-arrow-group-arrows">
-                {DIRECTION_ORDER.map(dir => {
-                  const Icon = DIRECTION_ICONS[dir]
-                  return <Icon key={dir} className="kbd-key-icon" />
-                })}
-              </span>
+              {renderArrows()}
               <span>...</span>
             </>
           ) : (
@@ -734,15 +766,9 @@ function ArrowGroupRow({
               {hasModifiers && (
                 <>
                   {renderModifierIcons(modifiers)}
-                  <span className="kbd-arrow-group-plus">+</span>
                 </>
               )}
-              <span className="kbd-arrow-group-arrows">
-                {DIRECTION_ORDER.map(dir => {
-                  const Icon = DIRECTION_ICONS[dir]
-                  return <Icon key={dir} className="kbd-key-icon" />
-                })}
-              </span>
+              {renderArrows()}
             </>
           )}
         </kbd>
@@ -792,6 +818,176 @@ function ArrowGroupRow({
  * />
  * ```
  */
+
+interface ModesSectionProps {
+  modeGroups: ShortcutGroup[]
+  editable: boolean
+  registry: ActionsRegistryValue
+  actionRegistry: ActionRegistry
+  renderShortcutEntry: (entry: ShortcutEntry) => ReactNode
+}
+
+function ModesSection({ modeGroups, editable, registry, actionRegistry, renderShortcutEntry }: ModesSectionProps) {
+  const [addingToMode, setAddingToMode] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [selectedIndex, setSelectedIndex] = useState(-1)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  const { getEffectiveMode, addActionToMode, removeActionFromMode } = registry
+
+  // Focus search input when opening add-action panel
+  useEffect(() => {
+    if (addingToMode && searchInputRef.current) {
+      searchInputRef.current.focus()
+    }
+  }, [addingToMode])
+
+  // Get global (unassigned) actions for add-to-mode search
+  const globalActions = useMemo(() => {
+    return Object.entries(actionRegistry)
+      .filter(([id, action]) => {
+        if (id.startsWith(ACTION_MODE_PREFIX)) return false
+        if (action.hideFromModal) return false
+        return !getEffectiveMode(id)
+      })
+      .map(([id, action]) => ({ id, label: action.label }))
+  }, [actionRegistry, getEffectiveMode])
+
+  const filteredGlobalActions = useMemo(() => {
+    if (!searchQuery) return globalActions
+    const q = searchQuery.toLowerCase()
+    return globalActions.filter(a =>
+      a.id.toLowerCase().includes(q) || a.label.toLowerCase().includes(q)
+    )
+  }, [globalActions, searchQuery])
+
+  // Reset selected index when filtered results change
+  useEffect(() => {
+    setSelectedIndex(-1)
+  }, [filteredGlobalActions])
+
+  const addAction = useCallback((actionId: string, modeId: string) => {
+    addActionToMode(actionId, modeId)
+    setAddingToMode(null)
+    setSearchQuery('')
+    setSelectedIndex(-1)
+  }, [addActionToMode])
+
+  return (
+    <div className="kbd-modes-section">
+      <h3 className="kbd-modes-title">Modes</h3>
+      {modeGroups.map(group => {
+        const mode = group.mode!
+        return (
+          <div
+            key={group.name}
+            className="kbd-modes-entry"
+            style={mode.color ? { '--kbd-mode-color': mode.color } as React.CSSProperties : undefined}
+          >
+            <div className="kbd-modes-header">
+              <span className="kbd-modes-label" style={mode.color ? { color: mode.color } : undefined}>
+                {group.name}
+              </span>
+              {mode.activationBindings.map(binding => (
+                <kbd key={binding} className="kbd-kbd kbd-modes-binding">
+                  {parseKeySeq(binding).map((elem, i) => (
+                    <Fragment key={i}>
+                      {i > 0 && <span className="kbd-sequence-sep"> </span>}
+                      <SeqElemDisplay elem={elem} />
+                    </Fragment>
+                  ))}
+                </kbd>
+              ))}
+              {mode.color && (
+                <span className="kbd-modes-color" style={{ backgroundColor: mode.color }} />
+              )}
+            </div>
+            <div className="kbd-modes-shortcuts">
+              {group.shortcuts.map((entry) => {
+                const entryKey = entry.type === 'action' ? entry.actionId : entry.groupId
+                const actionIdForRemove = entry.type === 'action' ? entry.actionId : entry.actionIds.left
+                const entryLabel = entry.label
+                return (
+                  <div key={entryKey} className="kbd-modes-action-row">
+                    {renderShortcutEntry(entry)}
+                    {editable && (
+                      <button
+                        className="kbd-modes-remove"
+                        onClick={() => removeActionFromMode(actionIdForRemove, mode.id)}
+                        aria-label={`Remove ${entryLabel} from ${group.name}`}
+                        title="Remove from mode"
+                      >
+                        &times;
+                      </button>
+                    )}
+                  </div>
+                )
+              })}
+              {group.shortcuts.length === 0 && (
+                <div className="kbd-modes-empty">No actions</div>
+              )}
+            </div>
+            {editable && (addingToMode === mode.id ? (
+              <div className="kbd-modes-add-panel">
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  className="kbd-modes-search"
+                  placeholder="Search actions..."
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  onKeyDown={e => {
+                    const items = filteredGlobalActions.slice(0, 8)
+                    if (e.key === 'Escape') {
+                      setAddingToMode(null)
+                      setSearchQuery('')
+                      setSelectedIndex(-1)
+                    } else if (e.key === 'ArrowDown') {
+                      e.preventDefault()
+                      setSelectedIndex(prev => Math.min(prev + 1, items.length - 1))
+                    } else if (e.key === 'ArrowUp') {
+                      e.preventDefault()
+                      setSelectedIndex(prev => Math.max(prev - 1, -1))
+                    } else if (e.key === 'Enter' && selectedIndex >= 0 && selectedIndex < items.length) {
+                      e.preventDefault()
+                      addAction(items[selectedIndex].id, mode.id)
+                    }
+                  }}
+                />
+                <ul className="kbd-modes-search-results">
+                  {filteredGlobalActions.slice(0, 8).map((action, i) => (
+                    <li key={action.id}>
+                      <button
+                        className={`kbd-modes-search-item${i === selectedIndex ? ' selected' : ''}`}
+                        onClick={() => addAction(action.id, mode.id)}
+                      >
+                        {action.label}
+                      </button>
+                    </li>
+                  ))}
+                  {filteredGlobalActions.length === 0 && (
+                    <li className="kbd-modes-no-results">No global actions found</li>
+                  )}
+                </ul>
+              </div>
+            ) : (
+              <button
+                className="kbd-modes-add-btn"
+                onClick={() => {
+                  setAddingToMode(mode.id)
+                  setSearchQuery('')
+                  setSelectedIndex(-1)
+                }}
+              >
+                + Add action...
+              </button>
+            ))}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export function ShortcutsModal({
   keymap: keymapProp,
   defaults: defaultsProp,
@@ -818,10 +1014,25 @@ export function ShortcutsModal({
   hint,
   showUnbound,
   TooltipComponent: TooltipComponentProp = DefaultTooltip,
+  arrowIcon: arrowIconProp,
   footerContent,
 }: ShortcutsModalProps) {
   // Try to get context (returns null if not within HotkeysProvider)
   const ctx = useMaybeHotkeysContext()
+
+  // Resolve arrowIcon prop to a component
+  const ArrowIconComponent = useMemo((): ComponentType<KeyIconProps> | null => {
+    if (!arrowIconProp) return null
+    if (typeof arrowIconProp === 'string') {
+      switch (arrowIconProp) {
+        case 'move': return ArrowsMove
+        case 'dpad': return ArrowsDpad
+        case 'double': return ArrowsDouble
+        default: return null
+      }
+    }
+    return arrowIconProp
+  }, [arrowIconProp])
 
   // Disable editing on touch devices (no physical keyboard to capture)
   const [isTouchDevice, setIsTouchDevice] = useState(false)
@@ -894,9 +1105,15 @@ export function ShortcutsModal({
   const [importError, setImportError] = useState<string | null>(null)
 
   // Check if there are any customizations to export
+  const modeCusts = ctx?.registry.modeCustomizations
   const hasCustomizations = ctx ? (
     Object.keys(ctx.registry.overrides).length > 0 ||
-    Object.keys(ctx.registry.removedDefaults).length > 0
+    Object.keys(ctx.registry.removedDefaults).length > 0 ||
+    (modeCusts && (
+      Object.keys(modeCusts.additions).length > 0 ||
+      Object.keys(modeCusts.removals).length > 0 ||
+      Object.keys(modeCusts.userModes).length > 0
+    ))
   ) : false
 
   const handleExport = onExport ?? (ctx ? () => {
@@ -965,8 +1182,8 @@ export function ShortcutsModal({
   const setIsEditingBindingRef = useRef(ctx?.setIsEditingBinding)
   setIsEditingBindingRef.current = ctx?.setIsEditingBinding
 
-  // Compute conflicts
-  const conflicts = useMemo(() => findConflicts(keymap), [keymap])
+  // Compute conflicts (mode-aware when context is available)
+  const conflicts = useMemo(() => findConflicts(keymap, ctx?.registry.getEffectiveMode), [keymap, ctx?.registry.getEffectiveMode])
   const actionBindings = useMemo(() => getActionBindings(keymap), [keymap])
 
   const close = useCallback(() => {
@@ -1473,8 +1690,8 @@ export function ShortcutsModal({
   // Default showUnbound to true in editable mode, false otherwise
   const effectiveShowUnbound = showUnbound ?? editable
   const shortcutGroups = useMemo(
-    () => organizeShortcuts(keymap, labels, descriptions, groupNames, groupOrder, ctx?.registry.actionRegistry, effectiveShowUnbound, ctx?.modes, ctx?.activeMode),
-    [keymap, labels, descriptions, groupNames, groupOrder, ctx?.registry.actionRegistry, effectiveShowUnbound, ctx?.modes, ctx?.activeMode],
+    () => organizeShortcuts(keymap, labels, descriptions, groupNames, groupOrder, ctx?.registry.actionRegistry, effectiveShowUnbound, ctx?.modes, ctx?.activeMode, ctx?.registry.getEffectiveMode),
+    [keymap, labels, descriptions, groupNames, groupOrder, ctx?.registry.actionRegistry, effectiveShowUnbound, ctx?.modes, ctx?.activeMode, ctx?.registry.getEffectiveMode],
   )
 
   // Arrow group modifier-only recording: listen for keydown/keyup when editing
@@ -1600,6 +1817,47 @@ export function ShortcutsModal({
     )
   }
 
+  // Render a single shortcut entry (action or arrow group)
+  const renderShortcutEntry = (entry: ShortcutEntry): ReactNode => {
+    if (entry.type === 'arrowGroup') {
+      return (
+        <ArrowGroupRow
+          key={entry.groupId}
+          entry={entry}
+          editable={editable}
+          TooltipComponent={TooltipComponentProp}
+          onStartEditing={startArrowGroupEditing}
+          renderExtraBindings={(actionId, bindings) => (
+            <>
+              {bindings.map(key => renderEditableKbd(actionId, key, true))}
+            </>
+          )}
+          arrowGroupEditState={arrowGroupEditState}
+          arrowGroupActiveKeys={arrowGroupActiveKeys}
+          conflicts={conflicts}
+          ArrowIconComponent={ArrowIconComponent}
+        />
+      )
+    }
+    const { actionId, label, description, bindings } = entry
+    return (
+      <div key={actionId} className="kbd-action">
+        {description ? (
+          <TooltipComponentProp title={description}>
+            <span className="kbd-action-label">
+              {label}
+            </span>
+          </TooltipComponentProp>
+        ) : (
+          <span className="kbd-action-label">
+            {label}
+          </span>
+        )}
+        {renderCell(actionId, bindings)}
+      </div>
+    )
+  }
+
   // Render a single group (default or custom)
   const renderGroup = (group: ShortcutGroup) => {
     // Check for custom renderer
@@ -1609,43 +1867,7 @@ export function ShortcutsModal({
     }
 
     // Default single-column rendering
-    return group.shortcuts.map((entry) => {
-      if (entry.type === 'arrowGroup') {
-        return (
-          <ArrowGroupRow
-            key={entry.groupId}
-            entry={entry}
-            editable={editable}
-            TooltipComponent={TooltipComponentProp}
-            onStartEditing={startArrowGroupEditing}
-            renderExtraBindings={(actionId, bindings) => (
-              <>
-                {bindings.map(key => renderEditableKbd(actionId, key, true))}
-              </>
-            )}
-            arrowGroupEditState={arrowGroupEditState}
-            arrowGroupActiveKeys={arrowGroupActiveKeys}
-          />
-        )
-      }
-      const { actionId, label, description, bindings } = entry
-      return (
-        <div key={actionId} className="kbd-action">
-          {description ? (
-            <TooltipComponentProp title={description}>
-              <span className="kbd-action-label">
-                {label}
-              </span>
-            </TooltipComponentProp>
-          ) : (
-            <span className="kbd-action-label">
-              {label}
-            </span>
-          )}
-          {renderCell(actionId, bindings)}
-        </div>
-      )
-    })
+    return group.shortcuts.map(renderShortcutEntry)
   }
 
   // Default render
@@ -1669,28 +1891,32 @@ export function ShortcutsModal({
             </div>
           )}
 
-          {shortcutGroups.map((group) => (
+          {shortcutGroups.filter(g => !g.mode).map((group) => (
             <div
               key={group.name}
-              className={`kbd-group${group.mode ? ' kbd-mode-group' : ''}`}
-              style={group.mode?.color ? { '--kbd-mode-color': group.mode.color } as React.CSSProperties : undefined}
+              className="kbd-group"
             >
               <h3 className="kbd-group-title">
                 {group.name}
-                {group.mode?.activationBindings?.map(binding => (
-                  <kbd key={binding} className="kbd-kbd kbd-mode-activation">
-                    {parseKeySeq(binding).map((elem, i) => (
-                      <Fragment key={i}>
-                        {i > 0 && <span className="kbd-sequence-sep"> </span>}
-                        <SeqElemDisplay elem={elem} />
-                      </Fragment>
-                    ))}
-                  </kbd>
-                ))}
               </h3>
               {renderGroup(group)}
             </div>
           ))}
+
+          {/* Modes section: editable mode groups with add/remove */}
+          {ctx && ctx.modes.size > 0 && (() => {
+            const modeGroups = shortcutGroups.filter(g => g.mode)
+            if (modeGroups.length === 0) return null
+            return (
+              <ModesSection
+                modeGroups={modeGroups}
+                editable={editable}
+                registry={ctx.registry}
+                actionRegistry={ctx.registry.actionRegistry}
+                renderShortcutEntry={renderShortcutEntry}
+              />
+            )
+          })()}
 
           {/* Footer with Export/Import/Reset */}
           {editable && (handleExport || handleImport || handleReset) && (

@@ -32,6 +32,13 @@ export interface SpeedDialProps {
   ariaLabel?: string
   /** Custom CSS class for the container */
   className?: string
+  /**
+   * How to display the expand/collapse chevron:
+   * - 'separate' (default): standalone button above the primary button
+   * - 'badge': small overlapping badge on the primary button's top edge
+   * - 'none': no chevron; expand via hover/long-press only
+   */
+  chevronMode?: 'separate' | 'badge' | 'none'
 }
 
 function ChevronIcon({ direction }: { direction: 'up' | 'down' }) {
@@ -76,6 +83,7 @@ export function SpeedDial({
   primaryIcon,
   ariaLabel = 'Open command palette',
   className,
+  chevronMode = 'separate',
 }: SpeedDialProps) {
   const ctx = useMaybeHotkeysContext()
   const [isSticky, setIsSticky] = useState(false)
@@ -161,10 +169,12 @@ export function SpeedDial({
 
   const containerClasses = ['kbd-speed-dial']
   if (isExpanded) containerClasses.push('kbd-speed-dial-expanded')
+  if (chevronMode === 'badge') containerClasses.push('kbd-speed-dial-badge-mode')
   if (className) containerClasses.push(className)
 
   const chevronClasses = ['kbd-speed-dial-chevron']
   if (isSticky) chevronClasses.push('kbd-speed-dial-sticky')
+  if (chevronMode === 'badge') chevronClasses.push('kbd-speed-dial-badge')
 
   // Built-in shortcuts action
   const builtinActions: SpeedDialAction[] = []
@@ -205,15 +215,17 @@ export function SpeedDial({
       </button>
 
       {/* Chevron toggle (above primary) */}
-      <button
-        type="button"
-        className={chevronClasses.join(' ')}
-        onClick={handleChevronClick}
-        aria-label={isExpanded ? 'Collapse actions' : 'Expand actions'}
-        aria-expanded={isExpanded}
-      >
-        <ChevronIcon direction={isExpanded ? 'down' : 'up'} />
-      </button>
+      {chevronMode !== 'none' && (
+        <button
+          type="button"
+          className={chevronClasses.join(' ')}
+          onClick={handleChevronClick}
+          aria-label={isExpanded ? 'Collapse actions' : 'Expand actions'}
+          aria-expanded={isExpanded}
+        >
+          <ChevronIcon direction={isExpanded ? 'down' : 'up'} />
+        </button>
+      )}
 
       {/* Secondary actions (above chevron, visible when expanded) */}
       {isExpanded && allSecondaryActions.map(action => {

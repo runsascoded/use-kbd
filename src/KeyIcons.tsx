@@ -142,6 +142,84 @@ export function Tab({ className, style }: KeyIconProps) {
   )
 }
 
+const compactStyle: CSSProperties = {
+  width: '1.4em',
+  height: '1.4em',
+  verticalAlign: 'middle',
+}
+
+/** Compact 4-way move icon (cross shape with arrow points) */
+export function ArrowsMove({ className, style }: KeyIconProps) {
+  return (
+    <svg
+      className={className}
+      style={{ ...compactStyle, ...style }}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      {/* Horizontal line with arrow points */}
+      <line x1="3" y1="12" x2="21" y2="12"/>
+      <polyline points="18 9 21 12 18 15"/>
+      <polyline points="6 9 3 12 6 15"/>
+      {/* Vertical line with arrow points */}
+      <line x1="12" y1="3" x2="12" y2="21"/>
+      <polyline points="9 6 12 3 15 6"/>
+      <polyline points="9 18 12 21 15 18"/>
+    </svg>
+  )
+}
+
+/** Compact D-pad icon (four filled triangular arrowheads) */
+export function ArrowsDpad({ className, style }: KeyIconProps) {
+  return (
+    <svg
+      className={className}
+      style={{ ...compactStyle, ...style }}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      stroke="none"
+    >
+      {/* Up */}
+      <polygon points="12,2 8,9 16,9"/>
+      {/* Down */}
+      <polygon points="12,22 8,15 16,15"/>
+      {/* Left */}
+      <polygon points="2,12 9,8 9,16"/>
+      {/* Right */}
+      <polygon points="22,12 15,8 15,16"/>
+    </svg>
+  )
+}
+
+/** Compact double-headed arrows icon (horizontal + vertical) */
+export function ArrowsDouble({ className, style }: KeyIconProps) {
+  return (
+    <svg
+      className={className}
+      style={{ ...compactStyle, ...style }}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      {/* Horizontal double arrow */}
+      <line x1="3" y1="12" x2="21" y2="12"/>
+      <polyline points="18 9 21 12 18 15"/>
+      <polyline points="6 9 3 12 6 15"/>
+      {/* Vertical double arrow */}
+      <line x1="12" y1="3" x2="12" y2="21"/>
+      <polyline points="9 6 12 3 15 6"/>
+      <polyline points="9 18 12 21 15 18"/>
+    </svg>
+  )
+}
+
 export type KeyIconType = 'arrowup' | 'arrowdown' | 'arrowleft' | 'arrowright' | 'enter' | 'backspace' | 'tab'
 
 /** Get the icon component for a key, or null if no icon exists */
