@@ -305,13 +305,13 @@ export function LookupModal({ defaultBinding = 'meta+shift+k' }: LookupModalProp
         return
       }
 
-      if (e.key === 'ArrowDown') {
+      if (e.key === 'ArrowDown' && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
         e.preventDefault()
         setSelectedIndex(prev => Math.min(prev + 1, filteredBindings.length - 1))
         return
       }
 
-      if (e.key === 'ArrowUp') {
+      if (e.key === 'ArrowUp' && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
         e.preventDefault()
         setSelectedIndex(prev => Math.max(prev - 1, 0))
         return
