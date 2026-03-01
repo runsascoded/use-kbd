@@ -172,6 +172,8 @@ export interface ActionDefinition {
   arrowGroup?: { groupId: string; direction: Direction }
   /** Action pair metadata (set by useActionPair) */
   actionPair?: { pairId: string; index: 0 | 1 }
+  /** Action triplet metadata (set by useActionTriplet) */
+  actionTriplet?: { tripletId: string; index: 0 | 1 | 2 }
 }
 
 /** Cardinal direction for arrow key groups */

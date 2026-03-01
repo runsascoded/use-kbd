@@ -157,6 +157,7 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
     const action = actionsRef.current.get(actionId)
     const groupId = action?.config.arrowGroup?.groupId
     const pairId = action?.config.actionPair?.pairId
+    const tripletId = action?.config.actionTriplet?.tripletId
     const actionIds = groupId
       ? Array.from(actionsRef.current.entries())
           .filter(([, a]) => a.config.arrowGroup?.groupId === groupId)
@@ -164,6 +165,10 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
       : pairId
       ? Array.from(actionsRef.current.entries())
           .filter(([, a]) => a.config.actionPair?.pairId === pairId)
+          .map(([id]) => id)
+      : tripletId
+      ? Array.from(actionsRef.current.entries())
+          .filter(([, a]) => a.config.actionTriplet?.tripletId === tripletId)
           .map(([id]) => id)
       : [actionId]
 
@@ -223,6 +228,7 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
     const action = actionsRef.current.get(actionId)
     const groupId = action?.config.arrowGroup?.groupId
     const pairId = action?.config.actionPair?.pairId
+    const tripletId = action?.config.actionTriplet?.tripletId
     const actionIds = groupId
       ? Array.from(actionsRef.current.entries())
           .filter(([, a]) => a.config.arrowGroup?.groupId === groupId)
@@ -230,6 +236,10 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
       : pairId
       ? Array.from(actionsRef.current.entries())
           .filter(([, a]) => a.config.actionPair?.pairId === pairId)
+          .map(([id]) => id)
+      : tripletId
+      ? Array.from(actionsRef.current.entries())
+          .filter(([, a]) => a.config.actionTriplet?.tripletId === tripletId)
           .map(([id]) => id)
       : [actionId]
 
@@ -426,6 +436,7 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
         protected: config.protected,
         arrowGroup: config.arrowGroup,
         actionPair: config.actionPair,
+        actionTriplet: config.actionTriplet,
       }
     }
     return registry

@@ -100,7 +100,17 @@ export interface ActionPairShortcut {
   bindings: [string[], string[]]
 }
 
-export type ShortcutEntry = ActionShortcut | ArrowGroupShortcut | ActionPairShortcut
+/** An action triplet shortcut entry (collapsed from 3 related actions) */
+export interface ActionTripletShortcut {
+  type: 'actionTriplet'
+  tripletId: string
+  label: string
+  description?: string
+  actionIds: [string, string, string]
+  bindings: [string[], string[], string[]]
+}
+
+export type ShortcutEntry = ActionShortcut | ArrowGroupShortcut | ActionPairShortcut | ActionTripletShortcut
 
 export interface ShortcutGroup {
   name: string
@@ -379,8 +389,8 @@ function organizeShortcuts(
   // Sort shortcuts within each group by actionId
   for (const group of groupMap.values()) {
     group.shortcuts.sort((a, b) => {
-      const aId = a.type === 'action' ? a.actionId : a.type === 'arrowGroup' ? a.groupId : a.pairId
-      const bId = b.type === 'action' ? b.actionId : b.type === 'arrowGroup' ? b.groupId : b.pairId
+      const aId = a.type === 'action' ? a.actionId : a.type === 'arrowGroup' ? a.groupId : a.type === 'actionPair' ? a.pairId : a.tripletId
+      const bId = b.type === 'action' ? b.actionId : b.type === 'arrowGroup' ? b.groupId : b.type === 'actionPair' ? b.pairId : b.tripletId
       return aId.localeCompare(bId)
     })
   }
@@ -474,7 +484,7 @@ function organizeShortcuts(
         for (const { entry } of toInsert) {
           // Find the right insertion point based on groupId sorting
           let insertIdx = group.shortcuts.findIndex(s => {
-            const sId = s.type === 'action' ? s.actionId : s.type === 'arrowGroup' ? s.groupId : s.pairId
+            const sId = s.type === 'action' ? s.actionId : s.type === 'arrowGroup' ? s.groupId : s.type === 'actionPair' ? s.pairId : s.tripletId
             return sId.localeCompare(entry.groupId) > 0
           })
           if (insertIdx === -1) insertIdx = group.shortcuts.length
@@ -535,8 +545,69 @@ function organizeShortcuts(
         )
         for (const entry of toInsertPair) {
           let insertIdx = group.shortcuts.findIndex(s => {
-            const sId = s.type === 'action' ? s.actionId : s.type === 'arrowGroup' ? s.groupId : s.pairId
+            const sId = s.type === 'action' ? s.actionId : s.type === 'arrowGroup' ? s.groupId : s.type === 'actionPair' ? s.pairId : s.tripletId
             return sId.localeCompare(entry.pairId) > 0
+          })
+          if (insertIdx === -1) insertIdx = group.shortcuts.length
+          group.shortcuts.splice(insertIdx, 0, entry)
+        }
+      }
+    }
+
+    // Collapse action triplet entries into compact ActionTripletShortcut entries
+    for (const group of groupMap.values()) {
+      const triplets = new Map<string, { entries: ActionShortcut[]; indices: Set<number> }>()
+
+      for (const entry of group.shortcuts) {
+        if (entry.type !== 'action') continue
+        const at = actionRegistry[entry.actionId]?.actionTriplet
+        if (!at) continue
+        if (!triplets.has(at.tripletId)) {
+          triplets.set(at.tripletId, { entries: [], indices: new Set() })
+        }
+        const t = triplets.get(at.tripletId)!
+        t.entries.push(entry)
+        t.indices.add(at.index)
+      }
+
+      const toRemoveTriplet = new Set<string>()
+      const toInsertTriplet: ActionTripletShortcut[] = []
+
+      for (const [tripletId, { entries, indices }] of triplets) {
+        if (indices.size !== 3) continue
+
+        // Sort entries by index
+        entries.sort((a, b) => {
+          const ai = actionRegistry[a.actionId]!.actionTriplet!.index
+          const bi = actionRegistry[b.actionId]!.actionTriplet!.index
+          return ai - bi
+        })
+
+        // Strip " a" / " b" / " c" suffix from label
+        const label = entries[0].label.replace(/\s+[abc]$/i, '')
+
+        toInsertTriplet.push({
+          type: 'actionTriplet',
+          tripletId,
+          label,
+          description: entries[0].description,
+          actionIds: [entries[0].actionId, entries[1].actionId, entries[2].actionId],
+          bindings: [entries[0].bindings, entries[1].bindings, entries[2].bindings],
+        })
+
+        for (const entry of entries) {
+          toRemoveTriplet.add(entry.actionId)
+        }
+      }
+
+      if (toRemoveTriplet.size > 0) {
+        group.shortcuts = group.shortcuts.filter(
+          s => s.type !== 'action' || !toRemoveTriplet.has(s.actionId)
+        )
+        for (const entry of toInsertTriplet) {
+          let insertIdx = group.shortcuts.findIndex(s => {
+            const sId = s.type === 'action' ? s.actionId : s.type === 'arrowGroup' ? s.groupId : s.type === 'actionPair' ? s.pairId : s.tripletId
+            return sId.localeCompare(entry.tripletId) > 0
           })
           if (insertIdx === -1) insertIdx = group.shortcuts.length
           group.shortcuts.splice(insertIdx, 0, entry)
@@ -635,6 +706,7 @@ function BindingDisplay({
   isDefault,
   onEdit,
   onRemove,
+  onAdd,
   pendingKeys,
   activeKeys,
   timeoutDuration = DEFAULT_SEQUENCE_TIMEOUT,
@@ -648,6 +720,7 @@ function BindingDisplay({
   isDefault?: boolean
   onEdit?: () => void
   onRemove?: () => void
+  onAdd?: () => void
   pendingKeys?: HotkeySequence
   activeKeys?: KeyCombination | null
   timeoutDuration?: number
@@ -729,6 +802,15 @@ function BindingDisplay({
           aria-label="Remove binding"
         >
           ×
+        </button>
+      )}
+      {editable && onAdd && (
+        <button
+          className="kbd-add-inline-btn"
+          onClick={(e) => { e.stopPropagation(); onAdd() }}
+          aria-label="Add binding"
+        >
+          +
         </button>
       )}
     </kbd>
@@ -885,6 +967,39 @@ function ActionPairRow({
 }
 
 /**
+ * Compact row for an action triplet — renders as:
+ *   Slice along    [X]  /  [Y]  /  [Z]
+ */
+function ActionTripletRow({
+  entry,
+  renderCell,
+  TooltipComponent: Tooltip,
+}: {
+  entry: ActionTripletShortcut
+  renderCell: (actionId: string, keys: string[]) => ReactNode
+  TooltipComponent: TooltipComponent
+}) {
+  return (
+    <div className="kbd-action kbd-action-triplet-row" data-action-triplet={entry.tripletId}>
+      {entry.description ? (
+        <Tooltip title={entry.description}>
+          <span className="kbd-action-label">{entry.label}</span>
+        </Tooltip>
+      ) : (
+        <span className="kbd-action-label">{entry.label}</span>
+      )}
+      <span className="kbd-action-bindings">
+        {renderCell(entry.actionIds[0], entry.bindings[0])}
+        <span className="kbd-action-pair-sep">/</span>
+        {renderCell(entry.actionIds[1], entry.bindings[1])}
+        <span className="kbd-action-pair-sep">/</span>
+        {renderCell(entry.actionIds[2], entry.bindings[2])}
+      </span>
+    </div>
+  )
+}
+
+/**
  * Modal for displaying all keyboard shortcuts, organized by group.
  *
  * Opens by default with `?` key. Shows all registered actions and their bindings,
@@ -1005,7 +1120,7 @@ function ModesSection({ modeGroups, editable, registry, actionRegistry, renderSh
             </div>
             <div className="kbd-modes-shortcuts">
               {group.shortcuts.map((entry) => {
-                const entryKey = entry.type === 'action' ? entry.actionId : entry.type === 'arrowGroup' ? entry.groupId : entry.pairId
+                const entryKey = entry.type === 'action' ? entry.actionId : entry.type === 'arrowGroup' ? entry.groupId : entry.type === 'actionPair' ? entry.pairId : entry.tripletId
                 const actionIdForRemove = entry.type === 'action' ? entry.actionId : entry.type === 'arrowGroup' ? entry.actionIds.left : entry.actionIds[0]
                 const entryLabel = entry.label
                 return (
@@ -1264,6 +1379,7 @@ export function ShortcutsModal({
   const [editingAction, setEditingAction] = useState<string | null>(null)
   const [editingKey, setEditingKey] = useState<string | null>(null)
   const [addingAction, setAddingAction] = useState<string | null>(null)
+  const [addAfterKey, setAddAfterKey] = useState<string | null>(null)
   const [pendingConflict, setPendingConflict] = useState<{
     action: string
     key: string
@@ -1281,6 +1397,7 @@ export function ShortcutsModal({
   const editingActionRef = useRef<string | null>(null)
   const editingKeyRef = useRef<string | null>(null)
   const addingActionRef = useRef<string | null>(null)
+  const addAfterKeyRef = useRef<string | null>(null)
   const setIsEditingBindingRef = useRef(ctx?.setIsEditingBinding)
   setIsEditingBindingRef.current = ctx?.setIsEditingBinding
 
@@ -1293,9 +1410,11 @@ export function ShortcutsModal({
     setEditingAction(null)
     setEditingKey(null)
     setAddingAction(null)
+    setAddAfterKey(null)
     editingActionRef.current = null
     editingKeyRef.current = null
     addingActionRef.current = null
+    addAfterKeyRef.current = null
     setPendingConflict(null)
     arrowGroupEditRef.current = null
     setArrowGroupEditState(null)
@@ -1398,9 +1517,11 @@ export function ShortcutsModal({
         editingActionRef.current = null
         editingKeyRef.current = null
         addingActionRef.current = null
+        addAfterKeyRef.current = null
         setEditingAction(null)
         setEditingKey(null)
         setAddingAction(null)
+        setAddAfterKey(null)
         setIsEditingBindingRef.current?.(false)
       },
       [checkConflict, handleBindingChange, handleBindingAdd],
@@ -1409,9 +1530,11 @@ export function ShortcutsModal({
       editingActionRef.current = null
       editingKeyRef.current = null
       addingActionRef.current = null
+      addAfterKeyRef.current = null
       setEditingAction(null)
       setEditingKey(null)
       setAddingAction(null)
+      setAddAfterKey(null)
       setPendingConflict(null)
       setIsEditingBindingRef.current?.(false)
     }, []),
@@ -1467,10 +1590,32 @@ export function ShortcutsModal({
       editingActionRef.current = null
       editingKeyRef.current = null
       addingActionRef.current = action
+      addAfterKeyRef.current = null
       // Also set state for re-render
       setEditingAction(null)
       setEditingKey(null)
       setAddingAction(action)
+      setAddAfterKey(null)
+      setPendingConflict(null)
+      ctx?.setIsEditingBinding(true)
+      startRecording()
+    },
+    [startRecording, ctx?.setIsEditingBinding],
+  )
+
+  // Start adding a new binding after a specific existing binding
+  const startAddingAfter = useCallback(
+    (action: string, afterKey: string) => {
+      // Set refs immediately (sync)
+      editingActionRef.current = null
+      editingKeyRef.current = null
+      addingActionRef.current = action
+      addAfterKeyRef.current = afterKey
+      // Also set state for re-render
+      setEditingAction(null)
+      setEditingKey(null)
+      setAddingAction(action)
+      setAddAfterKey(afterKey)
       setPendingConflict(null)
       ctx?.setIsEditingBinding(true)
       startRecording()
@@ -1496,9 +1641,11 @@ export function ShortcutsModal({
     editingActionRef.current = null
     editingKeyRef.current = null
     addingActionRef.current = null
+    addAfterKeyRef.current = null
     setEditingAction(null)
     setEditingKey(null)
     setAddingAction(null)
+    setAddAfterKey(null)
     setPendingConflict(null)
     ctx?.setIsEditingBinding(false)
   }, [cancel, ctx?.setIsEditingBinding])
@@ -1624,13 +1771,14 @@ export function ShortcutsModal({
             startEditingBinding(actionId, key)
           }}
           onRemove={editable && showRemove && !isProtected ? () => removeBinding(actionId, key) : undefined}
+          onAdd={editable && multipleBindings ? () => startAddingAfter(actionId, key) : undefined}
           pendingKeys={pendingKeys}
           activeKeys={activeKeys}
           timeoutDuration={pendingConflictInfo.hasConflict ? Infinity : sequenceTimeout}
         />
       )
     },
-    [editingAction, editingKey, addingAction, conflicts, defaults, editable, startEditingBinding, removeBinding, pendingKeys, activeKeys, isRecording, cancel, handleBindingAdd, handleBindingChange, sequenceTimeout, pendingConflictInfo, ctx?.registry.actionRegistry],
+    [editingAction, editingKey, addingAction, conflicts, defaults, editable, startEditingBinding, startAddingAfter, removeBinding, pendingKeys, activeKeys, isRecording, cancel, handleBindingAdd, handleBindingChange, sequenceTimeout, pendingConflictInfo, multipleBindings, ctx?.registry.actionRegistry],
   )
 
   // Helper: render add button for an action
@@ -1684,20 +1832,43 @@ export function ShortcutsModal({
   // Helper: render a cell with all bindings for an action
   const renderCell = useCallback(
     (actionId: string, keys: string[]) => {
-      // Show add button if: multiple bindings allowed, OR no bindings exist (need to reassign)
-      const showAddButton = editable && (multipleBindings || keys.length === 0)
+      const isAddingThis = addingAction === actionId
+      // Standalone "+" only when no bindings exist
+      const showStandaloneAdd = editable && keys.length === 0
       return (
         <span className="kbd-action-bindings">
           {keys.map((key) => (
             <Fragment key={key}>
               {renderEditableKbd(actionId, key, true)}
+              {/* Inline placeholder after the binding whose "+" was clicked */}
+              {isAddingThis && addAfterKey === key && (
+                <BindingDisplay
+                  binding=""
+                  isEditing
+                  isPendingConflict={pendingConflictInfo.hasConflict}
+                  pendingKeys={pendingKeys}
+                  activeKeys={activeKeys}
+                  timeoutDuration={pendingConflictInfo.hasConflict ? Infinity : sequenceTimeout}
+                />
+              )}
             </Fragment>
           ))}
-          {showAddButton && renderAddButton(actionId)}
+          {/* Placeholder at end when adding from empty state (standalone "+") */}
+          {isAddingThis && addAfterKey === null && (
+            <BindingDisplay
+              binding=""
+              isEditing
+              isPendingConflict={pendingConflictInfo.hasConflict}
+              pendingKeys={pendingKeys}
+              activeKeys={activeKeys}
+              timeoutDuration={pendingConflictInfo.hasConflict ? Infinity : sequenceTimeout}
+            />
+          )}
+          {showStandaloneAdd && !isAddingThis && renderAddButton(actionId)}
         </span>
       )
     },
-    [renderEditableKbd, renderAddButton, editable, multipleBindings],
+    [renderEditableKbd, renderAddButton, editable, addingAction, addAfterKey, pendingKeys, activeKeys, sequenceTimeout, pendingConflictInfo],
   )
 
   // Props for custom group renderers
@@ -1783,6 +1954,7 @@ export function ShortcutsModal({
       if (target.closest('.kbd-kbd.editable')) return
       // If click is on add button, don't cancel (it will start its own editing)
       if (target.closest('.kbd-add-btn')) return
+      if (target.closest('.kbd-add-inline-btn')) return
       cancelEditing()
     },
     [editingAction, addingAction, cancelEditing, arrowGroupEditState, cancelArrowGroupEditing],
@@ -1945,6 +2117,16 @@ export function ShortcutsModal({
       return (
         <ActionPairRow
           key={entry.pairId}
+          entry={entry}
+          renderCell={renderCell}
+          TooltipComponent={TooltipComponentProp}
+        />
+      )
+    }
+    if (entry.type === 'actionTriplet') {
+      return (
+        <ActionTripletRow
+          key={entry.tripletId}
           entry={entry}
           renderCell={renderCell}
           TooltipComponent={TooltipComponentProp}

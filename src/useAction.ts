@@ -47,6 +47,8 @@ export interface ActionConfig {
   arrowGroup?: { groupId: string; direction: Direction }
   /** Action pair metadata (set by useActionPair) */
   actionPair?: { pairId: string; index: 0 | 1 }
+  /** Action triplet metadata (set by useActionTriplet) */
+  actionTriplet?: { tripletId: string; index: 0 | 1 | 2 }
 }
 
 /**
@@ -121,6 +123,7 @@ export function useAction(id: string, config: ActionConfig): void {
     config.protected,
     JSON.stringify(config.arrowGroup),
     JSON.stringify(config.actionPair),
+    JSON.stringify(config.actionTriplet),
   ])
 }
 
@@ -187,6 +190,7 @@ export function useActions(actions: Record<string, ActionConfig>): void {
         c.protected,
         c.arrowGroup,
         c.actionPair,
+        c.actionTriplet,
       ])
     ),
   ])
