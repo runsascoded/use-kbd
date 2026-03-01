@@ -427,8 +427,8 @@
 /* === Remove binding button === */
 .kbd-remove-btn {
   position: absolute;
-  top: -6px;
-  right: -6px;
+  top: -7px;
+  right: -7px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -436,9 +436,9 @@
   border: none;
   border-radius: 50%;
   padding: 0;
-  width: 16px;
-  height: 16px;
-  font-size: 12px;
+  width: 13px;
+  height: 13px;
+  font-size: 10px;
   font-weight: bold;
   line-height: 1;
   color: #fff;
@@ -473,6 +473,60 @@
 
   .kbd-remove-btn:active {
     background: #b91c1c;
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* === Add binding inline button (bottom-right of kbd) === */
+.kbd-add-inline-btn {
+  position: absolute;
+  bottom: -7px;
+  right: -7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--kbd-success, #16a34a);
+  border: none;
+  border-radius: 50%;
+  padding: 0;
+  width: 13px;
+  height: 13px;
+  font-size: 10px;
+  font-weight: bold;
+  line-height: 1;
+  color: #fff;
+  cursor: pointer;
+  opacity: 0;
+  transform: scale(0.8);
+  transition:
+    opacity var(--kbd-transition),
+    transform var(--kbd-transition),
+    background var(--kbd-transition);
+}
+
+/* Show on hover (desktop) */
+@media (hover: hover) {
+  .kbd-kbd:hover .kbd-add-inline-btn,
+  .kbd-kbd:focus-within .kbd-add-inline-btn {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  .kbd-add-inline-btn:hover {
+    background: #15803d;
+  }
+}
+
+/* Touch devices */
+@media (hover: none) {
+  .kbd-kbd.editable .kbd-add-inline-btn {
+    opacity: 0.7;
+    transform: scale(0.9);
+  }
+
+  .kbd-add-inline-btn:active {
+    background: #15803d;
     opacity: 1;
     transform: scale(1);
   }
