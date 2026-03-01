@@ -151,14 +151,19 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
     return action?.config.mode
   }, [modeCustomizations])
 
-  // Add an action to a mode (handles arrow groups atomically)
+  // Add an action to a mode (handles arrow groups and action pairs atomically)
   const addActionToMode = useCallback((actionId: string, modeId: string) => {
-    // Collect all action IDs to move (arrow group = all 4 directions)
+    // Collect all action IDs to move (arrow group = all 4, action pair = both)
     const action = actionsRef.current.get(actionId)
     const groupId = action?.config.arrowGroup?.groupId
+    const pairId = action?.config.actionPair?.pairId
     const actionIds = groupId
       ? Array.from(actionsRef.current.entries())
           .filter(([, a]) => a.config.arrowGroup?.groupId === groupId)
+          .map(([id]) => id)
+      : pairId
+      ? Array.from(actionsRef.current.entries())
+          .filter(([, a]) => a.config.actionPair?.pairId === pairId)
           .map(([id]) => id)
       : [actionId]
 
@@ -213,13 +218,18 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
     })
   }, [setModeCustomizations])
 
-  // Remove an action from its mode (handles arrow groups atomically)
+  // Remove an action from its mode (handles arrow groups and action pairs atomically)
   const removeActionFromMode = useCallback((actionId: string, modeId: string) => {
     const action = actionsRef.current.get(actionId)
     const groupId = action?.config.arrowGroup?.groupId
+    const pairId = action?.config.actionPair?.pairId
     const actionIds = groupId
       ? Array.from(actionsRef.current.entries())
           .filter(([, a]) => a.config.arrowGroup?.groupId === groupId)
+          .map(([id]) => id)
+      : pairId
+      ? Array.from(actionsRef.current.entries())
+          .filter(([, a]) => a.config.actionPair?.pairId === pairId)
           .map(([id]) => id)
       : [actionId]
 
@@ -415,6 +425,7 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
         enabled: config.enabled,
         protected: config.protected,
         arrowGroup: config.arrowGroup,
+        actionPair: config.actionPair,
       }
     }
     return registry

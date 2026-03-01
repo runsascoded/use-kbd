@@ -90,7 +90,17 @@ export interface ArrowGroupShortcut {
   extraBindings: Partial<Record<Direction, string[]>>
 }
 
-export type ShortcutEntry = ActionShortcut | ArrowGroupShortcut
+/** An action pair shortcut entry (collapsed from 2 inverse actions) */
+export interface ActionPairShortcut {
+  type: 'actionPair'
+  pairId: string
+  label: string
+  description?: string
+  actionIds: [string, string]
+  bindings: [string[], string[]]
+}
+
+export type ShortcutEntry = ActionShortcut | ArrowGroupShortcut | ActionPairShortcut
 
 export interface ShortcutGroup {
   name: string
@@ -369,8 +379,8 @@ function organizeShortcuts(
   // Sort shortcuts within each group by actionId
   for (const group of groupMap.values()) {
     group.shortcuts.sort((a, b) => {
-      const aId = a.type === 'action' ? a.actionId : a.groupId
-      const bId = b.type === 'action' ? b.actionId : b.groupId
+      const aId = a.type === 'action' ? a.actionId : a.type === 'arrowGroup' ? a.groupId : a.pairId
+      const bId = b.type === 'action' ? b.actionId : b.type === 'arrowGroup' ? b.groupId : b.pairId
       return aId.localeCompare(bId)
     })
   }
@@ -464,8 +474,69 @@ function organizeShortcuts(
         for (const { entry } of toInsert) {
           // Find the right insertion point based on groupId sorting
           let insertIdx = group.shortcuts.findIndex(s => {
-            const sId = s.type === 'action' ? s.actionId : s.groupId
+            const sId = s.type === 'action' ? s.actionId : s.type === 'arrowGroup' ? s.groupId : s.pairId
             return sId.localeCompare(entry.groupId) > 0
+          })
+          if (insertIdx === -1) insertIdx = group.shortcuts.length
+          group.shortcuts.splice(insertIdx, 0, entry)
+        }
+      }
+    }
+
+    // Collapse action pair entries into compact ActionPairShortcut entries
+    for (const group of groupMap.values()) {
+      const pairs = new Map<string, { entries: ActionShortcut[]; indices: Set<number> }>()
+
+      for (const entry of group.shortcuts) {
+        if (entry.type !== 'action') continue
+        const ap = actionRegistry[entry.actionId]?.actionPair
+        if (!ap) continue
+        if (!pairs.has(ap.pairId)) {
+          pairs.set(ap.pairId, { entries: [], indices: new Set() })
+        }
+        const p = pairs.get(ap.pairId)!
+        p.entries.push(entry)
+        p.indices.add(ap.index)
+      }
+
+      const toRemovePair = new Set<string>()
+      const toInsertPair: ActionPairShortcut[] = []
+
+      for (const [pairId, { entries, indices }] of pairs) {
+        if (indices.size !== 2) continue
+
+        // Sort entries by index
+        entries.sort((a, b) => {
+          const ai = actionRegistry[a.actionId]!.actionPair!.index
+          const bi = actionRegistry[b.actionId]!.actionPair!.index
+          return ai - bi
+        })
+
+        // Strip " a" / " b" suffix from label
+        const label = entries[0].label.replace(/\s+[ab]$/i, '')
+
+        toInsertPair.push({
+          type: 'actionPair',
+          pairId,
+          label,
+          description: entries[0].description,
+          actionIds: [entries[0].actionId, entries[1].actionId],
+          bindings: [entries[0].bindings, entries[1].bindings],
+        })
+
+        for (const entry of entries) {
+          toRemovePair.add(entry.actionId)
+        }
+      }
+
+      if (toRemovePair.size > 0) {
+        group.shortcuts = group.shortcuts.filter(
+          s => s.type !== 'action' || !toRemovePair.has(s.actionId)
+        )
+        for (const entry of toInsertPair) {
+          let insertIdx = group.shortcuts.findIndex(s => {
+            const sId = s.type === 'action' ? s.actionId : s.type === 'arrowGroup' ? s.groupId : s.pairId
+            return sId.localeCompare(entry.pairId) > 0
           })
           if (insertIdx === -1) insertIdx = group.shortcuts.length
           group.shortcuts.splice(insertIdx, 0, entry)
@@ -783,6 +854,37 @@ function ArrowGroupRow({
 }
 
 /**
+ * Compact row for an action pair — renders as:
+ *   Zoom in / out    [=]  /  [−]
+ */
+function ActionPairRow({
+  entry,
+  renderCell,
+  TooltipComponent: Tooltip,
+}: {
+  entry: ActionPairShortcut
+  renderCell: (actionId: string, keys: string[]) => ReactNode
+  TooltipComponent: TooltipComponent
+}) {
+  return (
+    <div className="kbd-action kbd-action-pair-row" data-action-pair={entry.pairId}>
+      {entry.description ? (
+        <Tooltip title={entry.description}>
+          <span className="kbd-action-label">{entry.label}</span>
+        </Tooltip>
+      ) : (
+        <span className="kbd-action-label">{entry.label}</span>
+      )}
+      <span className="kbd-action-bindings">
+        {renderCell(entry.actionIds[0], entry.bindings[0])}
+        <span className="kbd-action-pair-sep">/</span>
+        {renderCell(entry.actionIds[1], entry.bindings[1])}
+      </span>
+    </div>
+  )
+}
+
+/**
  * Modal for displaying all keyboard shortcuts, organized by group.
  *
  * Opens by default with `?` key. Shows all registered actions and their bindings,
@@ -903,8 +1005,8 @@ function ModesSection({ modeGroups, editable, registry, actionRegistry, renderSh
             </div>
             <div className="kbd-modes-shortcuts">
               {group.shortcuts.map((entry) => {
-                const entryKey = entry.type === 'action' ? entry.actionId : entry.groupId
-                const actionIdForRemove = entry.type === 'action' ? entry.actionId : entry.actionIds.left
+                const entryKey = entry.type === 'action' ? entry.actionId : entry.type === 'arrowGroup' ? entry.groupId : entry.pairId
+                const actionIdForRemove = entry.type === 'action' ? entry.actionId : entry.type === 'arrowGroup' ? entry.actionIds.left : entry.actionIds[0]
                 const entryLabel = entry.label
                 return (
                   <div key={entryKey} className="kbd-modes-action-row">
@@ -1817,7 +1919,7 @@ export function ShortcutsModal({
     )
   }
 
-  // Render a single shortcut entry (action or arrow group)
+  // Render a single shortcut entry (action, arrow group, or action pair)
   const renderShortcutEntry = (entry: ShortcutEntry): ReactNode => {
     if (entry.type === 'arrowGroup') {
       return (
@@ -1836,6 +1938,16 @@ export function ShortcutsModal({
           arrowGroupActiveKeys={arrowGroupActiveKeys}
           conflicts={conflicts}
           ArrowIconComponent={ArrowIconComponent}
+        />
+      )
+    }
+    if (entry.type === 'actionPair') {
+      return (
+        <ActionPairRow
+          key={entry.pairId}
+          entry={entry}
+          renderCell={renderCell}
+          TooltipComponent={TooltipComponentProp}
         />
       )
     }

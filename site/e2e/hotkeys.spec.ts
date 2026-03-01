@@ -2108,15 +2108,15 @@ test.describe('3D Viewer Demo', () => {
     // Default target is (0.0, 0.0, 0.0)
     await expect(page.locator('[data-testid="camera-target"]')).toContainText('0.0, 0.0, 0.0')
 
-    // Shift+ArrowRight → target.x should increase
+    // Shift+ArrowRight → camera-relative pan right (at 45° azimuth, moves x+ and z-)
     await page.keyboard.press('Shift+ArrowRight')
     await page.waitForTimeout(200)
-    await expect(page.locator('[data-testid="camera-target"]')).toContainText('0.3, 0.0, 0.0')
+    await expect(page.locator('[data-testid="camera-target"]')).toContainText('0.2, 0.0, -0.2')
 
     // Shift+ArrowUp → target.y should increase
     await page.keyboard.press('Shift+ArrowUp')
     await page.waitForTimeout(200)
-    await expect(page.locator('[data-testid="camera-target"]')).toContainText('0.3, 0.3, 0.0')
+    await expect(page.locator('[data-testid="camera-target"]')).toContainText('0.2, 0.3, -0.2')
   })
 
   test('global: Ctrl+Left/Right roll, Ctrl+Up/Down orbit', async ({ page }) => {
@@ -2212,15 +2212,15 @@ test.describe('3D Viewer Demo', () => {
     // Default target is (0.0, 0.0, 0.0)
     await expect(page.locator('[data-testid="camera-target"]')).toContainText('0.0, 0.0, 0.0')
 
-    // Arrow keys pan
+    // Arrow keys pan (camera-relative: at 45° azimuth, right moves x+/z-)
     await page.keyboard.press('ArrowRight')
     await page.waitForTimeout(200)
-    await expect(page.locator('[data-testid="camera-target"]')).toContainText('0.3, 0.0, 0.0')
+    await expect(page.locator('[data-testid="camera-target"]')).toContainText('0.2, 0.0, -0.2')
 
     // Vim keys also pan
     await page.keyboard.press('l')
     await page.waitForTimeout(200)
-    await expect(page.locator('[data-testid="camera-target"]')).toContainText('0.6, 0.0, 0.0')
+    await expect(page.locator('[data-testid="camera-target"]')).toContainText('0.4, 0.0, -0.4')
 
     await page.keyboard.press('Escape')
   })
@@ -2235,10 +2235,10 @@ test.describe('3D Viewer Demo', () => {
     // Default target is (0.0, 0.0, 0.0)
     await expect(page.locator('[data-testid="camera-target"]')).toContainText('0.0, 0.0, 0.0')
 
-    // Shift+ArrowRight → target.x should increase by 0.6 (2× step)
+    // Shift+ArrowRight → fast camera-relative pan right (2× step, at 45° azimuth)
     await page.keyboard.press('Shift+ArrowRight')
     await page.waitForTimeout(200)
-    await expect(page.locator('[data-testid="camera-target"]')).toContainText('0.6, 0.0, 0.0')
+    await expect(page.locator('[data-testid="camera-target"]')).toContainText('0.4, 0.0, -0.4')
 
     await page.keyboard.press('Escape')
   })
@@ -2306,6 +2306,27 @@ test.describe('3D Viewer Demo', () => {
     await page.keyboard.press('f')
     await page.waitForTimeout(200)
     await expect(page.locator('[data-testid="wireframe"]')).toContainText('off')
+  })
+
+  test('action pair: zoom shows as single combined row', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    await page.keyboard.press('?')
+    await page.waitForSelector('.kbd-modal', { timeout: 5000 })
+
+    // Zoom in / out should be a single pair row (not two individual rows)
+    const pairRow = page.locator('.kbd-action-pair-row', { hasText: 'Zoom in / out' })
+    await expect(pairRow).toBeVisible()
+
+    // Should have a "/" separator between binding groups
+    await expect(pairRow.locator('.kbd-action-pair-sep')).toBeVisible()
+
+    // Should NOT have individual "Zoom in" / "Zoom out" rows
+    const viewGroup = page.locator('.kbd-group', { hasText: '3D: VIEW' })
+    await expect(viewGroup.locator('.kbd-action', { hasText: /^Zoom in$/ })).not.toBeVisible()
+    await expect(viewGroup.locator('.kbd-action', { hasText: /^Zoom out$/ })).not.toBeVisible()
+
+    await page.keyboard.press('Escape')
   })
 
   test('shortcuts modal shows mode groups with arrow groups', async ({ page }) => {

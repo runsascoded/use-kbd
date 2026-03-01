@@ -170,6 +170,8 @@ export interface ActionDefinition {
   protected?: boolean
   /** Arrow group metadata (set by useArrowGroup) */
   arrowGroup?: { groupId: string; direction: Direction }
+  /** Action pair metadata (set by useActionPair) */
+  actionPair?: { pairId: string; index: 0 | 1 }
 }
 
 /** Cardinal direction for arrow key groups */

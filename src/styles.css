@@ -266,6 +266,14 @@
   gap: 1px;
 }
 
+/* === Action Pair Row === */
+.kbd-action-pair-sep {
+  color: var(--kbd-text-secondary);
+  margin: 0 4px;
+  font-size: 12px;
+  opacity: 0.5;
+}
+
 /* === Kbd element === */
 .kbd-kbd {
   position: relative;
@@ -1307,7 +1315,8 @@
 }
 
 .kbd-modes-action-row > .kbd-action,
-.kbd-modes-action-row > .kbd-arrow-group-row {
+.kbd-modes-action-row > .kbd-arrow-group-row,
+.kbd-modes-action-row > .kbd-action-pair-row {
   flex: 1;
   min-width: 0;
 }

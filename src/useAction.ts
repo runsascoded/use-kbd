@@ -45,6 +45,8 @@ export interface ActionConfig {
   protected?: boolean
   /** Arrow group metadata (set by useArrowGroup) */
   arrowGroup?: { groupId: string; direction: Direction }
+  /** Action pair metadata (set by useActionPair) */
+  actionPair?: { pairId: string; index: 0 | 1 }
 }
 
 /**
@@ -118,6 +120,7 @@ export function useAction(id: string, config: ActionConfig): void {
     config.hideFromModal,
     config.protected,
     JSON.stringify(config.arrowGroup),
+    JSON.stringify(config.actionPair),
   ])
 }
 
@@ -183,6 +186,7 @@ export function useActions(actions: Record<string, ActionConfig>): void {
         c.hideFromModal,
         c.protected,
         c.arrowGroup,
+        c.actionPair,
       ])
     ),
   ])

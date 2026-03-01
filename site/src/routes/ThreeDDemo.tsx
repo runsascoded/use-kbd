@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
-import { KbdModal, ModeIndicator, ShortcutsModal, useAction, useArrowGroup, useMode } from 'use-kbd'
+import { KbdModal, ModeIndicator, ShortcutsModal, useAction, useActionPair, useArrowGroup, useMode } from 'use-kbd'
 import 'use-kbd/styles.css'
 import { useTheme } from '../contexts/ThemeContext'
 
@@ -47,6 +47,8 @@ function Viewer() {
   const bg = BG[resolvedTheme]
 
   const [azimuth, setAzimuth] = useState(() => getStored('azimuth', DEFAULTS.azimuth))
+  const azimuthRef = useRef(azimuth)
+  azimuthRef.current = azimuth
   const [elevation, setElevation] = useState(() => getStored('elevation', DEFAULTS.elevation))
   const [distance, setDistance] = useState(() => getStored('distance', DEFAULTS.distance))
   const [roll, setRoll] = useState(() => getStored('roll', DEFAULTS.roll))
@@ -193,16 +195,25 @@ function Viewer() {
   const orbitRight = useCallback(() => setAzimuth(a => a + ORBIT_STEP), [])
   const orbitUp    = useCallback(() => setElevation(e => Math.min(85, e + ORBIT_STEP)), [])
   const orbitDown  = useCallback(() => setElevation(e => Math.max(-85, e - ORBIT_STEP)), [])
-  const panLeft  = useCallback(() => setTarget(t => ({ ...t, x: t.x - PAN_STEP })), [])
-  const panRight = useCallback(() => setTarget(t => ({ ...t, x: t.x + PAN_STEP })), [])
+  // Camera-relative pan: left/right move along the camera's local right vector
+  // (perpendicular to view direction on the ground plane), up/down move along y.
+  const panLR = useCallback((step: number) => {
+    const theta = azimuthRef.current * DEG
+    // Camera-right is perpendicular to the view direction on the xz plane
+    const rx = Math.cos(theta)
+    const rz = -Math.sin(theta)
+    setTarget(t => ({ ...t, x: t.x + rx * step, z: t.z + rz * step }))
+  }, [])
+  const panLeft  = useCallback(() => panLR(-PAN_STEP), [panLR])
+  const panRight = useCallback(() => panLR(PAN_STEP), [panLR])
   const panUp    = useCallback(() => setTarget(t => ({ ...t, y: t.y + PAN_STEP })), [])
   const panDown  = useCallback(() => setTarget(t => ({ ...t, y: t.y - PAN_STEP })), [])
   const fastOrbitLeft  = useCallback(() => setAzimuth(a => a - ORBIT_STEP * 2), [])
   const fastOrbitRight = useCallback(() => setAzimuth(a => a + ORBIT_STEP * 2), [])
   const fastOrbitUp    = useCallback(() => setElevation(e => Math.min(85, e + ORBIT_STEP * 2)), [])
   const fastOrbitDown  = useCallback(() => setElevation(e => Math.max(-85, e - ORBIT_STEP * 2)), [])
-  const fastPanLeft  = useCallback(() => setTarget(t => ({ ...t, x: t.x - PAN_STEP * 2 })), [])
-  const fastPanRight = useCallback(() => setTarget(t => ({ ...t, x: t.x + PAN_STEP * 2 })), [])
+  const fastPanLeft  = useCallback(() => panLR(-PAN_STEP * 2), [panLR])
+  const fastPanRight = useCallback(() => panLR(PAN_STEP * 2), [panLR])
   const fastPanUp    = useCallback(() => setTarget(t => ({ ...t, y: t.y + PAN_STEP * 2 })), [])
   const fastPanDown  = useCallback(() => setTarget(t => ({ ...t, y: t.y - PAN_STEP * 2 })), [])
 
@@ -274,18 +285,13 @@ function Viewer() {
   })
 
   // ===== Global view actions =====
-  useAction('view:zoom-in', {
-    label: 'Zoom in',
+  useActionPair('view:zoom', {
+    label: 'Zoom in / out',
     group: '3D: View',
-    defaultBindings: ['='],
-    handler: useCallback(() => setDistance(d => d / ZOOM_FACTOR), []),
-  })
-
-  useAction('view:zoom-out', {
-    label: 'Zoom out',
-    group: '3D: View',
-    defaultBindings: ['-'],
-    handler: useCallback(() => setDistance(d => d * ZOOM_FACTOR), []),
+    actions: [
+      { defaultBindings: ['='], handler: useCallback(() => setDistance(d => d / ZOOM_FACTOR), []) },
+      { defaultBindings: ['-'], handler: useCallback(() => setDistance(d => d * ZOOM_FACTOR), []) },
+    ],
   })
 
   useAction('view:reset', {
@@ -307,6 +313,25 @@ function Viewer() {
     defaultBindings: ['f'],
     handler: useCallback(() => setWireframe(w => !w), []),
   })
+
+  // Mouse wheel: zoom (bare), pan (Shift), roll (Ctrl)
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      const dy = Math.sign(e.deltaY)
+      if (e.ctrlKey || e.metaKey) {
+        setRoll(r => r + dy * ROLL_STEP)
+      } else if (e.shiftKey) {
+        setTarget(t => ({ ...t, y: t.y - dy * PAN_STEP }))
+      } else {
+        setDistance(d => dy > 0 ? d * ZOOM_FACTOR : d / ZOOM_FACTOR)
+      }
+    }
+    container.addEventListener('wheel', onWheel, { passive: false })
+    return () => container.removeEventListener('wheel', onWheel)
+  }, [])
 
   return (
     <div className="viewer-app">
