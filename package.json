@@ -55,14 +55,14 @@
     "react": "^18.3.1",
     "tsup": "^8.3.5",
     "typescript": "^5.7.2",
-    "typescript-eslint": "^8.50.1"
+    "typescript-eslint": "^8.50.1",
+    "og-crd": "https://github.com/runsascoded/og-crd#2cb91c82e15d729d71e56d9945b519bd1e39a550"
   },
   "peerDependencies": {
     "react": ">=18.0.0",
     "react-dom": ">=18.0.0"
   },
   "dependencies": {
-    "debug": "^4.4.3",
-    "og-crd": "workspace:*"
+    "debug": "^4.4.3"
   }
 }

@@ -11,9 +11,6 @@ importers:
       debug:
         specifier: ^4.4.3
         version: 4.4.3
-      og-crd:
-        specifier: workspace:*
-        version: link:../og-crd
       react-dom:
         specifier: '>=18.0.0'
         version: 18.3.1(react@18.3.1)
@@ -42,6 +39,9 @@ importers:
       globals:
         specifier: ^16.5.0
         version: 16.5.0
+      og-crd:
+        specifier: https://github.com/runsascoded/og-crd#2cb91c82e15d729d71e56d9945b519bd1e39a550
+        version: https://codeload.github.com/runsascoded/og-crd/tar.gz/2cb91c82e15d729d71e56d9945b519bd1e39a550(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -1834,6 +1834,14 @@ packages:
   object.values@1.2.1:
     resolution: {integrity: sha512-gXah6aZrcUxjWg2zR2MwouP2eHlCBzdV4pygudehaKXSGW4v2AsRQUK+lwwXhii6KFZcunEnmSUoYp5CXibxtA==}
     engines: {node: '>= 0.4'}
+
+  og-crd@https://codeload.github.com/runsascoded/og-crd/tar.gz/2cb91c82e15d729d71e56d9945b519bd1e39a550:
+    resolution: {tarball: https://codeload.github.com/runsascoded/og-crd/tar.gz/2cb91c82e15d729d71e56d9945b519bd1e39a550}
+    version: 0.0.1-dist.4aeb7d3
+    hasBin: true
+    peerDependencies:
+      react: '>=18'
+      react-dom: '>=18'
 
   optionator@0.9.4:
     resolution: {integrity: sha512-6IpQ7mKUxRcZNLIObR0hz7lxsapSSIYNZJwXPGeF0mTVqGKFIXj1DQcMoT22S3ROcLyY/rz0PWaWZ9ayWmad9g==}
@@ -4241,6 +4249,11 @@ snapshots:
       call-bound: 1.0.4
       define-properties: 1.2.1
       es-object-atoms: 1.1.1
+
+  og-crd@https://codeload.github.com/runsascoded/og-crd/tar.gz/2cb91c82e15d729d71e56d9945b519bd1e39a550(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
+    dependencies:
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
 
   optionator@0.9.4:
     dependencies:
