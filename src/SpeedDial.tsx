@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { useMaybeHotkeysContext } from './HotkeysProvider'
 import { SearchIcon } from './SearchTrigger'
+import type { TooltipComponent } from './ShortcutsModal'
 
 export interface SpeedDialAction {
   /** Unique key for React rendering */
@@ -39,6 +40,10 @@ export interface SpeedDialProps {
    * - 'none': no chevron; expand via hover/long-press only
    */
   chevronMode?: 'separate' | 'badge' | 'none'
+  /** Custom tooltip wrapper for action buttons.
+   *  Recommended placement: opposite the SD's viewport edge (typically 'left').
+   *  Receives { title: string, children: ReactNode }. */
+  TooltipComponent?: TooltipComponent
 }
 
 function ChevronIcon({ direction }: { direction: 'up' | 'down' }) {
@@ -57,6 +62,8 @@ function ChevronIcon({ direction }: { direction: 'up' | 'down' }) {
     </svg>
   )
 }
+
+const DefaultTip = ({ children }: { title: string; children: ReactNode }) => <>{children}</>
 
 function KeyboardIcon() {
   return (
@@ -84,6 +91,7 @@ export function SpeedDial({
   ariaLabel = 'Open command palette',
   className,
   chevronMode = 'separate',
+  TooltipComponent: Tip = DefaultTip,
 }: SpeedDialProps) {
   const ctx = useMaybeHotkeysContext()
   const [isSticky, setIsSticky] = useState(false)
@@ -206,27 +214,31 @@ export function SpeedDial({
       {/* DOM order = visual bottom-to-top via column-reverse */}
 
       {/* Primary button (bottom) */}
-      <button
-        ref={primaryBtnRef}
-        type="button"
-        className="kbd-speed-dial-primary"
-        onClick={handlePrimaryClick}
-        aria-label={ariaLabel}
-      >
-        {primaryIcon ?? <SearchIcon className="kbd-speed-dial-icon" />}
-      </button>
+      <Tip title={ariaLabel}>
+        <button
+          ref={primaryBtnRef}
+          type="button"
+          className="kbd-speed-dial-primary"
+          onClick={handlePrimaryClick}
+          aria-label={ariaLabel}
+        >
+          {primaryIcon ?? <SearchIcon className="kbd-speed-dial-icon" />}
+        </button>
+      </Tip>
 
       {/* Chevron toggle (above primary) */}
       {chevronMode !== 'none' && (
-        <button
-          type="button"
-          className={chevronClasses.join(' ')}
-          onClick={handleChevronClick}
-          aria-label={isExpanded ? 'Collapse actions' : 'Expand actions'}
-          aria-expanded={isExpanded}
-        >
-          <ChevronIcon direction={isExpanded ? 'down' : 'up'} />
-        </button>
+        <Tip title={isExpanded ? 'Collapse actions' : 'Expand actions'}>
+          <button
+            type="button"
+            className={chevronClasses.join(' ')}
+            onClick={handleChevronClick}
+            aria-label={isExpanded ? 'Collapse actions' : 'Expand actions'}
+            aria-expanded={isExpanded}
+          >
+            <ChevronIcon direction={isExpanded ? 'down' : 'up'} />
+          </button>
+        </Tip>
       )}
 
       {/* Secondary actions (above chevron, visible when expanded) */}
@@ -235,29 +247,29 @@ export function SpeedDial({
         if (action.href) {
           const external = action.external ?? true
           return (
-            <a
-              key={action.key}
-              className={cls}
-              href={action.href}
-              aria-label={action.label}
-              title={action.label}
-              {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-            >
-              {action.icon}
-            </a>
+            <Tip key={action.key} title={action.label}>
+              <a
+                className={cls}
+                href={action.href}
+                aria-label={action.label}
+                {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+              >
+                {action.icon}
+              </a>
+            </Tip>
           )
         }
         return (
-          <button
-            key={action.key}
-            type="button"
-            className={cls}
-            onClick={action.onClick}
-            aria-label={action.label}
-            title={action.label}
-          >
-            {action.icon}
-          </button>
+          <Tip key={action.key} title={action.label}>
+            <button
+              type="button"
+              className={cls}
+              onClick={action.onClick}
+              aria-label={action.label}
+            >
+              {action.icon}
+            </button>
+          </Tip>
         )
       })}
     </div>
