@@ -1,7 +1,13 @@
-import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
+import { type ComponentType, useCallback, useEffect, useRef, useState } from 'react'
 import { useMaybeHotkeysContext } from './HotkeysProvider'
 import { SearchIcon } from './SearchTrigger'
-import type { TooltipComponent } from './ShortcutsModal'
+
+export interface SpeedDialTooltipProps {
+  /** Tooltip text */
+  title: string
+  /** The anchor element to position relative to */
+  anchor: HTMLElement
+}
 
 export interface SpeedDialAction {
   /** Unique key for React rendering */
@@ -40,10 +46,11 @@ export interface SpeedDialProps {
    * - 'none': no chevron; expand via hover/long-press only
    */
   chevronMode?: 'separate' | 'badge' | 'none'
-  /** Custom tooltip wrapper for action buttons.
+  /** Custom tooltip renderer for action buttons.
+   *  Renders a positioned overlay anchored to the hovered button.
    *  Recommended placement: opposite the SD's viewport edge (typically 'left').
-   *  Receives { title: string, children: ReactNode }. */
-  TooltipComponent?: TooltipComponent
+   *  use-kbd manages hover detection internally. */
+  TooltipRenderer?: ComponentType<SpeedDialTooltipProps>
 }
 
 function ChevronIcon({ direction }: { direction: 'up' | 'down' }) {
@@ -62,8 +69,6 @@ function ChevronIcon({ direction }: { direction: 'up' | 'down' }) {
     </svg>
   )
 }
-
-const DefaultTip = ({ children }: { title: string; children: ReactNode }) => <>{children}</>
 
 function KeyboardIcon() {
   return (
@@ -91,11 +96,12 @@ export function SpeedDial({
   ariaLabel = 'Open command palette',
   className,
   chevronMode = 'separate',
-  TooltipComponent: Tip = DefaultTip,
+  TooltipRenderer,
 }: SpeedDialProps) {
   const ctx = useMaybeHotkeysContext()
   const [isSticky, setIsSticky] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
+  const [tooltip, setTooltip] = useState<{ title: string; anchor: HTMLElement } | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const primaryBtnRef = useRef<HTMLButtonElement>(null)
 
@@ -214,64 +220,78 @@ export function SpeedDial({
       {/* DOM order = visual bottom-to-top via column-reverse */}
 
       {/* Primary button (bottom) */}
-      <Tip title={ariaLabel}>
-        <button
-          ref={primaryBtnRef}
-          type="button"
-          className="kbd-speed-dial-primary"
-          onClick={handlePrimaryClick}
-          aria-label={ariaLabel}
-        >
-          {primaryIcon ?? <SearchIcon className="kbd-speed-dial-icon" />}
-        </button>
-      </Tip>
+      <button
+        ref={primaryBtnRef}
+        type="button"
+        className="kbd-speed-dial-primary"
+        onClick={handlePrimaryClick}
+        aria-label={ariaLabel}
+        title={TooltipRenderer ? undefined : ariaLabel}
+        onMouseEnter={TooltipRenderer ? (e) => setTooltip({ title: ariaLabel, anchor: e.currentTarget }) : undefined}
+        onMouseLeave={TooltipRenderer ? () => setTooltip(null) : undefined}
+      >
+        {primaryIcon ?? <SearchIcon className="kbd-speed-dial-icon" />}
+      </button>
 
       {/* Chevron toggle (above primary) */}
-      {chevronMode !== 'none' && (
-        <Tip title={isExpanded ? 'Collapse actions' : 'Expand actions'}>
+      {chevronMode !== 'none' && (() => {
+        const chevronTitle = isExpanded ? 'Collapse actions' : 'Expand actions'
+        return (
           <button
             type="button"
             className={chevronClasses.join(' ')}
             onClick={handleChevronClick}
-            aria-label={isExpanded ? 'Collapse actions' : 'Expand actions'}
+            aria-label={chevronTitle}
             aria-expanded={isExpanded}
+            title={TooltipRenderer ? undefined : chevronTitle}
+            onMouseEnter={TooltipRenderer ? (e) => setTooltip({ title: chevronTitle, anchor: e.currentTarget }) : undefined}
+            onMouseLeave={TooltipRenderer ? () => setTooltip(null) : undefined}
           >
             <ChevronIcon direction={isExpanded ? 'down' : 'up'} />
           </button>
-        </Tip>
-      )}
+        )
+      })()}
 
       {/* Secondary actions (above chevron, visible when expanded) */}
       {isExpanded && allSecondaryActions.map(action => {
         const cls = 'kbd-speed-dial-action'
+        const tipProps = TooltipRenderer ? {
+          onMouseEnter: (e: React.MouseEvent<HTMLElement>) => setTooltip({ title: action.label, anchor: e.currentTarget }),
+          onMouseLeave: () => setTooltip(null),
+        } : { title: action.label }
         if (action.href) {
           const external = action.external ?? true
           return (
-            <Tip key={action.key} title={action.label}>
-              <a
-                className={cls}
-                href={action.href}
-                aria-label={action.label}
-                {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-              >
-                {action.icon}
-              </a>
-            </Tip>
+            <a
+              key={action.key}
+              className={cls}
+              href={action.href}
+              aria-label={action.label}
+              {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+              {...tipProps}
+            >
+              {action.icon}
+            </a>
           )
         }
         return (
-          <Tip key={action.key} title={action.label}>
-            <button
-              type="button"
-              className={cls}
-              onClick={action.onClick}
-              aria-label={action.label}
-            >
-              {action.icon}
-            </button>
-          </Tip>
+          <button
+            key={action.key}
+            type="button"
+            className={cls}
+            onClick={action.onClick}
+            aria-label={action.label}
+            {...tipProps}
+          >
+            {action.icon}
+          </button>
         )
       })}
+
+      {/* Custom tooltip renderer (positioned overlay) */}
+      {TooltipRenderer && tooltip && (
+        <TooltipRenderer title={tooltip.title} anchor={tooltip.anchor} />
+      )}
     </div>
   )
 }
