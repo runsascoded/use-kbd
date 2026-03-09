@@ -4686,11 +4686,13 @@ function SpeedDial({
   primaryIcon,
   ariaLabel = "Open command palette",
   className,
-  chevronMode = "separate"
+  chevronMode = "separate",
+  TooltipRenderer
 }) {
   const ctx = useMaybeHotkeysContext();
   const [isSticky, setIsSticky] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
+  const [tooltip, setTooltip] = useState(null);
   const containerRef = useRef(null);
   const primaryBtnRef = useRef(null);
   const isExpanded = isSticky || isHovered;
@@ -4797,22 +4799,35 @@ function SpeedDial({
             className: "kbd-speed-dial-primary",
             onClick: handlePrimaryClick,
             "aria-label": ariaLabel,
+            title: TooltipRenderer ? void 0 : ariaLabel,
+            onMouseEnter: TooltipRenderer ? (e) => setTooltip({ title: ariaLabel, anchor: e.currentTarget }) : void 0,
+            onMouseLeave: TooltipRenderer ? () => setTooltip(null) : void 0,
             children: primaryIcon ?? /* @__PURE__ */ jsx(SearchIcon2, { className: "kbd-speed-dial-icon" })
           }
         ),
-        chevronMode !== "none" && /* @__PURE__ */ jsx(
-          "button",
-          {
-            type: "button",
-            className: chevronClasses.join(" "),
-            onClick: handleChevronClick,
-            "aria-label": isExpanded ? "Collapse actions" : "Expand actions",
-            "aria-expanded": isExpanded,
-            children: /* @__PURE__ */ jsx(ChevronIcon, { direction: isExpanded ? "down" : "up" })
-          }
-        ),
+        chevronMode !== "none" && (() => {
+          const chevronTitle = isExpanded ? "Collapse actions" : "Expand actions";
+          return /* @__PURE__ */ jsx(
+            "button",
+            {
+              type: "button",
+              className: chevronClasses.join(" "),
+              onClick: handleChevronClick,
+              "aria-label": chevronTitle,
+              "aria-expanded": isExpanded,
+              title: TooltipRenderer ? void 0 : chevronTitle,
+              onMouseEnter: TooltipRenderer ? (e) => setTooltip({ title: chevronTitle, anchor: e.currentTarget }) : void 0,
+              onMouseLeave: TooltipRenderer ? () => setTooltip(null) : void 0,
+              children: /* @__PURE__ */ jsx(ChevronIcon, { direction: isExpanded ? "down" : "up" })
+            }
+          );
+        })(),
         isExpanded && allSecondaryActions.map((action) => {
           const cls = "kbd-speed-dial-action";
+          const tipProps = TooltipRenderer ? {
+            onMouseEnter: (e) => setTooltip({ title: action.label, anchor: e.currentTarget }),
+            onMouseLeave: () => setTooltip(null)
+          } : { title: action.label };
           if (action.href) {
             const external = action.external ?? true;
             return /* @__PURE__ */ jsx(
@@ -4821,8 +4836,8 @@ function SpeedDial({
                 className: cls,
                 href: action.href,
                 "aria-label": action.label,
-                title: action.label,
                 ...external ? { target: "_blank", rel: "noopener noreferrer" } : {},
+                ...tipProps,
                 children: action.icon
               },
               action.key
@@ -4835,12 +4850,13 @@ function SpeedDial({
               className: cls,
               onClick: action.onClick,
               "aria-label": action.label,
-              title: action.label,
+              ...tipProps,
               children: action.icon
             },
             action.key
           );
-        })
+        }),
+        TooltipRenderer && tooltip && /* @__PURE__ */ jsx(TooltipRenderer, { title: tooltip.title, anchor: tooltip.anchor })
       ]
     }
   );
