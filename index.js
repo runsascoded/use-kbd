@@ -2478,8 +2478,12 @@ function useActionPair(id, config) {
     JSON.stringify(actionB.keywords),
     actionB.enabled,
     enabled
-    // handlers excluded — refs handle staleness in useActions
+    // handlers and enabled excluded — patched below to avoid stale closures
   ]);
+  actionConfigs[`${id}-a`].handler = actionA.handler;
+  actionConfigs[`${id}-b`].handler = actionB.handler;
+  actionConfigs[`${id}-a`].enabled = actionA.enabled ?? enabled;
+  actionConfigs[`${id}-b`].enabled = actionB.enabled ?? enabled;
   useActions(actionConfigs);
 }
 var SUFFIXES = ["a", "b", "c"];
@@ -2530,8 +2534,14 @@ function useActionTriplet(id, config) {
     JSON.stringify(actionC.keywords),
     actionC.enabled,
     enabled
-    // handlers excluded — refs handle staleness in useActions
+    // handlers and enabled excluded — patched below to avoid stale closures
   ]);
+  actionConfigs[`${id}-a`].handler = actionA.handler;
+  actionConfigs[`${id}-b`].handler = actionB.handler;
+  actionConfigs[`${id}-c`].handler = actionC.handler;
+  actionConfigs[`${id}-a`].enabled = actionA.enabled ?? enabled;
+  actionConfigs[`${id}-b`].enabled = actionB.enabled ?? enabled;
+  actionConfigs[`${id}-c`].enabled = actionC.enabled ?? enabled;
   useActions(actionConfigs);
 }
 function useMode(id, config) {
@@ -4745,8 +4755,10 @@ function SpeedDial({
     setIsSticky((s) => !s);
   }, []);
   if (!ctx) return null;
-  const bottom = position?.bottom ?? 20;
-  const right = position?.right ?? 20;
+  const verticalProp = position?.top != null ? "top" : "bottom";
+  const verticalVal = position?.top ?? position?.bottom ?? 20;
+  const horizontalProp = position?.left != null ? "left" : "right";
+  const horizontalVal = position?.left ?? position?.right ?? 20;
   const containerClasses = ["kbd-speed-dial"];
   if (isExpanded) containerClasses.push("kbd-speed-dial-expanded");
   if (chevronMode === "badge") containerClasses.push("kbd-speed-dial-badge-mode");
@@ -4771,8 +4783,8 @@ function SpeedDial({
       className: containerClasses.join(" "),
       style: {
         position: "fixed",
-        bottom: `calc(${bottom}px + env(safe-area-inset-bottom, 0px))`,
-        right: `${right}px`
+        [verticalProp]: `calc(${verticalVal}px + env(safe-area-inset-${verticalProp}, 0px))`,
+        [horizontalProp]: `${horizontalVal}px`
       },
       onMouseEnter: () => setIsHovered(true),
       onMouseLeave: () => setIsHovered(false),

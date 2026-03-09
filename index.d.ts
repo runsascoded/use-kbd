@@ -2196,7 +2196,9 @@ interface SpeedDialProps {
     showShortcuts?: boolean;
     /** Position offset from viewport edges */
     position?: {
+        top?: number;
         bottom?: number;
+        left?: number;
         right?: number;
     };
     /** Duration in ms for long-press to toggle sticky (default: 400) */
