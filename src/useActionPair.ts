@@ -86,8 +86,13 @@ export function useActionPair(id: string, config: ActionPairConfig): void {
     JSON.stringify(actionB.keywords),
     actionB.enabled,
     enabled,
-    // handlers excluded — refs handle staleness in useActions
+    // handlers and enabled excluded — patched below to avoid stale closures
   ])
+
+  actionConfigs[`${id}-a`].handler = actionA.handler
+  actionConfigs[`${id}-b`].handler = actionB.handler
+  actionConfigs[`${id}-a`].enabled = actionA.enabled ?? enabled
+  actionConfigs[`${id}-b`].enabled = actionB.enabled ?? enabled
 
   useActions(actionConfigs)
 }

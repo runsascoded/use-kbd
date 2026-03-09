@@ -93,8 +93,15 @@ export function useActionTriplet(id: string, config: ActionTripletConfig): void 
     JSON.stringify(actionC.keywords),
     actionC.enabled,
     enabled,
-    // handlers excluded — refs handle staleness in useActions
+    // handlers and enabled excluded — patched below to avoid stale closures
   ])
+
+  actionConfigs[`${id}-a`].handler = actionA.handler
+  actionConfigs[`${id}-b`].handler = actionB.handler
+  actionConfigs[`${id}-c`].handler = actionC.handler
+  actionConfigs[`${id}-a`].enabled = actionA.enabled ?? enabled
+  actionConfigs[`${id}-b`].enabled = actionB.enabled ?? enabled
+  actionConfigs[`${id}-c`].enabled = actionC.enabled ?? enabled
 
   useActions(actionConfigs)
 }
