@@ -23,7 +23,7 @@ export interface SpeedDialProps {
   /** Whether to show the built-in "Shortcuts" action that opens the omnibar (default: true) */
   showShortcuts?: boolean
   /** Position offset from viewport edges */
-  position?: { bottom?: number; right?: number }
+  position?: { top?: number; bottom?: number; left?: number; right?: number }
   /** Duration in ms for long-press to toggle sticky (default: 400) */
   longPressDuration?: number
   /** Custom icon for the primary button (defaults to SearchIcon) */
@@ -164,8 +164,10 @@ export function SpeedDial({
 
   if (!ctx) return null
 
-  const bottom = position?.bottom ?? 20
-  const right = position?.right ?? 20
+  const verticalProp = position?.top != null ? 'top' : 'bottom'
+  const verticalVal = position?.top ?? position?.bottom ?? 20
+  const horizontalProp = position?.left != null ? 'left' : 'right'
+  const horizontalVal = position?.left ?? position?.right ?? 20
 
   const containerClasses = ['kbd-speed-dial']
   if (isExpanded) containerClasses.push('kbd-speed-dial-expanded')
@@ -195,8 +197,8 @@ export function SpeedDial({
       className={containerClasses.join(' ')}
       style={{
         position: 'fixed',
-        bottom: `calc(${bottom}px + env(safe-area-inset-bottom, 0px))`,
-        right: `${right}px`,
+        [verticalProp]: `calc(${verticalVal}px + env(safe-area-inset-${verticalProp}, 0px))`,
+        [horizontalProp]: `${horizontalVal}px`,
       }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
