@@ -82,8 +82,49 @@ function Dashboard() {
 
 ### Usage in the wild <a id="usage"></a>
 
+<table>
+<tr>
+<td width="280" valign="top">
+<a href="https://runsascoded.com/apvd">
+<img src="https://runsascoded.com/apvd/img/screenshots/3-circles.png" alt="Area-Proportional Venn Diagrams" width="280">
+<br><b>Area-Proportional Venn Diagrams</b>
+</a>
+</td>
+<td width="280" valign="top">
+<a href="https://air.rbw.sh">
+<img src="https://380nwk.s3.amazonaws.com/awair/og-image.jpg" alt="Awair Dashboard" width="280">
+<br><b>Awair Dashboard</b>
+<br><sub>Real-time air quality monitoring dashboard with temperature, CO₂, humidity, PM2.5, and VOC data visualization</sub>
+</a>
+</td>
+<td width="280" valign="top">
+<a href="https://github.com/HackJerseyCity/jc-taxes">
+<img src="https://repository-images.githubusercontent.com/1153088407/26ae854c-725b-4ca3-819e-cad30586484a" alt="jc-taxes" width="280">
+<br><b>jc-taxes</b>
+<br><sub>3D map of Jersey City property tax payments</sub>
+</a>
+</td>
+</tr>
+<tr>
+<td width="280" valign="top">
+<a href="https://voro.rbw.sh">
+<img src="https://voro.rbw.sh/og-image.png" alt="Image Voronoi" width="280">
+<br><b>Image Voronoi</b>
+<br><sub>Interactive Voronoi mosaic from any image</sub>
+</a>
+</td>
+<td width="280" valign="top">
+<a href="https://ctbk.dev">
+<img src="https://ctbk.dev/screenshots/ctbk-og-mosaic.png" alt="ctbk.dev" width="280">
+<br><b>ctbk.dev - Citi Bike Dashboard</b>
+<br><sub>NYC Citi Bike trip data: rides per month, station maps, and more.</sub>
+</a>
+</td>
+</tr>
+</table>
+
 - [ctbk.dev] ([GitHub][ctbk-gh] · [usage][ctbk-usage] · [diff][ctbk-diff]) — Citi Bike trip data explorer
-- [awair.runsascoded.com] ([GitHub][awair-gh] · [usage][awair-usage] · [diff][awair-diff]) — Awair air quality dashboard
+- [air.rbw.sh] ([GitHub][awair-gh] · [usage][awair-usage] · [diff][awair-diff]) — Awair air quality dashboard
 - [jct.rbw.sh] ([GitHub][jct-gh] · [usage][jct-usage] · [diff][jct-diff]) — Jersey City 3D tax map
 - [voro.rbw.sh] ([GitHub][voro-gh] · [usage][voro-usage]) — Image Voronoi generator
 - [runsascoded.com/apvd] ([GitHub][apvd-gh] · [usage][apvd-usage]) — Area-Proportional Venn Diagrams
@@ -93,14 +134,14 @@ function Dashboard() {
 [ctbk-gh]: https://github.com/hudcostreets/ctbk.dev
 [ctbk-diff]: https://github.com/hudcostreets/ctbk.dev/compare/pre-use-kbd...use-kbd-demo
 [ctbk-usage]: https://github.com/search?q=repo%3Ahudcostreets%2Fctbk.dev+use-kbd&type=code
-[awair.runsascoded.com]: https://awair.runsascoded.com
+[air.rbw.sh]: https://air.rbw.sh
 [awair-gh]: https://github.com/runsascoded/awair
 [awair-diff]: https://github.com/runsascoded/awair/compare/pre-use-kbd...use-kbd-demo
 [awair-usage]: https://github.com/search?q=repo%3Arunsascoded%2Fawair+use-kbd&type=code
 [jct.rbw.sh]: https://jct.rbw.sh
-[jct-gh]: https://github.com/neighbor-ryan/jc-taxes
-[jct-diff]: https://github.com/neighbor-ryan/jc-taxes/compare/pre-use-kbd...use-kbd-demo
-[jct-usage]: https://github.com/search?q=repo%3Arunsascoded%2Fjc-taxes+use-kbd&type=code
+[jct-gh]: https://github.com/HackJerseyCity/jc-taxes
+[jct-diff]: https://github.com/HackJerseyCity/jc-taxes/compare/pre-use-kbd...use-kbd-demo
+[jct-usage]: https://github.com/search?q=repo%3AHackJerseyCity%2Fjc-taxes+use-kbd&type=code
 [voro.rbw.sh]: https://voro.rbw.sh
 [voro-gh]: https://github.com/runsascoded/ImageVoronoi
 [voro-usage]: https://github.com/search?q=repo%3Arunsascoded%2FImageVoronoi+use-kbd&type=code

@@ -62,6 +62,7 @@
     "react-dom": ">=18.0.0"
   },
   "dependencies": {
-    "debug": "^4.4.3"
+    "debug": "^4.4.3",
+    "og-crd": "workspace:*"
   }
 }
