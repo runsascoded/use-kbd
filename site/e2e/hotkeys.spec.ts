@@ -21,6 +21,54 @@ test.describe('Global Features', () => {
     await expect(modal).toBeVisible()
   })
 
+  test('shortcuts modal supports keyboard scrolling (PageDown, arrows)', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    // Navigate to table page (has many shortcuts, ensuring modal is scrollable)
+    await page.keyboard.press('g')
+    await page.waitForTimeout(100)
+    await page.keyboard.press('t')
+    await page.waitForTimeout(500)
+    await expect(page).toHaveURL('/table')
+
+    // Open shortcuts modal
+    await page.keyboard.press('?')
+    await page.waitForSelector('.kbd-modal', { timeout: 5000 })
+
+    const modal = page.locator('.kbd-modal')
+    await expect(modal).toBeVisible()
+
+    // Modal should be focused (scrollTop starts at 0)
+    const scrollBefore = await modal.evaluate(el => el.scrollTop)
+    expect(scrollBefore).toBe(0)
+
+    // Press PageDown — should scroll the modal
+    await page.keyboard.press('PageDown')
+    await page.waitForTimeout(100)
+
+    const scrollAfterPageDown = await modal.evaluate(el => el.scrollTop)
+    expect(scrollAfterPageDown).toBeGreaterThan(0)
+
+    // Press ArrowDown — should scroll further
+    await page.keyboard.press('ArrowDown')
+    await page.waitForTimeout(100)
+
+    const scrollAfterArrow = await modal.evaluate(el => el.scrollTop)
+    expect(scrollAfterArrow).toBeGreaterThan(scrollAfterPageDown)
+
+    // Press PageUp — should scroll back toward top
+    await page.keyboard.press('PageUp')
+    await page.waitForTimeout(100)
+
+    const scrollAfterPageUp = await modal.evaluate(el => el.scrollTop)
+    expect(scrollAfterPageUp).toBeLessThan(scrollAfterArrow)
+
+    // Clean up
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(200)
+    await expect(modal).not.toBeVisible()
+  })
+
   test('shortcuts work while modal is open, modal closes on sequence', async ({ page }) => {
     await page.locator('body').click({ position: { x: 10, y: 10 } })
 

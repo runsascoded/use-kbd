@@ -1328,6 +1328,7 @@ export function ShortcutsModal({
   } : undefined)
 
   // Export/Import handlers
+  const modalRef = useRef<HTMLDivElement>(null)
   const importInputRef = useRef<HTMLInputElement>(null)
   const [importError, setImportError] = useState<string | null>(null)
 
@@ -1936,6 +1937,11 @@ export function ShortcutsModal({
     return () => window.removeEventListener('keydown', handleMetaK, true)
   }, [isOpen, ctx, close])
 
+  // Focus modal for keyboard scrolling (PageUp/Down, arrows)
+  useEffect(() => {
+    if (isOpen) modalRef.current?.focus()
+  }, [isOpen])
+
   // Close on backdrop click
   const handleBackdropClick = useCallback(
     (e: MouseEvent) => {
@@ -2179,7 +2185,7 @@ export function ShortcutsModal({
   return (
     <TooltipContext.Provider value={TooltipComponentProp}>
       <div className={backdropClassName} onClick={handleBackdropClick}>
-        <div className={modalClassName} role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" onClick={handleModalClick}>
+        <div ref={modalRef} className={modalClassName} role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" tabIndex={-1} onClick={handleModalClick}>
           <div className="kbd-modal-header">
             <h2 className="kbd-modal-title">{title}</h2>
             <button className="kbd-modal-close" onClick={close} aria-label="Close">
