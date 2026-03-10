@@ -6121,6 +6121,7 @@ function ShortcutsModal({
   const handleReset = onReset ?? (ctx ? () => {
     ctx.registry.resetOverrides();
   } : void 0);
+  const modalRef = useRef(null);
   const importInputRef = useRef(null);
   const [importError, setImportError] = useState(null);
   const modeCusts = ctx?.registry.modeCustomizations;
@@ -6596,6 +6597,9 @@ function ShortcutsModal({
     window.addEventListener("keydown", handleMetaK, true);
     return () => window.removeEventListener("keydown", handleMetaK, true);
   }, [isOpen, ctx, close]);
+  useEffect(() => {
+    if (isOpen) modalRef.current?.focus();
+  }, [isOpen]);
   const handleBackdropClick = useCallback(
     (e) => {
       if (e.target === e.currentTarget) {
@@ -6780,7 +6784,7 @@ function ShortcutsModal({
     }
     return group.shortcuts.map(renderShortcutEntry);
   };
-  return /* @__PURE__ */ jsx(TooltipContext.Provider, { value: TooltipComponentProp, children: /* @__PURE__ */ jsx("div", { className: backdropClassName, onClick: handleBackdropClick, children: /* @__PURE__ */ jsxs("div", { className: modalClassName, role: "dialog", "aria-modal": "true", "aria-label": "Keyboard shortcuts", onClick: handleModalClick, children: [
+  return /* @__PURE__ */ jsx(TooltipContext.Provider, { value: TooltipComponentProp, children: /* @__PURE__ */ jsx("div", { className: backdropClassName, onClick: handleBackdropClick, children: /* @__PURE__ */ jsxs("div", { ref: modalRef, className: modalClassName, role: "dialog", "aria-modal": "true", "aria-label": "Keyboard shortcuts", tabIndex: -1, onClick: handleModalClick, children: [
     /* @__PURE__ */ jsxs("div", { className: "kbd-modal-header", children: [
       /* @__PURE__ */ jsx("h2", { className: "kbd-modal-title", children: title }),
       /* @__PURE__ */ jsx("button", { className: "kbd-modal-close", onClick: close, "aria-label": "Close", children: "\xD7" })
