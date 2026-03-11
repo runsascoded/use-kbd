@@ -815,6 +815,45 @@ test.describe('Data Table Demo', () => {
     await expect(rows.nth(2)).toHaveClass(/selected/)
   })
 
+  test('SpeedDial collapses on touch devices after chevron tap', async ({ browser }) => {
+    // Emulate a touch device (no mouse hover)
+    const context = await browser.newContext({
+      hasTouch: true,
+      viewport: { width: 375, height: 667 },
+    })
+    const page = await context.newPage()
+    await page.addInitScript(() => {
+      localStorage.removeItem('use-kbd-demo')
+      localStorage.removeItem('use-kbd-demo-removed')
+    })
+    await page.goto('/table')
+    await expect(page.locator('.kbd-speed-dial-primary')).toBeVisible()
+
+    const chevron = page.locator('.kbd-speed-dial-chevron')
+    const actions = page.locator('.kbd-speed-dial-action')
+
+    // Tap chevron to expand (sets sticky)
+    await chevron.tap()
+    await page.waitForTimeout(200)
+    await expect(actions.first()).toBeVisible()
+
+    // Tap chevron again to collapse
+    await chevron.tap()
+    await page.waitForTimeout(200)
+    await expect(actions.first()).not.toBeVisible()
+
+    // Verify expand/collapse cycle works repeatedly
+    await chevron.tap()
+    await page.waitForTimeout(200)
+    await expect(actions.first()).toBeVisible()
+
+    await chevron.tap()
+    await page.waitForTimeout(200)
+    await expect(actions.first()).not.toBeVisible()
+
+    await context.close()
+  })
+
   test('omnibar click execution: placeholder action shows param entry on repeat', async ({ page }) => {
     const rows = page.locator('.data-table tbody tr')
     await rows.first().click()

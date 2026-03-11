@@ -214,8 +214,8 @@ export function SpeedDial({
         [verticalProp]: `calc(${verticalVal}px + env(safe-area-inset-${verticalProp}, 0px))`,
         [horizontalProp]: `${horizontalVal}px`,
       }}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      onPointerEnter={(e) => { if (e.pointerType === 'mouse') setIsHovered(true) }}
+      onPointerLeave={(e) => { if (e.pointerType === 'mouse') setIsHovered(false) }}
     >
       {/* DOM order = visual bottom-to-top via column-reverse */}
 
