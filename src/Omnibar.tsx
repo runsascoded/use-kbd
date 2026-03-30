@@ -1,4 +1,4 @@
-import { Fragment, KeyboardEvent, MouseEvent, ReactNode, RefObject, useCallback, useEffect, useMemo, useRef } from 'react'
+import { Fragment, KeyboardEvent, MouseEvent, ReactNode, RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ACTION_MODE_PREFIX, ACTION_OMNIBAR, DEFAULT_BUILTIN_GROUP } from './constants'
 import { useMaybeHotkeysContext } from './HotkeysProvider'
 import { ModifierIcon } from './ModifierIcons'
@@ -54,7 +54,7 @@ export interface OmnibarProps {
    * Use this to handle navigation for entries with `href`.
    */
   onExecuteRemote?: (entry: OmnibarEntry) => void
-  /** Maximum number of results to show (default: 10) */
+  /** Hard cap on results. Omit for infinite scroll (default, renders 25 at a time). */
   maxResults?: number
   /** Placeholder text for input (default: 'Type a command...') */
   placeholder?: string
@@ -186,7 +186,7 @@ export function Omnibar({
   onClose: onCloseProp,
   onExecute: onExecuteProp,
   onExecuteRemote: onExecuteRemoteProp,
-  maxResults = 10,
+  maxResults,
   placeholder = 'Type a command...',
   children,
   backdropClassName = 'kbd-omnibar-backdrop',
@@ -289,6 +289,26 @@ export function Omnibar({
   // Ref for the results container (IntersectionObserver root)
   const resultsContainerRef = useRef<HTMLDivElement | null>(null)
 
+  // Infinite scroll for local results: render a page at a time
+  const PAGE_SIZE = 25
+  const [renderedCount, setRenderedCount] = useState(PAGE_SIZE)
+  const localSentinelRef = useRef<HTMLDivElement | null>(null)
+
+  // Reset rendered count when query changes
+  useEffect(() => {
+    setRenderedCount(PAGE_SIZE)
+  }, [query])
+
+  // Expand rendered count when arrow key selection approaches the boundary
+  useEffect(() => {
+    if (selectedIndex >= renderedCount - 5 && renderedCount < results.length) {
+      setRenderedCount(prev => Math.min(prev + PAGE_SIZE, results.length))
+    }
+  }, [selectedIndex, renderedCount, results.length])
+
+  const visibleResults = renderedCount < results.length ? results.slice(0, renderedCount) : results
+  const hasMoreLocal = renderedCount < results.length
+
   // Refs for sentinel elements (one per endpoint with scroll mode)
   const sentinelRefs = useRef<Map<string, HTMLDivElement | null>>(new Map())
 
@@ -382,6 +402,25 @@ export function Omnibar({
 
     return () => observer.disconnect()
   }, [isOpen, endpointPagination, loadMore])
+
+  // IntersectionObserver for local results infinite scroll
+  useEffect(() => {
+    if (!isOpen || !hasMoreLocal) return
+    const container = resultsContainerRef.current
+    const sentinel = localSentinelRef.current
+    if (!container || !sentinel) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setRenderedCount(prev => Math.min(prev + PAGE_SIZE, results.length))
+        }
+      },
+      { root: container, rootMargin: '100px', threshold: 0 },
+    )
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [isOpen, hasMoreLocal, results.length])
 
   // Global ESC handler to close omnibar (works even if input loses focus)
   useEffect(() => {
@@ -528,7 +567,7 @@ export function Omnibar({
           ) : (
             <>
               {/* Local action results */}
-              {results.map((result, i) => {
+              {visibleResults.map((result, i) => {
                 const modeId = result.mode
                 const modeInfo = modeId && ctx?.modes ? ctx.modes.get(modeId) : undefined
                 const isModeInactive = modeId && ctx?.activeMode !== modeId
@@ -567,6 +606,18 @@ export function Omnibar({
                   </div>
                 )
               })}
+
+              {/* Infinite scroll sentinel for local results */}
+              {hasMoreLocal && (
+                <div
+                  ref={localSentinelRef}
+                  className="kbd-omnibar-pagination"
+                >
+                  <span className="kbd-omnibar-pagination-info">
+                    {visibleResults.length} of {results.length}
+                  </span>
+                </div>
+              )}
 
               {/* Remote endpoint results grouped by endpoint */}
               {(() => {

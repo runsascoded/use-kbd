@@ -2708,3 +2708,87 @@ test.describe('Builtin Group and Sort Order', () => {
     await page.keyboard.press('Escape')
   })
 })
+
+test.describe('Omnibar Infinite Scroll', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.removeItem('use-kbd-demo')
+      localStorage.removeItem('use-kbd-demo-removed')
+    })
+    // 50 dummy actions via the many-actions test route
+    await page.goto('/many-actions?n=50')
+    await page.waitForSelector('#demo', { timeout: 5000 })
+  })
+
+  test('omnibar renders first page and loads more on scroll', async ({ page }) => {
+    // Open omnibar
+    await page.keyboard.press('Meta+k')
+    await page.waitForSelector('.kbd-omnibar', { timeout: 5000 })
+    await page.waitForTimeout(300)
+
+    const results = page.locator('.kbd-omnibar-result')
+    const pagination = page.locator('.kbd-omnibar-pagination-info')
+
+    // Should render ~25 results initially (first page), not all 50+
+    // (50 dummy + 3 builtins = 53 total)
+    const initialCount = await results.count()
+    expect(initialCount).toBeGreaterThanOrEqual(20)
+    expect(initialCount).toBeLessThanOrEqual(30)
+
+    // Should show pagination indicator
+    await expect(pagination).toBeVisible()
+    const text = await pagination.textContent()
+    expect(text).toMatch(/\d+ of \d+/)
+
+    // Scroll the results container to the bottom to trigger loading more
+    await page.locator('.kbd-omnibar-results').evaluate(el => {
+      el.scrollTop = el.scrollHeight
+    })
+    await page.waitForTimeout(500)
+
+    // Should have loaded more results
+    const afterScrollCount = await results.count()
+    expect(afterScrollCount).toBeGreaterThan(initialCount)
+  })
+
+  test('arrow key navigation auto-expands rendered results', async ({ page }) => {
+    await page.keyboard.press('Meta+k')
+    await page.waitForSelector('.kbd-omnibar', { timeout: 5000 })
+    await page.waitForTimeout(300)
+
+    const results = page.locator('.kbd-omnibar-result')
+    const initialCount = await results.count()
+
+    // Arrow down past the initial page boundary
+    for (let i = 0; i < initialCount + 5; i++) {
+      await page.keyboard.press('ArrowDown')
+    }
+    await page.waitForTimeout(200)
+
+    // More results should now be rendered
+    const afterNavCount = await results.count()
+    expect(afterNavCount).toBeGreaterThan(initialCount)
+  })
+
+  test('query change resets rendered count', async ({ page }) => {
+    await page.keyboard.press('Meta+k')
+    await page.waitForSelector('.kbd-omnibar', { timeout: 5000 })
+    await page.waitForTimeout(300)
+
+    // Scroll to load more
+    await page.locator('.kbd-omnibar-results').evaluate(el => {
+      el.scrollTop = el.scrollHeight
+    })
+    await page.waitForTimeout(500)
+
+    const expandedCount = await page.locator('.kbd-omnibar-result').count()
+
+    // Type a query to filter
+    await page.keyboard.type('Action 1')
+    await page.waitForTimeout(200)
+
+    // Results should be filtered (fewer than expanded count)
+    const filteredCount = await page.locator('.kbd-omnibar-result').count()
+    expect(filteredCount).toBeLessThan(expandedCount)
+  })
+})

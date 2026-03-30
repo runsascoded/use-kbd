@@ -11,6 +11,7 @@ import { ActionLink } from './components/ActionLink'
 import { FloatingControls } from './components/FloatingControls'
 import { ThemeProvider, useTheme } from './contexts/ThemeContext'
 import { Home } from './routes/Home'
+import { ManyActionsDemo } from './routes/ManyActionsDemo'
 import { TableDemo } from './routes/TableDemo'
 import { CanvasDemo } from './routes/CanvasDemo'
 import { CalendarDemo } from './routes/CalendarDemo'
@@ -112,6 +113,7 @@ function AppContent() {
           <Route path="/canvas" element={<CanvasDemo />} />
           <Route path="/3d" element={<ThreeDDemo />} />
           <Route path="/calendar" element={<CalendarDemo />} />
+          <Route path="/many-actions" element={<ManyActionsDemo />} />
         </Routes>
       </main>
       <Omnibar />

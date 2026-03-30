@@ -70,7 +70,7 @@ export interface UseOmnibarOptions {
   onOpen?: () => void
   /** Called when omnibar closes */
   onClose?: () => void
-  /** Maximum number of results to show (default: 10) */
+  /** Hard cap on results. Omit for no limit (component handles pagination). */
   maxResults?: number
   /** Remote endpoints registry (optional - enables remote search) */
   endpointsRegistry?: OmnibarEndpointsRegistryValue
@@ -197,7 +197,7 @@ export function useOmnibar(options: UseOmnibarOptions): UseOmnibarResult {
     onExecuteRemote,
     onOpen,
     onClose,
-    maxResults = 10,
+    maxResults,
     endpointsRegistry,
     debounceMs = DEFAULT_DEBOUNCE_MS,
     recentActionIds = [],
@@ -284,10 +284,11 @@ export function useOmnibar(options: UseOmnibarOptions): UseOmnibarResult {
       // Filter out recents from the rest of the results to avoid duplicates
       const otherResults = allResults.filter(r => !recentIdSet.has(r.id))
 
-      return [...recentResults, ...otherResults].slice(0, maxResults)
+      const merged = [...recentResults, ...otherResults]
+      return maxResults != null ? merged.slice(0, maxResults) : merged
     }
 
-    return allResults.slice(0, maxResults)
+    return maxResults != null ? allResults.slice(0, maxResults) : allResults
   }, [query, actions, keymap, maxResults, recentActionIds])
 
   // Query endpoints - sync immediately, async debounced
