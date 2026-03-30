@@ -2,11 +2,6 @@
 
 var jsxRuntime = require('react/jsx-runtime');
 var react = require('react');
-var createDebug = require('debug');
-
-function _interopDefault (e) { return e && e.__esModule ? e : { default: e }; }
-
-var createDebug__default = /*#__PURE__*/_interopDefault(createDebug);
 
 // src/types.ts
 function extractCaptures(state) {
@@ -52,11 +47,26 @@ function createTwoColumnRenderer(config) {
     ] });
   };
 }
+
+// src/debug.ts
+function makeDebug(namespace) {
+  return (...args) => {
+    try {
+      const pattern = localStorage.getItem("debug") || "";
+      if (!pattern) return;
+      const regex = new RegExp("^" + pattern.replace(/\*/g, ".*") + "$");
+      if (regex.test(namespace)) {
+        console.log(`%c${namespace}`, "color: #888", ...args);
+      }
+    } catch {
+    }
+  };
+}
 var dbg = {
-  hotkeys: createDebug__default.default("use-kbd:hotkeys"),
-  recording: createDebug__default.default("use-kbd:recording"),
-  registry: createDebug__default.default("use-kbd:registry"),
-  modes: createDebug__default.default("use-kbd:modes")
+  hotkeys: makeDebug("use-kbd:hotkeys"),
+  recording: makeDebug("use-kbd:recording"),
+  registry: makeDebug("use-kbd:registry"),
+  modes: makeDebug("use-kbd:modes")
 };
 
 // src/ActionsRegistry.ts

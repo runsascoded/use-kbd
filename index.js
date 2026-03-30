@@ -1,6 +1,5 @@
 import { jsx, jsxs, Fragment } from 'react/jsx-runtime';
 import { createContext, forwardRef, useRef, useState, useCallback, useMemo, useEffect, useContext, Fragment as Fragment$1 } from 'react';
-import createDebug from 'debug';
 
 // src/types.ts
 function extractCaptures(state) {
@@ -46,11 +45,26 @@ function createTwoColumnRenderer(config) {
     ] });
   };
 }
+
+// src/debug.ts
+function makeDebug(namespace) {
+  return (...args) => {
+    try {
+      const pattern = localStorage.getItem("debug") || "";
+      if (!pattern) return;
+      const regex = new RegExp("^" + pattern.replace(/\*/g, ".*") + "$");
+      if (regex.test(namespace)) {
+        console.log(`%c${namespace}`, "color: #888", ...args);
+      }
+    } catch {
+    }
+  };
+}
 var dbg = {
-  hotkeys: createDebug("use-kbd:hotkeys"),
-  recording: createDebug("use-kbd:recording"),
-  registry: createDebug("use-kbd:registry"),
-  modes: createDebug("use-kbd:modes")
+  hotkeys: makeDebug("use-kbd:hotkeys"),
+  recording: makeDebug("use-kbd:recording"),
+  registry: makeDebug("use-kbd:registry"),
+  modes: makeDebug("use-kbd:modes")
 };
 
 // src/ActionsRegistry.ts
