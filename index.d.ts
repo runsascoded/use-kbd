@@ -625,7 +625,7 @@ interface UseOmnibarOptions {
     onOpen?: () => void;
     /** Called when omnibar closes */
     onClose?: () => void;
-    /** Maximum number of results to show (default: 10) */
+    /** Hard cap on results. Omit for no limit (component handles pagination). */
     maxResults?: number;
     /** Remote endpoints registry (optional - enables remote search) */
     endpointsRegistry?: OmnibarEndpointsRegistryValue;
@@ -1120,7 +1120,7 @@ interface OmnibarProps {
      * Use this to handle navigation for entries with `href`.
      */
     onExecuteRemote?: (entry: OmnibarEntry) => void;
-    /** Maximum number of results to show (default: 10) */
+    /** Hard cap on results. Omit for infinite scroll (default, renders 25 at a time). */
     maxResults?: number;
     /** Placeholder text for input (default: 'Type a command...') */
     placeholder?: string;

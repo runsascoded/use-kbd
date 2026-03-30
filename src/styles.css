@@ -668,6 +668,7 @@
 .kbd-omnibar-results {
   max-height: var(--kbd-omnibar-max-height);
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .kbd-omnibar-result {

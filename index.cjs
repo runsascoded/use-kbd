@@ -3038,7 +3038,7 @@ function useOmnibar(options) {
     onExecuteRemote,
     onOpen,
     onClose,
-    maxResults = 10,
+    maxResults,
     endpointsRegistry,
     debounceMs = DEFAULT_DEBOUNCE_MS,
     recentActionIds = []
@@ -3103,9 +3103,10 @@ function useOmnibar(options) {
         }
       }
       const otherResults = allResults.filter((r) => !recentIdSet.has(r.id));
-      return [...recentResults, ...otherResults].slice(0, maxResults);
+      const merged = [...recentResults, ...otherResults];
+      return maxResults != null ? merged.slice(0, maxResults) : merged;
     }
-    return allResults.slice(0, maxResults);
+    return maxResults != null ? allResults.slice(0, maxResults) : allResults;
   }, [query, actions, keymap, maxResults, recentActionIds]);
   react.useEffect(() => {
     if (debounceTimerRef.current) {
@@ -4906,7 +4907,7 @@ function Omnibar({
   onClose: onCloseProp,
   onExecute: onExecuteProp,
   onExecuteRemote: onExecuteRemoteProp,
-  maxResults = 10,
+  maxResults,
   placeholder = "Type a command...",
   children,
   backdropClassName = "kbd-omnibar-backdrop",
@@ -4989,6 +4990,19 @@ function Omnibar({
   });
   const isOpen = isOpenProp ?? ctx?.isOmnibarOpen ?? internalIsOpen;
   const resultsContainerRef = react.useRef(null);
+  const PAGE_SIZE = 25;
+  const [renderedCount, setRenderedCount] = react.useState(PAGE_SIZE);
+  const localSentinelRef = react.useRef(null);
+  react.useEffect(() => {
+    setRenderedCount(PAGE_SIZE);
+  }, [query]);
+  react.useEffect(() => {
+    if (selectedIndex >= renderedCount - 5 && renderedCount < results.length) {
+      setRenderedCount((prev) => Math.min(prev + PAGE_SIZE, results.length));
+    }
+  }, [selectedIndex, renderedCount, results.length]);
+  const visibleResults = renderedCount < results.length ? results.slice(0, renderedCount) : results;
+  const hasMoreLocal = renderedCount < results.length;
   const sentinelRefs = react.useRef(/* @__PURE__ */ new Map());
   const remoteResultsByEndpoint = react.useMemo(() => {
     const grouped = /* @__PURE__ */ new Map();
@@ -5055,6 +5069,22 @@ function Omnibar({
     }
     return () => observer.disconnect();
   }, [isOpen, endpointPagination, loadMore]);
+  react.useEffect(() => {
+    if (!isOpen || !hasMoreLocal) return;
+    const container = resultsContainerRef.current;
+    const sentinel = localSentinelRef.current;
+    if (!container || !sentinel) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setRenderedCount((prev) => Math.min(prev + PAGE_SIZE, results.length));
+        }
+      },
+      { root: container, rootMargin: "100px", threshold: 0 }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [isOpen, hasMoreLocal, results.length]);
   react.useEffect(() => {
     if (!isOpen) return;
     const handleGlobalKeyDown = (e) => {
@@ -5177,7 +5207,7 @@ function Omnibar({
       )
     ] }),
     /* @__PURE__ */ jsxRuntime.jsx("div", { className: "kbd-omnibar-results", ref: resultsContainerRef, children: totalResults === 0 && !isLoadingRemote ? /* @__PURE__ */ jsxRuntime.jsx("div", { className: "kbd-omnibar-no-results", children: query ? "No matching commands" : "Start typing to search commands..." }) : /* @__PURE__ */ jsxRuntime.jsxs(jsxRuntime.Fragment, { children: [
-      results.map((result, i) => {
+      visibleResults.map((result, i) => {
         const modeId = result.mode;
         const modeInfo = modeId && ctx?.modes ? ctx.modes.get(modeId) : void 0;
         const isModeInactive = modeId && ctx?.activeMode !== modeId;
@@ -5204,6 +5234,18 @@ function Omnibar({
           result.id
         );
       }),
+      hasMoreLocal && /* @__PURE__ */ jsxRuntime.jsx(
+        "div",
+        {
+          ref: localSentinelRef,
+          className: "kbd-omnibar-pagination",
+          children: /* @__PURE__ */ jsxRuntime.jsxs("span", { className: "kbd-omnibar-pagination-info", children: [
+            visibleResults.length,
+            " of ",
+            results.length
+          ] })
+        }
+      ),
       (() => {
         let remoteIndex = 0;
         return Array.from(remoteResultsByEndpoint.entries()).map(([endpointId, endpointResults]) => {
