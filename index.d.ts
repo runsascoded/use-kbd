@@ -1818,6 +1818,18 @@ interface UseRowSelectionOptions {
     cursorClassName?: string;
     /** Class applied to selected rows by `rowProps` (default `'selected'`). */
     selectedClassName?: string;
+    /**
+     * When the set of `key(row)` over `rows` changes (a page turn, re-sort, or
+     * filter), freeze the active range into `pinned` and reset the cursor, so the
+     * selection persists by identity instead of the index range silently landing
+     * on whatever rows moved into those positions. Default `true`.
+     *
+     * To also position the cursor on the new rows (e.g. "jump to this row on
+     * another page"), call `select` / `setCursor` *after* the change settles —
+     * from an effect keyed on the page — not in the same update that changes
+     * `rows`, which this freeze would otherwise supersede.
+     */
+    commitOnRowsChange?: boolean;
 }
 /** Props to spread onto a row element for the zero-dependency mouse layer. */
 interface RowSelectionRowProps {
@@ -1852,6 +1864,10 @@ interface UseRowSelectionResult<T> {
     moveCursor: (target: MoveTarget, extend?: boolean) => void;
     /** Select every row currently passed in (e.g. ⌃A over the visible page). */
     selectPage: () => void;
+    /** Freeze the resolved selection into `pinned` and drop the active range. */
+    commit: () => void;
+    /** Place the cursor and anchor at `index`, keeping `pinned` (e.g. restore a cursor after paging). */
+    setCursor: (index: number) => void;
     /** Clear the entire selection. */
     clear: () => void;
 }

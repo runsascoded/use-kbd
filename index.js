@@ -2518,7 +2518,8 @@ function useRowSelection(rows, key, options = {}) {
     initialCursor = -1,
     onSelectionChange,
     cursorClassName = "cursor",
-    selectedClassName = "selected"
+    selectedClassName = "selected",
+    commitOnRowsChange = true
   } = options;
   const [state, setState] = useState(() => ({
     cursor: initialCursor,
@@ -2530,10 +2531,25 @@ function useRowSelection(rows, key, options = {}) {
   const keyRef = useRef(key);
   keyRef.current = key;
   const mouseHoverRef = useRef(-1);
-  const selected = useMemo(
-    () => computeSelected(state, rows, keyRef.current),
-    [state, rows]
+  const fingerprint = useMemo(
+    () => rows.map((r) => keyRef.current(r)).join("\0"),
+    [rows]
   );
+  const lastSelectedRef = useRef(state.pinned);
+  const [prevFingerprint, setPrevFingerprint] = useState(fingerprint);
+  let effectiveState = state;
+  if (commitOnRowsChange && fingerprint !== prevFingerprint) {
+    setPrevFingerprint(fingerprint);
+    if (state.cursor >= 0 && state.anchor >= 0) {
+      effectiveState = { cursor: -1, anchor: -1, pinned: lastSelectedRef.current };
+      setState(effectiveState);
+    }
+  }
+  const selected = useMemo(
+    () => computeSelected(effectiveState, rows, keyRef.current),
+    [effectiveState, rows]
+  );
+  lastSelectedRef.current = selected;
   const onChangeRef = useRef(onSelectionChange);
   onChangeRef.current = onSelectionChange;
   useEffect(() => {
@@ -2591,6 +2607,16 @@ function useRowSelection(rows, key, options = {}) {
       return { cursor: -1, anchor: -1, pinned: new Set(rowsRef.current.map(k)) };
     });
   }, []);
+  const commit = useCallback(() => {
+    setState((prev) => ({
+      cursor: -1,
+      anchor: -1,
+      pinned: computeSelected(prev, rowsRef.current, keyRef.current)
+    }));
+  }, []);
+  const setCursor = useCallback((index) => {
+    setState((prev) => ({ cursor: index, anchor: index, pinned: prev.pinned }));
+  }, []);
   const clear = useCallback(() => {
     setState({ cursor: -1, anchor: -1, pinned: /* @__PURE__ */ new Set() });
   }, []);
@@ -2606,7 +2632,7 @@ function useRowSelection(rows, key, options = {}) {
     const row = rows[index];
     const on = row !== void 0 && selected.has(key(row));
     const className = [
-      state.cursor === index ? cursorClassName : "",
+      effectiveState.cursor === index ? cursorClassName : "",
       on ? selectedClassName : ""
     ].filter(Boolean).join(" ");
     return {
@@ -2629,20 +2655,22 @@ function useRowSelection(rows, key, options = {}) {
         mouseHoverRef.current = -1;
       }
     };
-  }, [rows, selected, key, state.cursor, cursorClassName, selectedClassName, extendTo, toggle, select]);
+  }, [rows, selected, key, effectiveState.cursor, cursorClassName, selectedClassName, extendTo, toggle, select]);
   return {
     selected,
     count: selected.size,
     isSelected,
     selectedRows,
-    cursor: state.cursor,
-    anchor: state.anchor,
+    cursor: effectiveState.cursor,
+    anchor: effectiveState.anchor,
     rowProps,
     select,
     extendTo,
     toggle,
     moveCursor,
     selectPage,
+    commit,
+    setCursor,
     clear
   };
 }
