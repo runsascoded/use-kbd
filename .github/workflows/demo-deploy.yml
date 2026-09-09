@@ -53,9 +53,22 @@ jobs:
       - name: Create 404.html for SPA routing
         run: cp docs/index.html docs/404.html
 
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('site/pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-playwright-
+
       - name: Install Playwright browsers
         working-directory: ./site
-        run: pnpm exec playwright install --with-deps chromium
+        # The e2e uses Playwright's bundled Chromium — it does not need Google's
+        # Chrome apt repo, whose mirror periodically serves a stale index and
+        # fails `apt-get update` (run by `--with-deps`). Drop that source so we
+        # only pull OS libs from Ubuntu's mirror.
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources
+          pnpm exec playwright install --with-deps chromium
 
       - name: Run E2E tests
         working-directory: ./site
