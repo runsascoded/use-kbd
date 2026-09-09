@@ -407,6 +407,36 @@ test.describe('Data Table Demo', () => {
     }
   })
 
+  test('selection survives a page turn (commitOnRowsChange)', async ({ page }) => {
+    const rows = page.locator('.data-table tbody tr')
+    // Range-select rows 1–3 on page 1
+    await rows.nth(1).click()
+    await rows.nth(3).click({ modifiers: ['Shift'] })
+    await expect(rows.nth(1)).toHaveClass(/selected/)
+    await expect(rows.nth(2)).toHaveClass(/selected/)
+    await expect(rows.nth(3)).toHaveClass(/selected/)
+
+    // Next page (→): the range is frozen into the selection by identity
+    await page.keyboard.press('ArrowRight')
+    await page.waitForTimeout(100)
+    // Nothing on page 2 is selected (the pinned ids aren't on this page)…
+    const count = await rows.count()
+    for (let i = 0; i < count; i++) {
+      await expect(rows.nth(i)).not.toHaveClass(/selected/)
+    }
+    // …but the selection is still there — the hint shows all three
+    await expect(page.locator('.data-table-app .hint strong')).toHaveText('(3 selected)')
+
+    // Back to page 1 (←): the same three rows are still selected
+    await page.keyboard.press('ArrowLeft')
+    await page.waitForTimeout(100)
+    await expect(rows.nth(1)).toHaveClass(/selected/)
+    await expect(rows.nth(2)).toHaveClass(/selected/)
+    await expect(rows.nth(3)).toHaveClass(/selected/)
+    await expect(rows.nth(0)).not.toHaveClass(/selected/)
+    await expect(rows.nth(4)).not.toHaveClass(/selected/)
+  })
+
   test('can sort columns with single keys', async ({ page }) => {
     await page.locator('body').click({ position: { x: 10, y: 10 } })
 

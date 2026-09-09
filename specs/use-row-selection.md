@@ -36,11 +36,15 @@ Returns:
   toggle(index): void            // add/remove disjoint row (meta/ctrl-click)
   moveCursor(target, extend?): void   // target: signed delta | 'first' | 'last'
   selectPage(): void             // select every row currently passed in (⌃A)
+  commit(): void                 // freeze the resolved selection into pinned, drop the range
+  setCursor(index): void         // place cursor+anchor at index, keep pinned
   clear(): void
 }
 ```
 
-Options: `initialCursor` (default `-1` = nothing selected), `onSelectionChange`, `cursorClassName` (default `'cursor'`), `selectedClassName` (default `'selected'`).
+Options: `initialCursor` (default `-1` = nothing selected), `onSelectionChange`, `cursorClassName` (default `'cursor'`), `selectedClassName` (default `'selected'`), `commitOnRowsChange` (default `true`).
+
+**Surviving a change of `rows` (paging / sort / filter)** — `anchor`/`cursor` are indices into the *current* `rows`, so when the caller re-slices `rows` the range would otherwise land on whatever moved into those positions. With `commitOnRowsChange` (default on), a change in the `key(row)` fingerprint of `rows` freezes the active range into `pinned` and resets the cursor, so the selection persists by identity. To also position the cursor on the new rows (a programmatic "jump to row on another page"), call `select`/`setCursor` *after* the change settles (an effect keyed on the page), not in the same update that changes `rows`; `commit()` is the imperative equivalent (pin the resolved selection, drop the range).
 
 The mouse layer is entirely inside `rowProps`: plain click → `select`, shift-click → `extendTo`, meta/ctrl-click → `toggle`; `onMouseEnter`/`Leave` track the hovered row so keyboard nav that starts with no cursor lands on the hovered row. `onMouseDown` calls `preventDefault()` on modified clicks so the browser's own text-selection gesture doesn't extend across rows (plain clicks still select/copy cell text). The imperative methods are memoized (stable identity) — safe to destructure into dep arrays.
 

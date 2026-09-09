@@ -140,6 +140,11 @@ function DataTable() {
   }, [clearSel])
 
   // Navigate to a specific row by ID
+  // Select the target row *after* the page change settles: with
+  // `commitOnRowsChange` on, selecting in the same update that turns the page
+  // would be superseded by the auto-commit, so stash the index and apply it in
+  // an effect keyed on the page.
+  const pendingSelectRef = useRef<number | null>(null)
   const navigateToRow = useCallback((rowId: number) => {
     // Find the row in sortedData to get its position
     const rowIndex = sortedData.findIndex(r => r.id === rowId)
@@ -147,11 +152,22 @@ function DataTable() {
 
     // Calculate which page the row is on
     const targetPage = Math.floor(rowIndex / pageSize) + 1
-    setCurrentPage(targetPage)
+    const indexInPage = rowIndex % pageSize
+    if (targetPage === currentPage) {
+      // Same page: no rows-change, so select directly.
+      selectRow(indexInPage)
+    } else {
+      pendingSelectRef.current = indexInPage
+      setCurrentPage(targetPage)
+    }
+  }, [sortedData, pageSize, currentPage, selectRow])
 
-    // Select the row (index into the page it lands on)
-    selectRow(rowIndex % pageSize)
-  }, [sortedData, pageSize, selectRow])
+  useEffect(() => {
+    if (pendingSelectRef.current !== null) {
+      selectRow(pendingSelectRef.current)
+      pendingSelectRef.current = null
+    }
+  }, [currentPage, selectRow])
 
   // Register omnibar endpoint for searching table rows
   useOmnibarEndpoint('table-rows', useMemo(() => ({
