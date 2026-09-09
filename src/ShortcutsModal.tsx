@@ -391,7 +391,7 @@ function organizeShortcuts(
   const getSortKey = (entry: ShortcutEntry): { order: number; registeredAt: number } => {
     const actionId = entry.type === 'action' ? entry.actionId
       : entry.type === 'arrowGroup' ? entry.actionIds.left
-      : entry.actionIds[0]
+        : entry.actionIds[0]
     const order = actionRegistry?.[actionId]?.sortOrder ?? 0
     const registeredAt = registeredActions?.get(actionId)?.registeredAt ?? 0
     return { order, registeredAt }

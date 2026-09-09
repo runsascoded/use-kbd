@@ -160,17 +160,17 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
     const tripletId = action?.config.actionTriplet?.tripletId
     const actionIds = groupId
       ? Array.from(actionsRef.current.entries())
-          .filter(([, a]) => a.config.arrowGroup?.groupId === groupId)
-          .map(([id]) => id)
+        .filter(([, a]) => a.config.arrowGroup?.groupId === groupId)
+        .map(([id]) => id)
       : pairId
-      ? Array.from(actionsRef.current.entries())
+        ? Array.from(actionsRef.current.entries())
           .filter(([, a]) => a.config.actionPair?.pairId === pairId)
           .map(([id]) => id)
-      : tripletId
-      ? Array.from(actionsRef.current.entries())
-          .filter(([, a]) => a.config.actionTriplet?.tripletId === tripletId)
-          .map(([id]) => id)
-      : [actionId]
+        : tripletId
+          ? Array.from(actionsRef.current.entries())
+            .filter(([, a]) => a.config.actionTriplet?.tripletId === tripletId)
+            .map(([id]) => id)
+          : [actionId]
 
     setModeCustomizations(prev => {
       const next = { ...prev, additions: { ...prev.additions }, removals: { ...prev.removals }, userModes: { ...prev.userModes } }
@@ -231,17 +231,17 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
     const tripletId = action?.config.actionTriplet?.tripletId
     const actionIds = groupId
       ? Array.from(actionsRef.current.entries())
-          .filter(([, a]) => a.config.arrowGroup?.groupId === groupId)
-          .map(([id]) => id)
+        .filter(([, a]) => a.config.arrowGroup?.groupId === groupId)
+        .map(([id]) => id)
       : pairId
-      ? Array.from(actionsRef.current.entries())
+        ? Array.from(actionsRef.current.entries())
           .filter(([, a]) => a.config.actionPair?.pairId === pairId)
           .map(([id]) => id)
-      : tripletId
-      ? Array.from(actionsRef.current.entries())
-          .filter(([, a]) => a.config.actionTriplet?.tripletId === tripletId)
-          .map(([id]) => id)
-      : [actionId]
+        : tripletId
+          ? Array.from(actionsRef.current.entries())
+            .filter(([, a]) => a.config.actionTriplet?.tripletId === tripletId)
+            .map(([id]) => id)
+          : [actionId]
 
     setModeCustomizations(prev => {
       const next = { ...prev, additions: { ...prev.additions }, removals: { ...prev.removals }, userModes: { ...prev.userModes } }
