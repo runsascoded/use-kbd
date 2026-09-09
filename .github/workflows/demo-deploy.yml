@@ -114,6 +114,7 @@ jobs:
   release:
     needs: build-and-test
     if: startsWith(github.ref, 'refs/tags/v')
+    # No npm_token → the reusable workflow publishes via OIDC trusted publishing
+    # (it already grants `id-token: write`). Configure a Trusted Publisher for
+    # `use-kbd` on npm pointing at this workflow (runsascoded/use-kbd, demo-deploy.yml).
     uses: runsascoded/pnpm-release/.github/workflows/release.yml@v1
-    secrets:
-      npm_token: ${{ secrets.NPM_TOKEN }}
