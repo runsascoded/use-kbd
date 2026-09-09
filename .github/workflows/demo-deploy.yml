@@ -62,13 +62,12 @@ jobs:
 
       - name: Install Playwright browsers
         working-directory: ./site
-        # The e2e uses Playwright's bundled Chromium — it does not need Google's
-        # Chrome apt repo, whose mirror periodically serves a stale index and
-        # fails `apt-get update` (run by `--with-deps`). Drop that source so we
-        # only pull OS libs from Ubuntu's mirror.
-        run: |
-          sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources
-          pnpm exec playwright install --with-deps chromium
+        # Bundled Chromium only, and GitHub's Ubuntu runner image already ships
+        # its OS libs — so skip `--with-deps`, whose `apt-get update` refreshes
+        # every preinstalled third-party apt source (Google, Microsoft, …) and
+        # aborts the whole step whenever any one transiently fails (stale index,
+        # 403, dropped signature). No apt = immune to those flakes.
+        run: pnpm exec playwright install chromium
 
       - name: Run E2E tests
         working-directory: ./site
