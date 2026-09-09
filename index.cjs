@@ -2502,6 +2502,203 @@ function useActionPair(id, config) {
   actionConfigs[`${id}-b`].enabled = actionB.enabled ?? enabled;
   useActions(actionConfigs);
 }
+function computeSelected(state, rows, key) {
+  const selected = new Set(state.pinned);
+  const { cursor, anchor } = state;
+  if (cursor >= 0 && anchor >= 0) {
+    const lo = Math.min(cursor, anchor);
+    const hi = Math.max(cursor, anchor);
+    for (let i = lo; i <= hi; i++) {
+      const row = rows[i];
+      if (row !== void 0) selected.add(key(row));
+    }
+  }
+  return selected;
+}
+function useRowSelection(rows, key, options = {}) {
+  const {
+    initialCursor = -1,
+    onSelectionChange,
+    cursorClassName = "cursor",
+    selectedClassName = "selected"
+  } = options;
+  const [state, setState] = react.useState(() => ({
+    cursor: initialCursor,
+    anchor: initialCursor,
+    pinned: /* @__PURE__ */ new Set()
+  }));
+  const rowsRef = react.useRef(rows);
+  rowsRef.current = rows;
+  const keyRef = react.useRef(key);
+  keyRef.current = key;
+  const mouseHoverRef = react.useRef(-1);
+  const selected = react.useMemo(
+    () => computeSelected(state, rows, keyRef.current),
+    [state, rows]
+  );
+  const onChangeRef = react.useRef(onSelectionChange);
+  onChangeRef.current = onSelectionChange;
+  react.useEffect(() => {
+    onChangeRef.current?.(selected);
+  }, [selected]);
+  const select = react.useCallback((index) => {
+    setState({ cursor: index, anchor: index, pinned: /* @__PURE__ */ new Set() });
+  }, []);
+  const extendTo = react.useCallback((index) => {
+    setState((prev) => ({
+      cursor: index,
+      anchor: prev.anchor >= 0 ? prev.anchor : index,
+      pinned: prev.pinned
+    }));
+  }, []);
+  const toggle = react.useCallback((index) => {
+    setState((prev) => {
+      const rows2 = rowsRef.current;
+      const row = rows2[index];
+      if (row === void 0) return prev;
+      const k = keyRef.current(row);
+      const current = computeSelected(prev, rows2, keyRef.current);
+      if (current.has(k)) {
+        const pinned = new Set(current);
+        pinned.delete(k);
+        return { cursor: -1, anchor: -1, pinned };
+      }
+      return { cursor: index, anchor: index, pinned: new Set(current) };
+    });
+  }, []);
+  const moveCursor = react.useCallback((target, extend = false) => {
+    setState((prev) => {
+      const len = rowsRef.current.length;
+      if (len === 0) return prev;
+      const clamp = (i) => Math.max(0, Math.min(len - 1, i));
+      const resolve = (from) => target === "first" ? 0 : target === "last" ? len - 1 : clamp(from + target);
+      if (prev.cursor < 0) {
+        const mh = mouseHoverRef.current;
+        const place = target === "first" ? 0 : target === "last" ? len - 1 : mh >= 0 ? mh : 0;
+        if (extend) {
+          return { cursor: place, anchor: prev.anchor >= 0 ? prev.anchor : place, pinned: prev.pinned };
+        }
+        return { cursor: place, anchor: place, pinned: /* @__PURE__ */ new Set() };
+      }
+      const next = resolve(prev.cursor);
+      if (extend) {
+        return { cursor: next, anchor: prev.anchor >= 0 ? prev.anchor : prev.cursor, pinned: prev.pinned };
+      }
+      return { cursor: next, anchor: next, pinned: /* @__PURE__ */ new Set() };
+    });
+  }, []);
+  const selectPage = react.useCallback(() => {
+    setState(() => {
+      const k = keyRef.current;
+      return { cursor: -1, anchor: -1, pinned: new Set(rowsRef.current.map(k)) };
+    });
+  }, []);
+  const clear = react.useCallback(() => {
+    setState({ cursor: -1, anchor: -1, pinned: /* @__PURE__ */ new Set() });
+  }, []);
+  const isSelected = react.useCallback(
+    (row) => selected.has(key(row)),
+    [selected, key]
+  );
+  const selectedRows = react.useCallback(
+    () => rows.filter((row) => selected.has(key(row))),
+    [rows, selected, key]
+  );
+  const rowProps = react.useCallback((index) => {
+    const row = rows[index];
+    const on = row !== void 0 && selected.has(key(row));
+    const className = [
+      state.cursor === index ? cursorClassName : "",
+      on ? selectedClassName : ""
+    ].filter(Boolean).join(" ");
+    return {
+      className,
+      onClick: (e) => {
+        if (e.shiftKey) extendTo(index);
+        else if (e.metaKey || e.ctrlKey) toggle(index);
+        else select(index);
+      },
+      // Suppress the browser's own text-selection gesture on modified clicks
+      // (shift/meta/ctrl+mousedown otherwise extends the DOM text selection),
+      // while leaving plain clicks free to select and copy cell text.
+      onMouseDown: (e) => {
+        if (e.shiftKey || e.metaKey || e.ctrlKey) e.preventDefault();
+      },
+      onMouseEnter: () => {
+        mouseHoverRef.current = index;
+      },
+      onMouseLeave: () => {
+        mouseHoverRef.current = -1;
+      }
+    };
+  }, [rows, selected, key, state.cursor, cursorClassName, selectedClassName, extendTo, toggle, select]);
+  return {
+    selected,
+    count: selected.size,
+    isSelected,
+    selectedRows,
+    cursor: state.cursor,
+    anchor: state.anchor,
+    rowProps,
+    select,
+    extendTo,
+    toggle,
+    moveCursor,
+    selectPage,
+    clear
+  };
+}
+var SPECS = {
+  "up": { label: "Row up", bindings: ["k", "arrowup"], run: (sel) => sel.moveCursor(-1) },
+  "down": { label: "Row down", bindings: ["j", "arrowdown"], run: (sel) => sel.moveCursor(1) },
+  "extend-up": { label: "Extend up", bindings: ["shift+k", "shift+arrowup"], run: (sel) => sel.moveCursor(-1, true) },
+  "extend-down": { label: "Extend down", bindings: ["shift+j", "shift+arrowdown"], run: (sel) => sel.moveCursor(1, true) },
+  "up-n": { label: "Up N rows", bindings: ["\\d+ k", "\\d+ arrowup"], numeric: true, run: (sel, n) => sel.moveCursor(-n) },
+  "down-n": { label: "Down N rows", bindings: ["\\d+ j", "\\d+ arrowdown"], numeric: true, run: (sel, n) => sel.moveCursor(n) },
+  "extend-up-n": { label: "Extend up N rows", bindings: ["\\d+ shift+k", "\\d+ shift+arrowup"], numeric: true, run: (sel, n) => sel.moveCursor(-n, true) },
+  "extend-down-n": { label: "Extend down N rows", bindings: ["\\d+ shift+j", "\\d+ shift+arrowdown"], numeric: true, run: (sel, n) => sel.moveCursor(n, true) },
+  "first": { label: "First row", bindings: ["meta+arrowup"], run: (sel) => sel.moveCursor("first") },
+  "last": { label: "Last row", bindings: ["meta+arrowdown"], run: (sel) => sel.moveCursor("last") },
+  "extend-first": { label: "Select to first", bindings: ["meta+shift+arrowup"], run: (sel) => sel.moveCursor("first", true) },
+  "extend-last": { label: "Select to last", bindings: ["meta+shift+arrowdown"], run: (sel) => sel.moveCursor("last", true) },
+  "all": { label: "Select all", bindings: ["ctrl+a"], selection: true, run: (sel) => sel.selectPage() },
+  "clear": { label: "Deselect all", bindings: ["escape"], selection: true, run: (sel) => sel.clear() }
+};
+var ORDER = Object.keys(SPECS);
+function useRowSelectionKeys(sel, options = {}) {
+  const {
+    enabled = true,
+    numeric = true,
+    idPrefix = "select",
+    group = "Selection",
+    selectionGroup = group,
+    labels,
+    bindings,
+    hideFromModal
+  } = options;
+  const bindingsKey = JSON.stringify(bindings);
+  const labelsKey = JSON.stringify(labels);
+  const actions = react.useMemo(() => {
+    const map = {};
+    for (const action of ORDER) {
+      const spec = SPECS[action];
+      if (spec.numeric && !numeric) continue;
+      const override = bindings?.[action];
+      if (override === false) continue;
+      const keys = override ?? spec.bindings;
+      map[`${idPrefix}:${action}`] = {
+        label: labels?.[action] ?? spec.label,
+        group: spec.selection ? selectionGroup : group,
+        defaultBindings: keys,
+        enabled,
+        hideFromModal,
+        handler: (_e, captures) => spec.run(sel, captures?.[0] ?? 1)
+      };
+    }
+    return map;
+  }, [enabled, numeric, idPrefix, group, selectionGroup, hideFromModal, bindingsKey, labelsKey, sel]);
+  useActions(actions);
+}
 var SUFFIXES = ["a", "b", "c"];
 function useActionTriplet(id, config) {
   const {
@@ -7031,6 +7228,7 @@ exports.ShortcutsModal = ShortcutsModal;
 exports.SpeedDial = SpeedDial;
 exports.Up = Up;
 exports.bindingHasPlaceholders = bindingHasPlaceholders;
+exports.computeSelected = computeSelected;
 exports.countPlaceholders = countPlaceholders;
 exports.createTwoColumnRenderer = createTwoColumnRenderer;
 exports.extractCaptures = extractCaptures;
@@ -7078,5 +7276,7 @@ exports.useOmnibarEndpoint = useOmnibarEndpoint;
 exports.useOmnibarEndpointsRegistry = useOmnibarEndpointsRegistry;
 exports.useParamEntry = useParamEntry;
 exports.useRecordHotkey = useRecordHotkey;
+exports.useRowSelection = useRowSelection;
+exports.useRowSelectionKeys = useRowSelectionKeys;
 //# sourceMappingURL=index.cjs.map
 //# sourceMappingURL=index.cjs.map

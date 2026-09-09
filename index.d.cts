@@ -1,5 +1,5 @@
 import * as react from 'react';
-import { ReactNode, CSSProperties, ComponentType, RefObject, KeyboardEvent as KeyboardEvent$1, SVGProps } from 'react';
+import { ReactNode, CSSProperties, ComponentType, RefObject, MouseEvent, KeyboardEvent as KeyboardEvent$1, SVGProps } from 'react';
 import * as react_jsx_runtime from 'react/jsx-runtime';
 
 /**
@@ -1795,6 +1795,131 @@ interface ActionPairConfig {
  */
 declare function useActionPair(id: string, config: ActionPairConfig): void;
 
+/**
+ * A cursor move target: a signed delta (rows to move, e.g. `-1`, `+5`),
+ * or one of the sentinels `'first'` / `'last'`.
+ */
+type MoveTarget = number | 'first' | 'last';
+/** Internal anchor/cursor/pinned tuple. Exported for testing the pure transitions. */
+interface RowSelectionState {
+    /** Moving end of the active range (index into the current rows), or -1 for none. */
+    cursor: number;
+    /** Fixed end of the active range (index into the current rows), or -1 for none. */
+    anchor: number;
+    /** Keys carried over from prior selections, preserved while extending a range. */
+    pinned: Set<string>;
+}
+interface UseRowSelectionOptions {
+    /** Initial cursor/anchor index. Default `-1` (nothing selected). */
+    initialCursor?: number;
+    /** Called whenever the resolved selection changes. */
+    onSelectionChange?: (selected: Set<string>) => void;
+    /** Class applied to the cursor row by `rowProps` (default `'cursor'`). */
+    cursorClassName?: string;
+    /** Class applied to selected rows by `rowProps` (default `'selected'`). */
+    selectedClassName?: string;
+}
+/** Props to spread onto a row element for the zero-dependency mouse layer. */
+interface RowSelectionRowProps {
+    className: string;
+    onClick: (e: MouseEvent) => void;
+    onMouseDown: (e: MouseEvent) => void;
+    onMouseEnter: () => void;
+    onMouseLeave: () => void;
+}
+interface UseRowSelectionResult<T> {
+    /** Resolved selection: `pinned ∪ keys of [min(anchor,cursor)…max(anchor,cursor)]`. */
+    selected: Set<string>;
+    /** `selected.size`. */
+    count: number;
+    /** Whether a given row is currently selected. */
+    isSelected: (row: T) => boolean;
+    /** Rows (in order) that are currently selected. */
+    selectedRows: () => T[];
+    /** Moving end of the active range (index), or -1. */
+    cursor: number;
+    /** Fixed end of the active range (index), or -1. */
+    anchor: number;
+    /** Props for the mouse layer (click / shift-click / meta-click, hover tracking). */
+    rowProps: (index: number) => RowSelectionRowProps;
+    /** Single-select the row at `index` (clears pinned; plain click). */
+    select: (index: number) => void;
+    /** Extend the active range to `index`, keeping the anchor (shift-click). */
+    extendTo: (index: number) => void;
+    /** Toggle the row at `index` in/out of the selection (meta/ctrl-click). */
+    toggle: (index: number) => void;
+    /** Move the cursor by a delta (or to first/last); `extend` keeps the anchor. */
+    moveCursor: (target: MoveTarget, extend?: boolean) => void;
+    /** Select every row currently passed in (e.g. ⌃A over the visible page). */
+    selectPage: () => void;
+    /** Clear the entire selection. */
+    clear: () => void;
+}
+/** Resolve `state` against the current `rows` into a set of selected keys. Pure. */
+declare function computeSelected<T>(state: RowSelectionState, rows: readonly T[], key: (row: T) => string): Set<string>;
+/**
+ * Headless, table-agnostic multi-row selection over an ordered list.
+ *
+ * Owns one small state machine — an `anchor`, a `cursor`, and a `pinned` set —
+ * from which the selection is derived: `pinned ∪ [min(anchor,cursor)…max]`. It
+ * ships a zero-dependency mouse layer (`rowProps`) and imperative methods that a
+ * keyboard skin (see {@link useRowSelectionKeys}) or custom actions drive. The
+ * hook itself imports nothing from the rest of use-kbd, so mouse-only consumers
+ * pay no keyboard cost.
+ *
+ * `rows` is whatever slice the caller renders (e.g. the current page); indices
+ * are relative to it, while the selection is tracked by stable `key(row)` so it
+ * survives re-render. `pinned` keys persist even for rows not currently present.
+ *
+ * @example
+ * ```tsx
+ * const sel = useRowSelection(pageRows, r => String(r.id))
+ * useRowSelectionKeys(sel) // optional keyboard layer
+ * return rows.map((r, i) => <tr key={r.id} {...sel.rowProps(i)}>…</tr>)
+ * ```
+ */
+declare function useRowSelection<T>(rows: readonly T[], key: (row: T) => string, options?: UseRowSelectionOptions): UseRowSelectionResult<T>;
+
+/** The set of actions {@link useRowSelectionKeys} can register (id suffixes). */
+type RowSelectionKeyAction = 'up' | 'down' | 'extend-up' | 'extend-down' | 'up-n' | 'down-n' | 'extend-up-n' | 'extend-down-n' | 'first' | 'last' | 'extend-first' | 'extend-last' | 'all' | 'clear';
+interface UseRowSelectionKeysOptions {
+    /** Whether the bindings are active (default `true`). */
+    enabled?: boolean;
+    /** Register the numeric-prefixed variants (`3j`, `5⇧k`, …). Default `true`. */
+    numeric?: boolean;
+    /** Prefix for the registered action ids (default `'select'` → `select:up`, …). */
+    idPrefix?: string;
+    /** Group for the move/extend actions in the ShortcutsModal (default `'Selection'`). */
+    group?: string;
+    /** Group for select-all / clear (defaults to `group`). */
+    selectionGroup?: string;
+    /** Override the label of any action. */
+    labels?: Partial<Record<RowSelectionKeyAction, string>>;
+    /** Override the bindings of any action, or `false` to not register it. */
+    bindings?: Partial<Record<RowSelectionKeyAction, string[] | false>>;
+    /** Hide the registered actions from the ShortcutsModal (still searchable). */
+    hideFromModal?: boolean;
+}
+/**
+ * Optional keyboard layer for a {@link useRowSelection} instance.
+ *
+ * Registers move / extend / select-all / clear actions (plus numeric-prefixed
+ * variants) through `useActions`, so the bindings appear in the ShortcutsModal
+ * and stay user-editable, exactly like any other use-kbd action. Delegates
+ * entirely to the passed selection's methods — the mouse layer and this share
+ * one state machine. Consumers that only want mouse selection simply don't call
+ * this hook.
+ *
+ * Must be used within a `HotkeysProvider`.
+ *
+ * @example
+ * ```tsx
+ * const sel = useRowSelection(rows, r => r.id)
+ * useRowSelectionKeys(sel, { group: 'Rows' })
+ * ```
+ */
+declare function useRowSelectionKeys<T>(sel: UseRowSelectionResult<T>, options?: UseRowSelectionKeysOptions): void;
+
 interface ActionTripletEntry {
     defaultBindings?: string[];
     handler: ActionHandler;
@@ -2344,4 +2469,4 @@ declare const DEFAULT_BUILTIN_GROUP = "Meta";
  */
 declare const ACTION_MODE_PREFIX = "__mode:";
 
-export { ACTION_LOOKUP, ACTION_MODAL, ACTION_MODE_PREFIX, ACTION_OMNIBAR, type ActionConfig, type ActionDefinition, type ActionHandler, type ActionPairConfig, type ActionPairEntry, type ActionPairShortcut, type ActionRegistry, type ActionSearchResult, type ActionShortcut, type ActionTripletConfig, type ActionTripletEntry, type ActionTripletShortcut, ActionsRegistryContext, type ActionsRegistryValue, Alt, type ArrowGroupConfig, type ArrowGroupShortcut, ArrowsDouble, ArrowsDpad, ArrowsMove, Backspace, type BindingInfo, type BindingsExport, Command, Ctrl, DEFAULT_BUILTIN_GROUP, DEFAULT_SEQUENCE_TIMEOUT, DIGITS_PLACEHOLDER, DIGIT_PLACEHOLDER, type Direction, Down, type EndpointPagination, type EndpointPaginationInfo, type EndpointPaginationMode, type EndpointQueryResult, type EndpointResponse, Enter, FLOAT_PLACEHOLDER, type FuzzyMatchResult, type GroupRenderer, type GroupRendererProps, type HandlerMap, type HotkeyHandler, type HotkeyMap, type HotkeySequence, type HotkeysConfig, type HotkeysContextValue, HotkeysProvider, type HotkeysProviderProps, Kbd, KbdLookup, KbdModal, KbdOmnibar, type KbdProps, Kbds, Key, type KeyCombination, type KeyCombinationDisplay, type KeyConflict, type KeyIconProps, type KeyIconType, type KeySeq, KeybindingEditor, type KeybindingEditorProps, type KeybindingEditorRenderProps, Left, LookupModal, MobileFAB, type MobileFABProps, type ModeConfig, type ModeCustomizations, ModeIndicator, type ModeIndicatorPosition, type ModeIndicatorProps, type ModeState, ModesRegistryContext, type ModesRegistryValue, ModifierIcon, type ModifierIconProps, type ModifierName, type ModifierType, type Modifiers, Omnibar, type OmnibarActionEntry, type OmnibarEndpointAsyncConfig, type OmnibarEndpointConfig, type OmnibarEndpointConfigBase, type OmnibarEndpointSyncConfig, OmnibarEndpointsRegistryContext, type OmnibarEndpointsRegistryValue, type OmnibarEntry, type OmnibarEntryBase, type OmnibarLinkEntry, type OmnibarProps, type OmnibarRenderProps, Option, type PendingAction, type RecordHotkeyOptions, type RecordHotkeyResult, type RegisteredAction, type RegisteredEndpoint, type RegisteredMode, type RemoteOmnibarResult, Right, SearchIcon, SearchTrigger, type SearchTriggerProps, type SeqElem, type SeqElemState, type SeqMatchState, type SequenceCompletion, SequenceModal, Shift, type ShortcutEntry, type ShortcutGroup, ShortcutsModal, type ShortcutsModalProps, type ShortcutsModalRenderProps, SpeedDial, type SpeedDialAction, type SpeedDialProps, type SpeedDialTooltipProps, type TooltipComponent, type TooltipProps, type TwoColumnConfig, type TwoColumnRow, Up, type UseEditableHotkeysOptions, type UseEditableHotkeysResult, type UseHotkeysOptions, type UseHotkeysResult, type UseOmnibarOptions, type UseOmnibarResult, type UseParamEntryOptions, type UseParamEntryReturn, type UserModeConfig, bindingHasPlaceholders, countPlaceholders, createTwoColumnRenderer, extractCaptures, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, formatKeySeq, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasAnyPlaceholderBindings, hasConflicts, hasDigitPlaceholders, hotkeySequenceToKeySeq, isDigitPlaceholder, isMac, isModifierKey, isPlaceholderSentinel, isSequence, isShiftedSymbol, keySeqToHotkeySequence, normalizeKey, parseHotkeyString, parseKeySeq, parseQueryNumbers, searchActions, useAction, useActionPair, useActionTriplet, useActions, useActionsRegistry, useArrowGroup, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useMode, useModesRegistry, useOmnibar, useOmnibarEndpoint, useOmnibarEndpointsRegistry, useParamEntry, useRecordHotkey };
+export { ACTION_LOOKUP, ACTION_MODAL, ACTION_MODE_PREFIX, ACTION_OMNIBAR, type ActionConfig, type ActionDefinition, type ActionHandler, type ActionPairConfig, type ActionPairEntry, type ActionPairShortcut, type ActionRegistry, type ActionSearchResult, type ActionShortcut, type ActionTripletConfig, type ActionTripletEntry, type ActionTripletShortcut, ActionsRegistryContext, type ActionsRegistryValue, Alt, type ArrowGroupConfig, type ArrowGroupShortcut, ArrowsDouble, ArrowsDpad, ArrowsMove, Backspace, type BindingInfo, type BindingsExport, Command, Ctrl, DEFAULT_BUILTIN_GROUP, DEFAULT_SEQUENCE_TIMEOUT, DIGITS_PLACEHOLDER, DIGIT_PLACEHOLDER, type Direction, Down, type EndpointPagination, type EndpointPaginationInfo, type EndpointPaginationMode, type EndpointQueryResult, type EndpointResponse, Enter, FLOAT_PLACEHOLDER, type FuzzyMatchResult, type GroupRenderer, type GroupRendererProps, type HandlerMap, type HotkeyHandler, type HotkeyMap, type HotkeySequence, type HotkeysConfig, type HotkeysContextValue, HotkeysProvider, type HotkeysProviderProps, Kbd, KbdLookup, KbdModal, KbdOmnibar, type KbdProps, Kbds, Key, type KeyCombination, type KeyCombinationDisplay, type KeyConflict, type KeyIconProps, type KeyIconType, type KeySeq, KeybindingEditor, type KeybindingEditorProps, type KeybindingEditorRenderProps, Left, LookupModal, MobileFAB, type MobileFABProps, type ModeConfig, type ModeCustomizations, ModeIndicator, type ModeIndicatorPosition, type ModeIndicatorProps, type ModeState, ModesRegistryContext, type ModesRegistryValue, ModifierIcon, type ModifierIconProps, type ModifierName, type ModifierType, type Modifiers, type MoveTarget, Omnibar, type OmnibarActionEntry, type OmnibarEndpointAsyncConfig, type OmnibarEndpointConfig, type OmnibarEndpointConfigBase, type OmnibarEndpointSyncConfig, OmnibarEndpointsRegistryContext, type OmnibarEndpointsRegistryValue, type OmnibarEntry, type OmnibarEntryBase, type OmnibarLinkEntry, type OmnibarProps, type OmnibarRenderProps, Option, type PendingAction, type RecordHotkeyOptions, type RecordHotkeyResult, type RegisteredAction, type RegisteredEndpoint, type RegisteredMode, type RemoteOmnibarResult, Right, type RowSelectionKeyAction, type RowSelectionRowProps, type RowSelectionState, SearchIcon, SearchTrigger, type SearchTriggerProps, type SeqElem, type SeqElemState, type SeqMatchState, type SequenceCompletion, SequenceModal, Shift, type ShortcutEntry, type ShortcutGroup, ShortcutsModal, type ShortcutsModalProps, type ShortcutsModalRenderProps, SpeedDial, type SpeedDialAction, type SpeedDialProps, type SpeedDialTooltipProps, type TooltipComponent, type TooltipProps, type TwoColumnConfig, type TwoColumnRow, Up, type UseEditableHotkeysOptions, type UseEditableHotkeysResult, type UseHotkeysOptions, type UseHotkeysResult, type UseOmnibarOptions, type UseOmnibarResult, type UseParamEntryOptions, type UseParamEntryReturn, type UseRowSelectionKeysOptions, type UseRowSelectionOptions, type UseRowSelectionResult, type UserModeConfig, bindingHasPlaceholders, computeSelected, countPlaceholders, createTwoColumnRenderer, extractCaptures, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, formatKeySeq, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasAnyPlaceholderBindings, hasConflicts, hasDigitPlaceholders, hotkeySequenceToKeySeq, isDigitPlaceholder, isMac, isModifierKey, isPlaceholderSentinel, isSequence, isShiftedSymbol, keySeqToHotkeySequence, normalizeKey, parseHotkeyString, parseKeySeq, parseQueryNumbers, searchActions, useAction, useActionPair, useActionTriplet, useActions, useActionsRegistry, useArrowGroup, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useMode, useModesRegistry, useOmnibar, useOmnibarEndpoint, useOmnibarEndpointsRegistry, useParamEntry, useRecordHotkey, useRowSelection, useRowSelectionKeys };
