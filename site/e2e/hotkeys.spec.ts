@@ -352,6 +352,61 @@ test.describe('Data Table Demo', () => {
     await expect(rows.nth(4)).not.toHaveClass(/selected/)
   })
 
+  test('mouse: shift-click extends a range from the anchor', async ({ page }) => {
+    const rows = page.locator('.data-table tbody tr')
+    await rows.nth(1).click()
+    await expect(rows.nth(1)).toHaveClass(/selected/)
+
+    // Shift-click row 4 → rows 1..4 selected, 0 and 5 excluded
+    await rows.nth(4).click({ modifiers: ['Shift'] })
+    await expect(rows.nth(0)).not.toHaveClass(/selected/)
+    await expect(rows.nth(1)).toHaveClass(/selected/)
+    await expect(rows.nth(2)).toHaveClass(/selected/)
+    await expect(rows.nth(3)).toHaveClass(/selected/)
+    await expect(rows.nth(4)).toHaveClass(/selected/)
+    await expect(rows.nth(5)).not.toHaveClass(/selected/)
+
+    // The shift-click must not leave a native browser text selection behind
+    const textSelection = await page.evaluate(() => window.getSelection()?.toString() ?? '')
+    expect(textSelection).toBe('')
+  })
+
+  test('mouse: ctrl/meta-click toggles disjoint rows', async ({ page }) => {
+    const rows = page.locator('.data-table tbody tr')
+    await rows.nth(0).click()
+    await expect(rows.nth(0)).toHaveClass(/selected/)
+
+    // Modifier-click a non-adjacent row: pins the prior selection, adds this one
+    await rows.nth(3).click({ modifiers: ['ControlOrMeta'] })
+    await expect(rows.nth(0)).toHaveClass(/selected/)
+    await expect(rows.nth(3)).toHaveClass(/selected/)
+    await expect(rows.nth(1)).not.toHaveClass(/selected/)
+    await expect(rows.nth(2)).not.toHaveClass(/selected/)
+
+    // Modifier-click it again toggles it back off, prior selection intact
+    await rows.nth(3).click({ modifiers: ['ControlOrMeta'] })
+    await expect(rows.nth(3)).not.toHaveClass(/selected/)
+    await expect(rows.nth(0)).toHaveClass(/selected/)
+  })
+
+  test('ctrl+a selects the whole page, escape clears', async ({ page }) => {
+    const rows = page.locator('.data-table tbody tr')
+    await rows.first().click()
+
+    await page.keyboard.press('Control+a')
+    await page.waitForTimeout(100)
+    const count = await rows.count()
+    for (let i = 0; i < count; i++) {
+      await expect(rows.nth(i)).toHaveClass(/selected/)
+    }
+
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(100)
+    for (let i = 0; i < count; i++) {
+      await expect(rows.nth(i)).not.toHaveClass(/selected/)
+    }
+  })
+
   test('can sort columns with single keys', async ({ page }) => {
     await page.locator('body').click({ position: { x: 10, y: 10 } })
 

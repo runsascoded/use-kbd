@@ -7,6 +7,8 @@ import {
   ShortcutsModal,
   useAction,
   useOmnibarEndpoint,
+  useRowSelection,
+  useRowSelectionKeys,
 } from 'use-kbd'
 import type { EndpointPagination, EndpointResponse } from 'use-kbd'
 import type { TooltipProps } from 'use-kbd'
@@ -60,21 +62,15 @@ const INITIAL_DATA: DataRow[] = Array.from({ length: 1000 }, (_, i) => ({
 
 const PAGE_SIZES = [10, 20, 50, 100]
 
+/** Stable selection key for a row. */
+const rowKey = (r: DataRow) => String(r.id)
+
 type SortDirection = 'asc' | 'desc' | null
 type SortColumn = 'name' | 'status' | 'value'
 
 function DataTable() {
   const [data, setData] = useState<DataRow[]>(INITIAL_DATA)
   const [history, setHistory] = useState<DataRow[][]>([]) // for undo
-  // Multi-select state:
-  // - hoveredIndex: keyboard cursor position (moving end of current range)
-  // - rangeAnchor: fixed end of current range
-  // - pinnedIds: IDs from previous selections (preserved during shift+arrow)
-  // - selectedIds: computed as pinnedIds ∪ current range
-  const [hoveredIndex, setHoveredIndex] = useState<number>(0)
-  const [rangeAnchor, setRangeAnchor] = useState<number>(0)
-  const [pinnedIds, setPinnedIds] = useState<Set<number>>(new Set())
-  const [mouseHoverIndex, setMouseHoverIndex] = useState<number>(-1)
   const containerRef = useRef<HTMLDivElement>(null)
   const tableRef = useRef<HTMLTableElement>(null)
   const [sortColumn, setSortColumn] = useState<SortColumn | null>(null)
@@ -87,30 +83,6 @@ function DataTable() {
   const saveHistory = useCallback(() => {
     setHistory(prev => [...prev.slice(-19), data])
   }, [data])
-
-  // Document-level click handler for deselection
-  useEffect(() => {
-    const handleDocumentClick = (e: MouseEvent) => {
-      const target = e.target as HTMLElement
-      // Don't deselect if clicking inside the table, pagination, modals, omnibar, or floating controls
-      if (
-        tableRef.current?.contains(target) ||
-        target.closest('.pagination-controls') ||
-        target.closest('.kbd-modal') ||
-        target.closest('.kbd-backdrop') ||
-        target.closest('.kbd-omnibar') ||
-        target.closest('.kbd-omnibar-backdrop') ||
-        target.closest('.kbd-speed-dial')
-      ) {
-        return
-      }
-      setPinnedIds(new Set())
-      setHoveredIndex(-1)
-      setRangeAnchor(-1)
-    }
-    document.addEventListener('click', handleDocumentClick)
-    return () => document.removeEventListener('click', handleDocumentClick)
-  }, [])
 
   // Sorted data
   const sortedData = useMemo(() => {
@@ -130,20 +102,42 @@ function DataTable() {
     return sortedData.slice(start, start + pageSize)
   }, [sortedData, currentPage, pageSize])
 
-  // Compute selectedIds from pinnedIds + current range
-  const selectedIds = useMemo(() => {
-    const result = new Set(pinnedIds)
-    if (hoveredIndex >= 0 && rangeAnchor >= 0) {
-      const start = Math.min(hoveredIndex, rangeAnchor)
-      const end = Math.max(hoveredIndex, rangeAnchor)
-      for (let i = start; i <= end; i++) {
-        if (paginatedData[i]) {
-          result.add(paginatedData[i].id)
-        }
+  // Multi-row selection: use-kbd's headless state machine (anchor/cursor/pinned)
+  // plus its zero-dep mouse layer. Keys are the row ids as strings.
+  const sel = useRowSelection(paginatedData, rowKey, { initialCursor: 0 })
+  const selectedIds = sel.selected
+  // Stable method handles (the hook memoizes them) for use in dep arrays.
+  const { select: selectRow, clear: clearSel } = sel
+
+  // Keyboard layer: move / extend / numeric / first-last / select-all / clear.
+  // Registers editable actions in the ShortcutsModal under the given groups.
+  useRowSelectionKeys(sel, {
+    idPrefix: 'nav',
+    group: 'Table: Row Navigation',
+    selectionGroup: 'Table: Selection',
+  })
+
+  // Document-level click handler for deselection
+  useEffect(() => {
+    const handleDocumentClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      // Don't deselect if clicking inside the table, pagination, modals, omnibar, or floating controls
+      if (
+        tableRef.current?.contains(target) ||
+        target.closest('.pagination-controls') ||
+        target.closest('.kbd-modal') ||
+        target.closest('.kbd-backdrop') ||
+        target.closest('.kbd-omnibar') ||
+        target.closest('.kbd-omnibar-backdrop') ||
+        target.closest('.kbd-speed-dial')
+      ) {
+        return
       }
+      clearSel()
     }
-    return result
-  }, [pinnedIds, hoveredIndex, rangeAnchor, paginatedData])
+    document.addEventListener('click', handleDocumentClick)
+    return () => document.removeEventListener('click', handleDocumentClick)
+  }, [clearSel])
 
   // Navigate to a specific row by ID
   const navigateToRow = useCallback((rowId: number) => {
@@ -155,14 +149,9 @@ function DataTable() {
     const targetPage = Math.floor(rowIndex / pageSize) + 1
     setCurrentPage(targetPage)
 
-    // Calculate the index within the page
-    const indexInPage = rowIndex % pageSize
-
-    // Select the row
-    setHoveredIndex(indexInPage)
-    setRangeAnchor(indexInPage)
-    setPinnedIds(new Set())
-  }, [sortedData, pageSize])
+    // Select the row (index into the page it lands on)
+    selectRow(rowIndex % pageSize)
+  }, [sortedData, pageSize, selectRow])
 
   // Register omnibar endpoint for searching table rows
   useOmnibarEndpoint('table-rows', useMemo(() => ({
@@ -286,249 +275,6 @@ function DataTable() {
     setSortDirection(null)
   }, [])
 
-  // Row navigation actions (within current page)
-  // Regular up/down: move cursor and single-select (clears pinned)
-  // If no selection, initialize from mouse hover position
-  useAction('nav:up', {
-    label: 'Row up',
-    description: 'Move cursor up one row and select it',
-    group: 'Table: Row Navigation',
-    defaultBindings: ['k', 'arrowup'],
-    handler: useCallback(() => {
-      // If no cursor, initialize from mouse hover
-      if (hoveredIndex < 0 && mouseHoverIndex >= 0) {
-        setHoveredIndex(mouseHoverIndex)
-        setRangeAnchor(mouseHoverIndex)
-        setPinnedIds(new Set())
-        return
-      }
-      if (hoveredIndex > 0) {
-        const newIndex = hoveredIndex - 1
-        setHoveredIndex(newIndex)
-        setRangeAnchor(newIndex)
-        setPinnedIds(new Set())
-      }
-    }, [hoveredIndex, mouseHoverIndex]),
-  })
-
-  useAction('nav:down', {
-    label: 'Row down',
-    description: 'Move cursor down one row and select it',
-    group: 'Table: Row Navigation',
-    defaultBindings: ['j', 'arrowdown'],
-    handler: useCallback(() => {
-      // If no cursor, initialize from mouse hover
-      if (hoveredIndex < 0 && mouseHoverIndex >= 0) {
-        setHoveredIndex(mouseHoverIndex)
-        setRangeAnchor(mouseHoverIndex)
-        setPinnedIds(new Set())
-        return
-      }
-      if (hoveredIndex < paginatedData.length - 1) {
-        const newIndex = hoveredIndex + 1
-        setHoveredIndex(newIndex)
-        setRangeAnchor(newIndex)
-        setPinnedIds(new Set())
-      }
-    }, [paginatedData, hoveredIndex, mouseHoverIndex]),
-  })
-
-  // Numeric navigation: move up/down by N rows
-  // If no selection, initialize from mouse hover position
-  useAction('nav:up-n', {
-    label: 'Up N rows',
-    group: 'Table: Row Navigation',
-    defaultBindings: ['\\d+ k', '\\d+ arrowup'],
-    handler: useCallback((_e, captures) => {
-      const n = captures?.[0] ?? 1
-      // If no cursor, initialize from mouse hover
-      if (hoveredIndex < 0 && mouseHoverIndex >= 0) {
-        setHoveredIndex(mouseHoverIndex)
-        setRangeAnchor(mouseHoverIndex)
-        setPinnedIds(new Set())
-        return
-      }
-      const newIndex = Math.max(0, hoveredIndex - n)
-      setHoveredIndex(newIndex)
-      setRangeAnchor(newIndex)
-      setPinnedIds(new Set())
-    }, [hoveredIndex, mouseHoverIndex]),
-  })
-
-  useAction('nav:down-n', {
-    label: 'Down N rows',
-    group: 'Table: Row Navigation',
-    defaultBindings: ['\\d+ j', '\\d+ arrowdown'],
-    handler: useCallback((_e, captures) => {
-      const n = captures?.[0] ?? 1
-      // If no cursor, initialize from mouse hover
-      if (hoveredIndex < 0 && mouseHoverIndex >= 0) {
-        setHoveredIndex(mouseHoverIndex)
-        setRangeAnchor(mouseHoverIndex)
-        setPinnedIds(new Set())
-        return
-      }
-      const newIndex = Math.min(paginatedData.length - 1, hoveredIndex + n)
-      setHoveredIndex(newIndex)
-      setRangeAnchor(newIndex)
-      setPinnedIds(new Set())
-    }, [paginatedData, hoveredIndex, mouseHoverIndex]),
-  })
-
-  // Shift+up/down: extend selection range from anchor (preserves pinned)
-  // If no cursor established, use mouse hover position as anchor
-  useAction('nav:extend-up', {
-    label: 'Extend up',
-    description: 'Extend selection upward (preserves pinned rows)',
-    group: 'Table: Row Navigation',
-    defaultBindings: ['shift+k', 'shift+arrowup'],
-    handler: useCallback(() => {
-      // If no cursor, initialize from mouse hover
-      if (hoveredIndex < 0 && mouseHoverIndex >= 0) {
-        const anchor = mouseHoverIndex
-        const newIndex = Math.max(0, anchor - 1)
-        setHoveredIndex(newIndex)
-        setRangeAnchor(anchor)
-        return
-      }
-      if (hoveredIndex > 0) {
-        setHoveredIndex(hoveredIndex - 1)
-      }
-    }, [hoveredIndex, mouseHoverIndex]),
-  })
-
-  useAction('nav:extend-down', {
-    label: 'Extend down',
-    group: 'Table: Row Navigation',
-    defaultBindings: ['shift+j', 'shift+arrowdown'],
-    handler: useCallback(() => {
-      // If no cursor, initialize from mouse hover
-      if (hoveredIndex < 0 && mouseHoverIndex >= 0) {
-        const anchor = mouseHoverIndex
-        const newIndex = Math.min(paginatedData.length - 1, anchor + 1)
-        setHoveredIndex(newIndex)
-        setRangeAnchor(anchor)
-        return
-      }
-      if (hoveredIndex < paginatedData.length - 1) {
-        setHoveredIndex(hoveredIndex + 1)
-      }
-    }, [paginatedData, hoveredIndex, mouseHoverIndex]),
-  })
-
-  // Numeric extend selection: extend up/down by N rows
-  useAction('nav:extend-up-n', {
-    label: 'Extend up N rows',
-    group: 'Table: Row Navigation',
-    defaultBindings: ['\\d+ shift+k', '\\d+ shift+arrowup'],
-    handler: useCallback((_e, captures) => {
-      const n = captures?.[0] ?? 1
-      // If no cursor, initialize from mouse hover
-      if (hoveredIndex < 0 && mouseHoverIndex >= 0) {
-        const anchor = mouseHoverIndex
-        const newIndex = Math.max(0, anchor - n)
-        setHoveredIndex(newIndex)
-        setRangeAnchor(anchor)
-        return
-      }
-      const newIndex = Math.max(0, hoveredIndex - n)
-      setHoveredIndex(newIndex)
-    }, [hoveredIndex, mouseHoverIndex]),
-  })
-
-  useAction('nav:extend-down-n', {
-    label: 'Extend down N rows',
-    group: 'Table: Row Navigation',
-    defaultBindings: ['\\d+ shift+j', '\\d+ shift+arrowdown'],
-    handler: useCallback((_e, captures) => {
-      const n = captures?.[0] ?? 1
-      // If no cursor, initialize from mouse hover
-      if (hoveredIndex < 0 && mouseHoverIndex >= 0) {
-        const anchor = mouseHoverIndex
-        const newIndex = Math.min(paginatedData.length - 1, anchor + n)
-        setHoveredIndex(newIndex)
-        setRangeAnchor(anchor)
-        return
-      }
-      const newIndex = Math.min(paginatedData.length - 1, hoveredIndex + n)
-      setHoveredIndex(newIndex)
-    }, [paginatedData, hoveredIndex, mouseHoverIndex]),
-  })
-
-  useAction('nav:first', {
-    label: 'First row',
-    group: 'Table: Row Navigation',
-    defaultBindings: ['meta+arrowup'],
-    handler: useCallback(() => {
-      if (paginatedData.length > 0) {
-        setHoveredIndex(0)
-        setRangeAnchor(0)
-        setPinnedIds(new Set())
-      }
-    }, [paginatedData]),
-  })
-
-  useAction('nav:last', {
-    label: 'Last row',
-    group: 'Table: Row Navigation',
-    defaultBindings: ['meta+arrowdown'],
-    handler: useCallback(() => {
-      if (paginatedData.length > 0) {
-        const lastIndex = paginatedData.length - 1
-        setHoveredIndex(lastIndex)
-        setRangeAnchor(lastIndex)
-        setPinnedIds(new Set())
-      }
-    }, [paginatedData]),
-  })
-
-  // Meta+shift: extend current range to start/end (preserves pinned)
-  useAction('nav:select-to-first', {
-    label: 'Select to first',
-    group: 'Table: Row Navigation',
-    defaultBindings: ['meta+shift+arrowup'],
-    handler: useCallback(() => {
-      if (paginatedData.length > 0) {
-        setHoveredIndex(0)
-      }
-    }, [paginatedData]),
-  })
-
-  useAction('nav:select-to-last', {
-    label: 'Select to last',
-    group: 'Table: Row Navigation',
-    defaultBindings: ['meta+shift+arrowdown'],
-    handler: useCallback(() => {
-      if (paginatedData.length > 0) {
-        setHoveredIndex(paginatedData.length - 1)
-      }
-    }, [paginatedData]),
-  })
-
-  useAction('nav:select-all', {
-    label: 'Select all',
-    group: 'Table: Selection',
-    defaultBindings: ['ctrl+a'],
-    handler: useCallback(() => {
-      if (paginatedData.length > 0) {
-        setPinnedIds(new Set(paginatedData.map(r => r.id)))
-        setHoveredIndex(-1)
-        setRangeAnchor(-1)
-      }
-    }, [paginatedData]),
-  })
-
-  useAction('nav:deselect', {
-    label: 'Deselect all',
-    group: 'Table: Selection',
-    defaultBindings: ['escape'],
-    handler: useCallback(() => {
-      setPinnedIds(new Set())
-      setHoveredIndex(-1)
-      setRangeAnchor(-1)
-    }, []),
-  })
-
   // Page navigation actions
   useAction('page:prev', {
     label: 'Prev page',
@@ -629,7 +375,7 @@ function DataTable() {
   const setSelectedStatus = useCallback((status: DataRow['status']) => {
     saveHistory()
     setData(prev => prev.map(row =>
-      selectedIds.has(row.id) ? { ...row, status } : row
+      selectedIds.has(rowKey(row)) ? { ...row, status } : row
     ))
   }, [selectedIds, saveHistory])
 
@@ -734,7 +480,7 @@ function DataTable() {
       if (factor === undefined) return
       saveHistory()
       setData(prev => prev.map(row =>
-        selectedIds.has(row.id) ? { ...row, value: Math.round(row.value * factor) } : row
+        selectedIds.has(rowKey(row)) ? { ...row, value: Math.round(row.value * factor) } : row
       ))
     }, [selectedIds, saveHistory]),
   })
@@ -750,7 +496,7 @@ function DataTable() {
       if (val === undefined) return
       saveHistory()
       setData(prev => prev.map(row =>
-        selectedIds.has(row.id) ? { ...row, value: Math.round(val) } : row
+        selectedIds.has(rowKey(row)) ? { ...row, value: Math.round(val) } : row
       ))
     }, [selectedIds, saveHistory]),
   })
@@ -774,7 +520,7 @@ function DataTable() {
       { label: 'Extend', leftAction: 'nav:extend-up', rightAction: 'nav:extend-down' },
       { label: 'Extend N', leftAction: 'nav:extend-up-n', rightAction: 'nav:extend-down-n' },
       { label: 'Jump', leftAction: 'nav:first', rightAction: 'nav:last' },
-      { label: 'Select to', leftAction: 'nav:select-to-first', rightAction: 'nav:select-to-last' },
+      { label: 'Select to', leftAction: 'nav:extend-first', rightAction: 'nav:extend-last' },
     ],
   }), [])
 
@@ -813,48 +559,15 @@ function DataTable() {
           </tr>
         </thead>
         <tbody>
-          {paginatedData.map((row, index) => {
-            const isCursor = index === hoveredIndex
-            const isSelected = selectedIds.has(row.id)
-            return (
-              <tr
-                key={row.id}
-                className={`${isCursor ? 'cursor' : ''} ${isSelected ? 'selected' : ''}`}
-                onMouseEnter={() => setMouseHoverIndex(index)}
-                onMouseLeave={() => setMouseHoverIndex(-1)}
-                onClick={(e) => {
-                  if (e.shiftKey) {
-                    // Shift-click: extend range from anchor to clicked (preserves pinned)
-                    setHoveredIndex(index)
-                  } else if (e.metaKey || e.ctrlKey) {
-                    // Meta/Ctrl-click: toggle if selected, otherwise add to selection
-                    if (selectedIds.has(row.id)) {
-                      // Deselect: remove from pinned, clear range if it was the cursor
-                      const newPinned = new Set(selectedIds)
-                      newPinned.delete(row.id)
-                      setPinnedIds(newPinned)
-                      setHoveredIndex(-1)
-                      setRangeAnchor(-1)
-                    } else {
-                      // Add: pin current selection, start new range at clicked
-                      setPinnedIds(new Set(selectedIds))
-                      setRangeAnchor(index)
-                      setHoveredIndex(index)
-                    }
-                  } else {
-                    // Normal click: single select (clears pinned)
-                    setPinnedIds(new Set())
-                    setRangeAnchor(index)
-                    setHoveredIndex(index)
-                  }
-                }}
-              >
-                <td>{row.name}</td>
-                <td><span className={`status-badge ${row.status}`}>{row.status}</span></td>
-                <td>{row.value}</td>
-              </tr>
-            )
-          })}
+          {paginatedData.map((row, index) => (
+            // Mouse layer (click / shift-click / meta-click, hover, cursor+selected classes)
+            // comes entirely from the hook via rowProps.
+            <tr key={row.id} {...sel.rowProps(index)}>
+              <td>{row.name}</td>
+              <td><span className={`status-badge ${row.status}`}>{row.status}</span></td>
+              <td>{row.value}</td>
+            </tr>
+          ))}
         </tbody>
       </table>
 
