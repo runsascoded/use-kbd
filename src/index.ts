@@ -62,6 +62,16 @@ export type { ArrowGroupConfig } from './useArrowGroup'
 export { useArrowGroup } from './useArrowGroup'
 export type { ActionPairConfig, ActionPairEntry } from './useActionPair'
 export { useActionPair } from './useActionPair'
+export type {
+  MoveTarget,
+  RowSelectionState,
+  RowSelectionRowProps,
+  UseRowSelectionOptions,
+  UseRowSelectionResult,
+} from './useRowSelection'
+export { computeSelected, useRowSelection } from './useRowSelection'
+export type { RowSelectionKeyAction, UseRowSelectionKeysOptions } from './useRowSelectionKeys'
+export { useRowSelectionKeys } from './useRowSelectionKeys'
 export type { ActionTripletConfig, ActionTripletEntry } from './useActionTriplet'
 export { useActionTriplet } from './useActionTriplet'
 export type { ActionsRegistryValue, RegisteredAction } from './ActionsRegistry'
