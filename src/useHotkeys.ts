@@ -452,9 +452,13 @@ export function useHotkeys(
   }, [])
 
   const clearPending = useCallback(() => {
-    setPendingKeys([])
-    setIsAwaitingSequence(false)
-    setTimeoutStartedAt(null)
+    // Bail out of the state updates when nothing is pending (the common case:
+    // an immediate single-key match clears after every keystroke). Returning the
+    // same reference lets React skip the re-render, so a plain keystroke doesn't
+    // fan out through the context to every display consumer.
+    setPendingKeys(prev => (prev.length === 0 ? prev : []))
+    setIsAwaitingSequence(prev => (prev ? false : prev))
+    setTimeoutStartedAt(prev => (prev === null ? prev : null))
     matchStatesRef.current.clear()
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current)

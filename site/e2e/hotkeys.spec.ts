@@ -3003,6 +3003,27 @@ test.describe('Registration render isolation', () => {
     // Sanity: the display consumer *did* re-render (proves the bump happened).
     expect((after['__display'] ?? 0)).toBeGreaterThan(before['__display'] ?? 0)
   })
+
+  test('a matched single keystroke does not re-render display consumers', async ({ page }) => {
+    // `?keyProbe` binds a no-op action to `y`; DisplayProbe consumes the full
+    // hotkeys context, so it re-renders whenever a keystroke fans out.
+    await page.goto('/many-actions?n=6&keyProbe=1')
+    await page.waitForSelector('#demo', { timeout: 5000 })
+
+    const displayRenders = () =>
+      page.evaluate(() => (window.__renders ?? {})['__display'] ?? 0)
+    await expect.poll(displayRenders).toBeGreaterThan(0)
+
+    await page.locator('body').click({ position: { x: 5, y: 5 } })
+    const before = await displayRenders()
+
+    // A matched single-key action clears pending state; that must be a no-op
+    // (same-reference state) so it doesn't re-render the context consumers.
+    await page.keyboard.press('y')
+    await page.waitForTimeout(200)
+
+    expect(await displayRenders()).toBe(before)
+  })
 })
 
 test.describe('Arrow group conflict tooltip', () => {

@@ -79,12 +79,28 @@ function ArrowGroupConflictProbe() {
   return null
 }
 
+/**
+ * A single action bound to `y`, for the e2e that checks a matched keystroke
+ * doesn't fan out a re-render to display consumers (the DisplayProbe above).
+ * Gated behind `?keyProbe`.
+ */
+function KeystrokeProbe() {
+  useAction('probe:key', {
+    label: 'Probe key',
+    group: 'Probe',
+    defaultBindings: ['y'],
+    handler: () => {},
+  })
+  return null
+}
+
 const GROUPS = ['Navigation', 'Editing', 'View', 'Tools']
 
 export function ManyActionsDemo() {
   const params = new URLSearchParams(window.location.search)
   const count = Number(params.get('n') || '50')
   const showArrowConflict = params.has('arrowConflict')
+  const showKeyProbe = params.has('keyProbe')
   const actions = Array.from({ length: count }, (_, i) => ({
     id: `test-action-${i}`,
     label: `Action ${i + 1}`,
@@ -98,6 +114,7 @@ export function ManyActionsDemo() {
       <RegisterExtraToggle />
       <DisplayProbe />
       {showArrowConflict && <ArrowGroupConflictProbe />}
+      {showKeyProbe && <KeystrokeProbe />}
       {actions.map(a => <DummyAction key={a.id} {...a} />)}
       <ShortcutsModal />
       <KbdOmnibar />
