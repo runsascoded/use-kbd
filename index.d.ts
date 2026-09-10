@@ -462,6 +462,13 @@ interface UseHotkeysOptions {
     onSequenceProgress?: (keys: HotkeySequence) => void;
     /** Called when sequence is cancelled (timeout with 'cancel' mode, or no match) */
     onSequenceCancel?: () => void;
+    /**
+     * Predicate for whether an action is currently enabled. Consulted *before*
+     * `preventDefault`: a key whose only matching actions are disabled is neither
+     * consumed nor treated as a sequence start, so it falls through to the browser
+     * / other handlers. Defaults to "everything enabled" when omitted.
+     */
+    isActionEnabled?: (id: string) => boolean;
 }
 interface UseHotkeysResult {
     /** Keys pressed so far in current sequence */
@@ -1512,6 +1519,14 @@ interface ActionsRegistryValue {
     execute: (id: string, captures?: number[]) => void;
     /** Check if an action is enabled (defaults to true if not set or not found) */
     isActionEnabled: (id: string) => boolean;
+    /**
+     * Update an action's live enabled state without re-registering it (so toggling
+     * `enabled` never bumps the registry version / re-renders consumers). Read back
+     * by `isActionEnabled`, which the keydown path consults before consuming a key.
+     */
+    setActionEnabled: (id: string, enabled: boolean) => void;
+    /** Stable API subset (register/unregister/setActionEnabled) for pure registrants */
+    api: ActionsRegistryApi;
     /** Currently registered actions */
     actions: Map<string, RegisteredAction>;
     /** Computed keymap from registered actions + user overrides */
@@ -1548,6 +1563,18 @@ interface ActionsRegistryValue {
     removeActionFromMode: (actionId: string, modeId: string) => void;
 }
 declare const ActionsRegistryContext: react.Context<ActionsRegistryValue | null>;
+/**
+ * The stable subset of the registry that `useAction`/`useActions` need. Its
+ * value never changes identity after mount (all three methods are stable), so
+ * pure registrants that consume it don't re-render when the registry version
+ * bumps (i.e. when *any* action registers/unregisters). Display consumers that
+ * need the live `actions`/`keymap`/`conflicts` keep using the full context.
+ */
+interface ActionsRegistryApi {
+    register: (id: string, config: ActionConfig) => void;
+    unregister: (id: string) => void;
+    setActionEnabled: (id: string, enabled: boolean) => void;
+}
 interface UseActionsRegistryOptions {
     /** localStorage key for persisting user overrides */
     storageKey?: string;
@@ -1591,7 +1618,7 @@ interface HotkeysConfig {
     sequenceTimeout?: number;
     /** Group name for built-in actions: shortcuts modal, omnibar, key lookup (default: "Meta") */
     builtinGroup?: string;
-    /** When true, keys with conflicts are disabled (default: true) */
+    /** When true, keys with conflicts are disabled (default: false — SeqM disambiguates) */
     disableConflicts?: boolean;
     /** Minimum viewport width to enable hotkeys (default: false = no viewport restriction) */
     minViewportWidth?: number | false;
