@@ -387,6 +387,55 @@ function DataTable() {
     }, []),
   })
 
+  // Duplicate selected rows `times` times (appended after the originals).
+  const duplicateSelected = useCallback((times: number) => {
+    if (times < 1) return
+    saveHistory()
+    setData(prev => {
+      let nextId = prev.reduce((m, r) => Math.max(m, r.id), 0) + 1
+      const copies: DataRow[] = []
+      for (const row of prev) {
+        if (selectedIds.has(rowKey(row))) {
+          for (let t = 0; t < times; t++) copies.push({ ...row, id: nextId++ })
+        }
+      }
+      return [...prev, ...copies]
+    })
+  }, [selectedIds, saveHistory])
+
+  // --- Intentional binding conflict, to showcase the ShortcutsModal's conflict
+  // detection + hover-for-details. `d` is a *prefix* of `d \d+`: pressing `d`
+  // could begin either binding, so both are flagged (and, with the default
+  // `disableConflicts`, disabled) as conflicting. Hover the red chips in the
+  // modal to see the specifics ("shares a prefix with…" / "is a prefix of…").
+  useAction('dup:one', {
+    label: 'Duplicate row',
+    description: 'Conflicts with "Duplicate N times" — `d` is a prefix of `d \\d+`',
+    group: 'Table: Duplicate',
+    defaultBindings: ['d'],
+    handler: useCallback(() => duplicateSelected(1), [duplicateSelected]),
+  })
+
+  useAction('dup:n', {
+    label: 'Duplicate N times',
+    description: 'Conflicts with "Duplicate row" — shares the `d` prefix (e.g. d3)',
+    group: 'Table: Duplicate',
+    defaultBindings: ['d \\d+'],
+    handler: useCallback((_e, captures) => duplicateSelected(captures?.[0] ?? 1), [duplicateSelected]),
+  })
+
+  // Intentionally-disabled action (bound to `q`). Used by e2e to verify a
+  // disabled binding does NOT consume its key — it should fall through rather
+  // than `preventDefault`. Hidden from the modal.
+  useAction('demo:disabled', {
+    label: 'Disabled (never fires)',
+    group: 'Table: Edit',
+    defaultBindings: ['q'],
+    enabled: false,
+    hideFromModal: true,
+    handler: useCallback(() => {}, []),
+  })
+
   // Status actions - set status on selected rows
   const setSelectedStatus = useCallback((status: DataRow['status']) => {
     saveHistory()
@@ -663,6 +712,7 @@ function DataTable() {
           'Table: Selection',
           'Table: Status',
           'Table: Edit',
+          'Table: Duplicate',
           'Global',
           'Navigation',
         ]}

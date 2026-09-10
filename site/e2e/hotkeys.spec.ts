@@ -473,19 +473,61 @@ test.describe('Data Table Demo', () => {
     await page.keyboard.press('?')
     await page.waitForSelector('.kbd-modal', { timeout: 5000 })
 
-    const conflict = page.locator('.kbd-kbd.conflict').first()
-    await expect(conflict).toBeVisible()
+    // The "Table: Duplicate" group carries an intentional prefix conflict:
+    // `d` (Duplicate row) is a prefix of `d \d+` (Duplicate N times), so both
+    // sides are flagged. Hover each and assert the exact relation it reports.
+    // Match on the exact label span (the rendered tooltip text also mentions the
+    // other action, so a loose `hasText` would leak across both rows).
+    const dupRowChip = page.locator('.kbd-action')
+      .filter({ has: page.getByText('Duplicate row', { exact: true }) })
+      .locator('.kbd-kbd.conflict').first()
+    const dupNChip = page.locator('.kbd-action')
+      .filter({ has: page.getByText('Duplicate N times', { exact: true }) })
+      .locator('.kbd-kbd.conflict').first()
+    await expect(dupRowChip).toBeVisible()
 
     // No tooltip until hover
     await expect(page.locator('[role="tooltip"]')).toHaveCount(0)
 
-    await conflict.hover()
-    const tip = page.locator('[role="tooltip"]')
-    await expect(tip).toContainText('Binding conflict', { timeout: 3000 })
-    // Names the colliding action, not just the key
-    await expect(tip).toContainText('(')
+    // Shorter binding reports the forward relation, naming the colliding action.
+    // (Other tooltips can coexist — the `\d+` chip has its own pattern tooltip —
+    // so scope each assertion to the tooltip carrying its distinctive phrase.)
+    await dupRowChip.hover()
+    await expect(page.getByRole('tooltip').filter({ hasText: 'is a prefix of' })).toHaveText(
+      'Binding conflict: • is a prefix of D (Duplicate N times)',
+      { timeout: 3000 },
+    )
+
+    // Longer binding reports the reverse relation (mgu-style "shares a prefix with…").
+    await page.mouse.move(0, 0)
+    await dupNChip.hover()
+    await expect(page.getByRole('tooltip').filter({ hasText: 'shares a prefix with' })).toHaveText(
+      'Binding conflict: • shares a prefix with D (Duplicate row)',
+      { timeout: 3000 },
+    )
 
     await page.keyboard.press('Escape')
+  })
+
+  test('a disabled binding does not consume its key (falls through)', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    // Record whether use-kbd's window keydown handler preventDefaulted the event.
+    // This listener is added after use-kbd's (mount) so it observes the final state.
+    await page.evaluate(() => {
+      const w = window as unknown as { __pd: boolean | null }
+      w.__pd = null
+      window.addEventListener('keydown', (e) => { w.__pd = e.defaultPrevented }, { passive: true })
+    })
+    const lastPrevented = () => page.evaluate(() => (window as unknown as { __pd: boolean | null }).__pd)
+
+    // 'q' is bound only to a disabled action → must fall through, not be consumed.
+    await page.keyboard.press('q')
+    expect(await lastPrevented()).toBe(false)
+
+    // Control: 'n' (Sort by name ↑) is enabled → it IS consumed.
+    await page.keyboard.press('n')
+    expect(await lastPrevented()).toBe(true)
   })
 
   test('can edit shortcut in modal', async ({ page }) => {
@@ -2895,5 +2937,48 @@ test.describe('Omnibar Infinite Scroll', () => {
     // Results should be filtered (fewer than expanded count)
     const filteredCount = await page.locator('.kbd-omnibar-result').count()
     expect(filteredCount).toBeLessThan(expandedCount)
+  })
+})
+
+test.describe('Registration render isolation', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.removeItem('use-kbd-demo')
+      localStorage.removeItem('use-kbd-demo-removed')
+    })
+    await page.goto('/many-actions?n=30')
+    await page.waitForSelector('#demo', { timeout: 5000 })
+  })
+
+  test('registering an action does not re-render existing registrants', async ({ page }) => {
+    // Per-action commit counts recorded by DummyAction (window.__renders[id]).
+    const snapshot = () =>
+      page.evaluate(() => ({ ...(window.__renders ?? {}) } as Record<string, number>))
+
+    // Wait until all 30 registrants + the display probe have committed.
+    await expect
+      .poll(async () => Object.keys(await snapshot()).length)
+      .toBeGreaterThanOrEqual(31)
+
+    const before = await snapshot()
+
+    // Mount one more registrant → registry version bump (register). The version
+    // bump re-renders the DisplayProbe (full-context consumer) in a *later*
+    // commit than the newly-mounted registrant, so wait on __display to be sure
+    // that re-render has flushed before asserting the pure registrants held.
+    await page.locator('#register-extra').click()
+    await expect
+      .poll(async () => (await snapshot())['__display'] ?? 0)
+      .toBeGreaterThan(before['__display'] ?? 0)
+
+    const after = await snapshot()
+
+    // The existing action registrants must NOT have re-rendered on the version
+    // bump (only the display consumer and the newly-mounted registrant did).
+    const registrantIds = Object.keys(before).filter(id => id !== '__display')
+    const changed = registrantIds.filter(id => after[id] !== before[id])
+    expect(changed).toEqual([])
+    // Sanity: the display consumer *did* re-render (proves the bump happened).
+    expect((after['__display'] ?? 0)).toBeGreaterThan(before['__display'] ?? 0)
   })
 })
