@@ -21,11 +21,43 @@
 
 **Test**: `site/e2e/hotkeys.spec.ts` › "registering an action does not re-render existing registrants" — mounting an extra registrant on `/many-actions` re-renders the display-probe (full-context consumer) but leaves all existing registrants' commit counts unchanged. TFFP-verified.
 
+## Ask 3 — a keystroke must not re-render every display consumer
+
+**Bug** (mgu spy: "a plain `j` commits with `HotkeysProvider` as an updater"):
+`clearPending` ran after every matched keystroke and unconditionally
+`setPendingKeys([])` (a fresh array), so even an immediate single-key match
+re-rendered `HotkeysProvider` and fanned out through the context to Omnibar,
+ShortcutsModal, SpeedDial, etc.
+
+**Fix**: guard the three sequence-state setters (`pendingKeys`,
+`isAwaitingSequence`, `timeoutStartedAt`) to return the same reference when
+already cleared, so React bails on the no-op update.
+
+**Test**: "a matched single keystroke does not re-render display consumers"
+(`?keyProbe` binds a no-op action; DisplayProbe's commit count is unchanged).
+TFFP-verified.
+
+**Remaining (follow-up, not done)**: multi-key *sequence* input (`pendingKeys`
+legitimately changing) still fans out to all display consumers. Isolating that
+needs a keystroke-state context split (BC-sensitive — `useHotkeysContext`
+currently exposes `pendingKeys` etc.), so it's deferred pending a decision.
+
+## Ask 4 — gate the built-in Escape/`clear` on a non-empty selection
+
+`useRowSelectionKeys`'s `clear` (Escape) is now `enabled` only while
+`sel.count > 0`. Combined with ask 1, Escape with nothing selected falls
+through (close a modal, drill up a treemap) instead of a no-op clear that
+consumes the key. Consumers can drop bespoke capture-phase Esc listeners.
+Test: "Escape falls through when nothing is selected". TFFP-verified.
+
 ## Verification
 
 - lib `tsup` build + types clean; lib + site `eslint` 0 errors; site `tsc -b` clean.
-- Full Playwright suite green (111 tests), incl. the two new tests above.
+- Full Playwright suite green (114 tests), incl. the new tests above.
 
 ## For mgu
 
-No npm release — pin the dist SHA via `pds gh use-kbd`. Re-run the render-spy after pinning to confirm the app-wide re-render on selection churn is gone and disabled bindings fall through.
+No npm release — pin the dist SHA via `pds gh use-kbd`. Re-run the render-spy
+after pinning to confirm: app-wide re-render on selection churn is gone,
+disabled bindings fall through, a plain keystroke no longer re-renders the
+display consumers, and Esc with nothing selected reaches the treemap drill-up.
