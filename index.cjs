@@ -2026,6 +2026,7 @@ function useHotkeys(keymap, handlers, options = {}) {
   return { pendingKeys, isAwaitingSequence, cancelSequence, timeoutStartedAt, sequenceTimeout };
 }
 var HotkeysContext = react.createContext(null);
+var SequenceStateContext = react.createContext(null);
 var DEFAULT_CONFIG = {
   storageKey: "use-kbd",
   builtinGroup: DEFAULT_BUILTIN_GROUP,
@@ -2287,11 +2288,6 @@ function HotkeysProvider({
     setIsEditingBinding,
     executeAction,
     recentActionIds,
-    pendingKeys,
-    isAwaitingSequence,
-    cancelSequence,
-    sequenceTimeoutStartedAt,
-    sequenceTimeout,
     conflicts,
     hasConflicts: hasConflicts2,
     searchActions: searchActionsHelper,
@@ -2323,18 +2319,20 @@ function HotkeysProvider({
     isEditingBinding,
     executeAction,
     recentActionIds,
-    pendingKeys,
-    isAwaitingSequence,
-    cancelSequence,
-    sequenceTimeoutStartedAt,
-    sequenceTimeout,
     conflicts,
     hasConflicts2,
     searchActionsHelper,
     getCompletions,
     modesRegistry
   ]);
-  return /* @__PURE__ */ jsxRuntime.jsx(ActionsRegistryContext.Provider, { value: registry, children: /* @__PURE__ */ jsxRuntime.jsx(ActionsRegistryApiContext.Provider, { value: registry.api, children: /* @__PURE__ */ jsxRuntime.jsx(ModesRegistryContext.Provider, { value: modesRegistry, children: /* @__PURE__ */ jsxRuntime.jsx(OmnibarEndpointsRegistryContext.Provider, { value: endpointsRegistry, children: /* @__PURE__ */ jsxRuntime.jsx(HotkeysContext.Provider, { value, children }) }) }) }) });
+  const sequenceState = react.useMemo(() => ({
+    pendingKeys,
+    isAwaitingSequence,
+    cancelSequence,
+    sequenceTimeoutStartedAt,
+    sequenceTimeout
+  }), [pendingKeys, isAwaitingSequence, cancelSequence, sequenceTimeoutStartedAt, sequenceTimeout]);
+  return /* @__PURE__ */ jsxRuntime.jsx(ActionsRegistryContext.Provider, { value: registry, children: /* @__PURE__ */ jsxRuntime.jsx(ActionsRegistryApiContext.Provider, { value: registry.api, children: /* @__PURE__ */ jsxRuntime.jsx(ModesRegistryContext.Provider, { value: modesRegistry, children: /* @__PURE__ */ jsxRuntime.jsx(OmnibarEndpointsRegistryContext.Provider, { value: endpointsRegistry, children: /* @__PURE__ */ jsxRuntime.jsx(HotkeysContext.Provider, { value, children: /* @__PURE__ */ jsxRuntime.jsx(SequenceStateContext.Provider, { value: sequenceState, children }) }) }) }) }) });
 }
 function useHotkeysContext() {
   const context = react.useContext(HotkeysContext);
@@ -2345,6 +2343,16 @@ function useHotkeysContext() {
 }
 function useMaybeHotkeysContext() {
   return react.useContext(HotkeysContext);
+}
+function useSequenceState() {
+  const context = react.useContext(SequenceStateContext);
+  if (!context) {
+    throw new Error("useSequenceState must be used within a HotkeysProvider");
+  }
+  return context;
+}
+function useMaybeSequenceState() {
+  return react.useContext(SequenceStateContext);
 }
 function useAction(id, config) {
   const registry = react.useContext(ActionsRegistryApiContext);
@@ -5577,15 +5585,17 @@ function Omnibar({
 }
 function SequenceModal() {
   const {
-    pendingKeys,
-    isAwaitingSequence,
-    cancelSequence,
-    sequenceTimeoutStartedAt: timeoutStartedAt,
-    sequenceTimeout,
     getCompletions,
     registry,
     executeAction
   } = useHotkeysContext();
+  const {
+    pendingKeys,
+    isAwaitingSequence,
+    cancelSequence,
+    sequenceTimeoutStartedAt: timeoutStartedAt,
+    sequenceTimeout
+  } = useSequenceState();
   const [selectedIndex, setSelectedIndex] = react.useState(0);
   const [hasInteracted, setHasInteracted] = react.useState(false);
   const completions = react.useMemo(() => {
@@ -7416,6 +7426,7 @@ exports.useEditableHotkeys = useEditableHotkeys;
 exports.useHotkeys = useHotkeys;
 exports.useHotkeysContext = useHotkeysContext;
 exports.useMaybeHotkeysContext = useMaybeHotkeysContext;
+exports.useMaybeSequenceState = useMaybeSequenceState;
 exports.useMode = useMode;
 exports.useModesRegistry = useModesRegistry;
 exports.useOmnibar = useOmnibar;
@@ -7425,5 +7436,6 @@ exports.useParamEntry = useParamEntry;
 exports.useRecordHotkey = useRecordHotkey;
 exports.useRowSelection = useRowSelection;
 exports.useRowSelectionKeys = useRowSelectionKeys;
+exports.useSequenceState = useSequenceState;
 //# sourceMappingURL=index.cjs.map
 //# sourceMappingURL=index.cjs.map

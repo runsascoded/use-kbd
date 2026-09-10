@@ -2024,6 +2024,7 @@ function useHotkeys(keymap, handlers, options = {}) {
   return { pendingKeys, isAwaitingSequence, cancelSequence, timeoutStartedAt, sequenceTimeout };
 }
 var HotkeysContext = createContext(null);
+var SequenceStateContext = createContext(null);
 var DEFAULT_CONFIG = {
   storageKey: "use-kbd",
   builtinGroup: DEFAULT_BUILTIN_GROUP,
@@ -2285,11 +2286,6 @@ function HotkeysProvider({
     setIsEditingBinding,
     executeAction,
     recentActionIds,
-    pendingKeys,
-    isAwaitingSequence,
-    cancelSequence,
-    sequenceTimeoutStartedAt,
-    sequenceTimeout,
     conflicts,
     hasConflicts: hasConflicts2,
     searchActions: searchActionsHelper,
@@ -2321,18 +2317,20 @@ function HotkeysProvider({
     isEditingBinding,
     executeAction,
     recentActionIds,
-    pendingKeys,
-    isAwaitingSequence,
-    cancelSequence,
-    sequenceTimeoutStartedAt,
-    sequenceTimeout,
     conflicts,
     hasConflicts2,
     searchActionsHelper,
     getCompletions,
     modesRegistry
   ]);
-  return /* @__PURE__ */ jsx(ActionsRegistryContext.Provider, { value: registry, children: /* @__PURE__ */ jsx(ActionsRegistryApiContext.Provider, { value: registry.api, children: /* @__PURE__ */ jsx(ModesRegistryContext.Provider, { value: modesRegistry, children: /* @__PURE__ */ jsx(OmnibarEndpointsRegistryContext.Provider, { value: endpointsRegistry, children: /* @__PURE__ */ jsx(HotkeysContext.Provider, { value, children }) }) }) }) });
+  const sequenceState = useMemo(() => ({
+    pendingKeys,
+    isAwaitingSequence,
+    cancelSequence,
+    sequenceTimeoutStartedAt,
+    sequenceTimeout
+  }), [pendingKeys, isAwaitingSequence, cancelSequence, sequenceTimeoutStartedAt, sequenceTimeout]);
+  return /* @__PURE__ */ jsx(ActionsRegistryContext.Provider, { value: registry, children: /* @__PURE__ */ jsx(ActionsRegistryApiContext.Provider, { value: registry.api, children: /* @__PURE__ */ jsx(ModesRegistryContext.Provider, { value: modesRegistry, children: /* @__PURE__ */ jsx(OmnibarEndpointsRegistryContext.Provider, { value: endpointsRegistry, children: /* @__PURE__ */ jsx(HotkeysContext.Provider, { value, children: /* @__PURE__ */ jsx(SequenceStateContext.Provider, { value: sequenceState, children }) }) }) }) }) });
 }
 function useHotkeysContext() {
   const context = useContext(HotkeysContext);
@@ -2343,6 +2341,16 @@ function useHotkeysContext() {
 }
 function useMaybeHotkeysContext() {
   return useContext(HotkeysContext);
+}
+function useSequenceState() {
+  const context = useContext(SequenceStateContext);
+  if (!context) {
+    throw new Error("useSequenceState must be used within a HotkeysProvider");
+  }
+  return context;
+}
+function useMaybeSequenceState() {
+  return useContext(SequenceStateContext);
 }
 function useAction(id, config) {
   const registry = useContext(ActionsRegistryApiContext);
@@ -5575,15 +5583,17 @@ function Omnibar({
 }
 function SequenceModal() {
   const {
-    pendingKeys,
-    isAwaitingSequence,
-    cancelSequence,
-    sequenceTimeoutStartedAt: timeoutStartedAt,
-    sequenceTimeout,
     getCompletions,
     registry,
     executeAction
   } = useHotkeysContext();
+  const {
+    pendingKeys,
+    isAwaitingSequence,
+    cancelSequence,
+    sequenceTimeoutStartedAt: timeoutStartedAt,
+    sequenceTimeout
+  } = useSequenceState();
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [hasInteracted, setHasInteracted] = useState(false);
   const completions = useMemo(() => {
@@ -7328,6 +7338,6 @@ function ShortcutsModal({
   ] }) }) });
 }
 
-export { ACTION_LOOKUP, ACTION_MODAL, ACTION_MODE_PREFIX, ACTION_OMNIBAR, ActionsRegistryContext, Alt, ArrowsDouble, ArrowsDpad, ArrowsMove, Backspace, Command, Ctrl, DEFAULT_BUILTIN_GROUP, DEFAULT_SEQUENCE_TIMEOUT, DIGITS_PLACEHOLDER, DIGIT_PLACEHOLDER, Down, Enter, FLOAT_PLACEHOLDER, HotkeysProvider, Kbd, KbdLookup, KbdModal, KbdOmnibar, Kbds, Key, KeybindingEditor, Left, LookupModal, MobileFAB, ModeIndicator, ModesRegistryContext, ModifierIcon, Omnibar, OmnibarEndpointsRegistryContext, Option, Right, SearchIcon2 as SearchIcon, SearchTrigger, SequenceModal, Shift, ShortcutsModal, SpeedDial, Up, bindingHasPlaceholders, computeSelected, countPlaceholders, createTwoColumnRenderer, extractCaptures, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, formatKeySeq, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasAnyPlaceholderBindings, hasConflicts, hasDigitPlaceholders, hotkeySequenceToKeySeq, isDigitPlaceholder, isMac, isModifierKey, isPlaceholderSentinel, isSequence, isShiftedSymbol, keySeqToHotkeySequence, normalizeKey, parseHotkeyString, parseKeySeq, parseQueryNumbers, searchActions, useAction, useActionPair, useActionTriplet, useActions, useActionsRegistry, useArrowGroup, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useMode, useModesRegistry, useOmnibar, useOmnibarEndpoint, useOmnibarEndpointsRegistry, useParamEntry, useRecordHotkey, useRowSelection, useRowSelectionKeys };
+export { ACTION_LOOKUP, ACTION_MODAL, ACTION_MODE_PREFIX, ACTION_OMNIBAR, ActionsRegistryContext, Alt, ArrowsDouble, ArrowsDpad, ArrowsMove, Backspace, Command, Ctrl, DEFAULT_BUILTIN_GROUP, DEFAULT_SEQUENCE_TIMEOUT, DIGITS_PLACEHOLDER, DIGIT_PLACEHOLDER, Down, Enter, FLOAT_PLACEHOLDER, HotkeysProvider, Kbd, KbdLookup, KbdModal, KbdOmnibar, Kbds, Key, KeybindingEditor, Left, LookupModal, MobileFAB, ModeIndicator, ModesRegistryContext, ModifierIcon, Omnibar, OmnibarEndpointsRegistryContext, Option, Right, SearchIcon2 as SearchIcon, SearchTrigger, SequenceModal, Shift, ShortcutsModal, SpeedDial, Up, bindingHasPlaceholders, computeSelected, countPlaceholders, createTwoColumnRenderer, extractCaptures, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, formatKeySeq, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasAnyPlaceholderBindings, hasConflicts, hasDigitPlaceholders, hotkeySequenceToKeySeq, isDigitPlaceholder, isMac, isModifierKey, isPlaceholderSentinel, isSequence, isShiftedSymbol, keySeqToHotkeySequence, normalizeKey, parseHotkeyString, parseKeySeq, parseQueryNumbers, searchActions, useAction, useActionPair, useActionTriplet, useActions, useActionsRegistry, useArrowGroup, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useMaybeSequenceState, useMode, useModesRegistry, useOmnibar, useOmnibarEndpoint, useOmnibarEndpointsRegistry, useParamEntry, useRecordHotkey, useRowSelection, useRowSelectionKeys, useSequenceState };
 //# sourceMappingURL=index.js.map
 //# sourceMappingURL=index.js.map

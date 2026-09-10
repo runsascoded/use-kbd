@@ -1673,14 +1673,6 @@ interface HotkeysContextValue {
     executeAction: (id: string, captures?: number[]) => void;
     /** Recently executed action IDs (most recent first) */
     recentActionIds: string[];
-    /** Sequence state: pending key combinations */
-    pendingKeys: HotkeySequence;
-    /** Sequence state: whether waiting for more keys */
-    isAwaitingSequence: boolean;
-    /** Sequence state: when the timeout started */
-    sequenceTimeoutStartedAt: number | null;
-    /** Sequence state: timeout duration in ms */
-    sequenceTimeout: number;
     /** Map of key -> actions[] for keys with multiple actions bound */
     conflicts: Map<string, string[]>;
     /** Whether there are any conflicts */
@@ -1689,8 +1681,6 @@ interface HotkeysContextValue {
     searchActions: (query: string) => ReturnType<typeof searchActions>;
     /** Get sequence completions for pending keys */
     getCompletions: (pendingKeys: HotkeySequence) => ReturnType<typeof getSequenceCompletions>;
-    /** Cancel the current sequence */
-    cancelSequence: () => void;
     /** Currently active mode ID (null if none) */
     activeMode: string | null;
     /** All registered modes */
@@ -1701,6 +1691,25 @@ interface HotkeysContextValue {
     activateMode: (id: string) => void;
     /** Deactivate the current mode */
     deactivateMode: () => void;
+}
+/**
+ * The in-progress key-sequence state. Kept in its own context (separate from
+ * {@link HotkeysContextValue}) because it changes on every keystroke of a
+ * multi-key sequence — isolating it means only components that render the
+ * sequence (e.g. SequenceModal) re-render on sequence input, not every hotkeys
+ * consumer (Omnibar, SpeedDial, Kbd, …).
+ */
+interface SequenceStateValue {
+    /** Sequence state: pending key combinations */
+    pendingKeys: HotkeySequence;
+    /** Sequence state: whether waiting for more keys */
+    isAwaitingSequence: boolean;
+    /** Sequence state: when the timeout started */
+    sequenceTimeoutStartedAt: number | null;
+    /** Sequence state: timeout duration in ms */
+    sequenceTimeout: number;
+    /** Cancel the current sequence */
+    cancelSequence: () => void;
 }
 interface HotkeysProviderProps {
     config?: HotkeysConfig;
@@ -1748,6 +1757,17 @@ declare function useHotkeysContext(): HotkeysContextValue;
  * Hook to optionally access hotkeys context.
  */
 declare function useMaybeHotkeysContext(): HotkeysContextValue | null;
+/**
+ * Hook to access the in-progress key-sequence state (pending keys, timeout, …).
+ * Subscribe to this — rather than {@link useHotkeysContext} — when you render
+ * the current sequence, so you re-render on keystrokes without dragging in every
+ * other hotkeys consumer. Must be used within a HotkeysProvider.
+ */
+declare function useSequenceState(): SequenceStateValue;
+/**
+ * Hook to optionally access the in-progress key-sequence state.
+ */
+declare function useMaybeSequenceState(): SequenceStateValue | null;
 
 interface ArrowGroupConfig {
     label: string;
@@ -2512,4 +2532,4 @@ declare const DEFAULT_BUILTIN_GROUP = "Meta";
  */
 declare const ACTION_MODE_PREFIX = "__mode:";
 
-export { ACTION_LOOKUP, ACTION_MODAL, ACTION_MODE_PREFIX, ACTION_OMNIBAR, type ActionConfig, type ActionDefinition, type ActionHandler, type ActionPairConfig, type ActionPairEntry, type ActionPairShortcut, type ActionRegistry, type ActionSearchResult, type ActionShortcut, type ActionTripletConfig, type ActionTripletEntry, type ActionTripletShortcut, ActionsRegistryContext, type ActionsRegistryValue, Alt, type ArrowGroupConfig, type ArrowGroupShortcut, ArrowsDouble, ArrowsDpad, ArrowsMove, Backspace, type BindingInfo, type BindingsExport, Command, Ctrl, DEFAULT_BUILTIN_GROUP, DEFAULT_SEQUENCE_TIMEOUT, DIGITS_PLACEHOLDER, DIGIT_PLACEHOLDER, type Direction, Down, type EndpointPagination, type EndpointPaginationInfo, type EndpointPaginationMode, type EndpointQueryResult, type EndpointResponse, Enter, FLOAT_PLACEHOLDER, type FuzzyMatchResult, type GroupRenderer, type GroupRendererProps, type HandlerMap, type HotkeyHandler, type HotkeyMap, type HotkeySequence, type HotkeysConfig, type HotkeysContextValue, HotkeysProvider, type HotkeysProviderProps, Kbd, KbdLookup, KbdModal, KbdOmnibar, type KbdProps, Kbds, Key, type KeyCombination, type KeyCombinationDisplay, type KeyConflict, type KeyIconProps, type KeyIconType, type KeySeq, KeybindingEditor, type KeybindingEditorProps, type KeybindingEditorRenderProps, Left, LookupModal, MobileFAB, type MobileFABProps, type ModeConfig, type ModeCustomizations, ModeIndicator, type ModeIndicatorPosition, type ModeIndicatorProps, type ModeState, ModesRegistryContext, type ModesRegistryValue, ModifierIcon, type ModifierIconProps, type ModifierName, type ModifierType, type Modifiers, type MoveTarget, Omnibar, type OmnibarActionEntry, type OmnibarEndpointAsyncConfig, type OmnibarEndpointConfig, type OmnibarEndpointConfigBase, type OmnibarEndpointSyncConfig, OmnibarEndpointsRegistryContext, type OmnibarEndpointsRegistryValue, type OmnibarEntry, type OmnibarEntryBase, type OmnibarLinkEntry, type OmnibarProps, type OmnibarRenderProps, Option, type PendingAction, type RecordHotkeyOptions, type RecordHotkeyResult, type RegisteredAction, type RegisteredEndpoint, type RegisteredMode, type RemoteOmnibarResult, Right, type RowSelectionKeyAction, type RowSelectionRowProps, type RowSelectionState, SearchIcon, SearchTrigger, type SearchTriggerProps, type SeqElem, type SeqElemState, type SeqMatchState, type SequenceCompletion, SequenceModal, Shift, type ShortcutEntry, type ShortcutGroup, ShortcutsModal, type ShortcutsModalProps, type ShortcutsModalRenderProps, SpeedDial, type SpeedDialAction, type SpeedDialProps, type SpeedDialTooltipProps, type TooltipComponent, type TooltipProps, type TwoColumnConfig, type TwoColumnRow, Up, type UseEditableHotkeysOptions, type UseEditableHotkeysResult, type UseHotkeysOptions, type UseHotkeysResult, type UseOmnibarOptions, type UseOmnibarResult, type UseParamEntryOptions, type UseParamEntryReturn, type UseRowSelectionKeysOptions, type UseRowSelectionOptions, type UseRowSelectionResult, type UserModeConfig, bindingHasPlaceholders, computeSelected, countPlaceholders, createTwoColumnRenderer, extractCaptures, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, formatKeySeq, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasAnyPlaceholderBindings, hasConflicts, hasDigitPlaceholders, hotkeySequenceToKeySeq, isDigitPlaceholder, isMac, isModifierKey, isPlaceholderSentinel, isSequence, isShiftedSymbol, keySeqToHotkeySequence, normalizeKey, parseHotkeyString, parseKeySeq, parseQueryNumbers, searchActions, useAction, useActionPair, useActionTriplet, useActions, useActionsRegistry, useArrowGroup, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useMode, useModesRegistry, useOmnibar, useOmnibarEndpoint, useOmnibarEndpointsRegistry, useParamEntry, useRecordHotkey, useRowSelection, useRowSelectionKeys };
+export { ACTION_LOOKUP, ACTION_MODAL, ACTION_MODE_PREFIX, ACTION_OMNIBAR, type ActionConfig, type ActionDefinition, type ActionHandler, type ActionPairConfig, type ActionPairEntry, type ActionPairShortcut, type ActionRegistry, type ActionSearchResult, type ActionShortcut, type ActionTripletConfig, type ActionTripletEntry, type ActionTripletShortcut, ActionsRegistryContext, type ActionsRegistryValue, Alt, type ArrowGroupConfig, type ArrowGroupShortcut, ArrowsDouble, ArrowsDpad, ArrowsMove, Backspace, type BindingInfo, type BindingsExport, Command, Ctrl, DEFAULT_BUILTIN_GROUP, DEFAULT_SEQUENCE_TIMEOUT, DIGITS_PLACEHOLDER, DIGIT_PLACEHOLDER, type Direction, Down, type EndpointPagination, type EndpointPaginationInfo, type EndpointPaginationMode, type EndpointQueryResult, type EndpointResponse, Enter, FLOAT_PLACEHOLDER, type FuzzyMatchResult, type GroupRenderer, type GroupRendererProps, type HandlerMap, type HotkeyHandler, type HotkeyMap, type HotkeySequence, type HotkeysConfig, type HotkeysContextValue, HotkeysProvider, type HotkeysProviderProps, Kbd, KbdLookup, KbdModal, KbdOmnibar, type KbdProps, Kbds, Key, type KeyCombination, type KeyCombinationDisplay, type KeyConflict, type KeyIconProps, type KeyIconType, type KeySeq, KeybindingEditor, type KeybindingEditorProps, type KeybindingEditorRenderProps, Left, LookupModal, MobileFAB, type MobileFABProps, type ModeConfig, type ModeCustomizations, ModeIndicator, type ModeIndicatorPosition, type ModeIndicatorProps, type ModeState, ModesRegistryContext, type ModesRegistryValue, ModifierIcon, type ModifierIconProps, type ModifierName, type ModifierType, type Modifiers, type MoveTarget, Omnibar, type OmnibarActionEntry, type OmnibarEndpointAsyncConfig, type OmnibarEndpointConfig, type OmnibarEndpointConfigBase, type OmnibarEndpointSyncConfig, OmnibarEndpointsRegistryContext, type OmnibarEndpointsRegistryValue, type OmnibarEntry, type OmnibarEntryBase, type OmnibarLinkEntry, type OmnibarProps, type OmnibarRenderProps, Option, type PendingAction, type RecordHotkeyOptions, type RecordHotkeyResult, type RegisteredAction, type RegisteredEndpoint, type RegisteredMode, type RemoteOmnibarResult, Right, type RowSelectionKeyAction, type RowSelectionRowProps, type RowSelectionState, SearchIcon, SearchTrigger, type SearchTriggerProps, type SeqElem, type SeqElemState, type SeqMatchState, type SequenceCompletion, SequenceModal, type SequenceStateValue, Shift, type ShortcutEntry, type ShortcutGroup, ShortcutsModal, type ShortcutsModalProps, type ShortcutsModalRenderProps, SpeedDial, type SpeedDialAction, type SpeedDialProps, type SpeedDialTooltipProps, type TooltipComponent, type TooltipProps, type TwoColumnConfig, type TwoColumnRow, Up, type UseEditableHotkeysOptions, type UseEditableHotkeysResult, type UseHotkeysOptions, type UseHotkeysResult, type UseOmnibarOptions, type UseOmnibarResult, type UseParamEntryOptions, type UseParamEntryReturn, type UseRowSelectionKeysOptions, type UseRowSelectionOptions, type UseRowSelectionResult, type UserModeConfig, bindingHasPlaceholders, computeSelected, countPlaceholders, createTwoColumnRenderer, extractCaptures, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, formatKeySeq, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasAnyPlaceholderBindings, hasConflicts, hasDigitPlaceholders, hotkeySequenceToKeySeq, isDigitPlaceholder, isMac, isModifierKey, isPlaceholderSentinel, isSequence, isShiftedSymbol, keySeqToHotkeySequence, normalizeKey, parseHotkeyString, parseKeySeq, parseQueryNumbers, searchActions, useAction, useActionPair, useActionTriplet, useActions, useActionsRegistry, useArrowGroup, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useMaybeSequenceState, useMode, useModesRegistry, useOmnibar, useOmnibarEndpoint, useOmnibarEndpointsRegistry, useParamEntry, useRecordHotkey, useRowSelection, useRowSelectionKeys, useSequenceState };
