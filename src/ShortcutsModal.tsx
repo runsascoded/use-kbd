@@ -8,7 +8,7 @@ import type { KeyIconProps } from './KeyIcons'
 import { useAction } from './useAction'
 import { useHotkeys } from './useHotkeys'
 import { useRecordHotkey } from './useRecordHotkey'
-import { findConflicts, formatCombination, getActionBindings, parseHotkeyString, parseKeySeq } from './utils'
+import { findConflicts, formatBinding, formatCombination, getActionBindings, parseHotkeyString, parseKeySeq } from './utils'
 import type { ActionsRegistryValue } from './ActionsRegistry'
 import type { ActionRegistry, Direction, HotkeySequence, KeyCombination, KeyCombinationDisplay, Modifiers, RegisteredMode, SeqElem } from './types'
 import type { HotkeyMap } from './useHotkeys'
@@ -703,6 +703,51 @@ function SeqElemDisplay({ elem, className }: { elem: SeqElem; className?: string
   return <KeyDisplay combo={{ key: elem.key, modifiers: elem.modifiers }} className={className} />
 }
 
+// `findConflicts` tags each conflicting relationship with a descriptor string
+// alongside the action ids; map those prefixes to human-readable phrasing.
+const CONFLICT_RELATIONS: [prefix: string, phrase: string][] = [
+  ['conflicts with: ', 'also matches'],
+  ['has prefix: ', 'shares a prefix with'],
+  ['prefix of: ', 'is a prefix of'],
+]
+
+/**
+ * Build the hover-tooltip text for a conflicting binding: what it collides with
+ * (other bindings, resolved to their action labels) and how.
+ */
+function buildConflictTitle(
+  actionId: string,
+  conflictActions: string[],
+  keymap: HotkeyMap,
+  actionRegistry: Record<string, { label?: string } | undefined> | undefined,
+): string {
+  const labelFor = (key: string): string => {
+    const a = keymap[key]
+    const ids = Array.isArray(a) ? a : a != null ? [a] : []
+    const labels = ids.map(id => actionRegistry?.[id]?.label).filter((l): l is string => !!l)
+    return labels.length ? ` (${labels.join(', ')})` : ''
+  }
+
+  const lines: string[] = []
+  const seen = new Set<string>()
+  const alsoTriggers: string[] = []
+  for (const entry of conflictActions) {
+    const relation = CONFLICT_RELATIONS.find(([prefix]) => entry.startsWith(prefix))
+    if (relation) {
+      const otherKey = entry.slice(relation[0].length)
+      const line = `${relation[1]} ${formatBinding(otherKey)}${labelFor(otherKey)}`
+      if (!seen.has(line)) { seen.add(line); lines.push(line) }
+    } else if (entry !== actionId) {
+      // A plain action id bound to this same key.
+      const label = actionRegistry?.[entry]?.label
+      if (label && !alsoTriggers.includes(label)) alsoTriggers.push(label)
+    }
+  }
+  if (alsoTriggers.length) lines.unshift(`also triggers ${alsoTriggers.join(', ')}`)
+  if (!lines.length) return ''
+  return `Binding conflict:\n${lines.map(l => `• ${l}`).join('\n')}`
+}
+
 /**
  * Render a hotkey binding (single key or sequence)
  */
@@ -712,6 +757,7 @@ function BindingDisplay({
   editable,
   isEditing,
   isConflict,
+  conflictDetails,
   isPendingConflict,
   isDefault,
   onEdit,
@@ -726,6 +772,8 @@ function BindingDisplay({
   editable?: boolean
   isEditing?: boolean
   isConflict?: boolean
+  /** Hover text describing what this binding conflicts with (shown when `isConflict`). */
+  conflictDetails?: string
   isPendingConflict?: boolean
   isDefault?: boolean
   onEdit?: () => void
@@ -735,6 +783,7 @@ function BindingDisplay({
   activeKeys?: KeyCombination | null
   timeoutDuration?: number
 }) {
+  const Tooltip = useContext(TooltipContext)
   const sequence = parseHotkeyString(binding)
   const keySeq = parseKeySeq(binding)
 
@@ -790,7 +839,7 @@ function BindingDisplay({
   }
 
   // Render normal binding (using keySeq to support digit placeholders)
-  return (
+  const kbdEl = (
     <kbd className={kbdClassName} onClick={handleClick} tabIndex={editable ? 0 : undefined} onKeyDown={editable && onEdit ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onEdit() } } : undefined}>
       {keySeq.length > 1 ? (
         keySeq.map((elem, i) => (
@@ -825,6 +874,10 @@ function BindingDisplay({
       )}
     </kbd>
   )
+
+  return isConflict && conflictDetails
+    ? <Tooltip title={conflictDetails}>{kbdEl}</Tooltip>
+    : kbdEl
 }
 
 /** Parse a modifier prefix string like "shift+" into Modifiers */
@@ -1742,6 +1795,9 @@ export function ShortcutsModal({
       const isEditingThis = editingAction === actionId && editingKey === key && !addingAction
       const conflictActions = conflicts.get(key)
       const isConflict = conflictActions && conflictActions.length > 1
+      const conflictDetails = isConflict
+        ? buildConflictTitle(actionId, conflictActions, keymap, ctx?.registry.actionRegistry)
+        : undefined
       const isDefault = defaults
         ? (() => {
           const defaultAction = defaults[key]
@@ -1762,6 +1818,7 @@ export function ShortcutsModal({
           editable={editable}
           isEditing={isEditingThis}
           isConflict={isConflict}
+          conflictDetails={conflictDetails}
           isPendingConflict={isPendingConflict}
           isDefault={isDefault}
           onEdit={() => {
@@ -1790,7 +1847,7 @@ export function ShortcutsModal({
         />
       )
     },
-    [editingAction, editingKey, addingAction, conflicts, defaults, editable, startEditingBinding, startAddingAfter, removeBinding, pendingKeys, activeKeys, isRecording, cancel, handleBindingAdd, handleBindingChange, sequenceTimeout, pendingConflictInfo, multipleBindings, ctx?.registry.actionRegistry],
+    [editingAction, editingKey, addingAction, conflicts, keymap, defaults, editable, startEditingBinding, startAddingAfter, removeBinding, pendingKeys, activeKeys, isRecording, cancel, handleBindingAdd, handleBindingChange, sequenceTimeout, pendingConflictInfo, multipleBindings, ctx?.registry.actionRegistry],
   )
 
   // Helper: render add button for an action

@@ -468,6 +468,26 @@ test.describe('Data Table Demo', () => {
     await page.keyboard.press('Escape')
   })
 
+  test('conflicting binding shows a details tooltip on hover', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+    await page.keyboard.press('?')
+    await page.waitForSelector('.kbd-modal', { timeout: 5000 })
+
+    const conflict = page.locator('.kbd-kbd.conflict').first()
+    await expect(conflict).toBeVisible()
+
+    // No tooltip until hover
+    await expect(page.locator('[role="tooltip"]')).toHaveCount(0)
+
+    await conflict.hover()
+    const tip = page.locator('[role="tooltip"]')
+    await expect(tip).toContainText('Binding conflict', { timeout: 3000 })
+    // Names the colliding action, not just the key
+    await expect(tip).toContainText('(')
+
+    await page.keyboard.press('Escape')
+  })
+
   test('can edit shortcut in modal', async ({ page }) => {
     await page.locator('body').click({ position: { x: 10, y: 10 } })
 
