@@ -133,11 +133,22 @@ Implemented steps 1-3 of the branch plan as a working proof:
 
 **Verdict: promising — cmdk cleanly backs the palette UI while the registry/endpoint bridge is untouched.** The hard part (feeding cmdk from async, ranked, registry-driven results) works with `shouldFilter={false}`.
 
-**Not yet wired (the parity work, steps 4-7)** — each is a known gap, not a blocker:
-- ParamEntry flow (capture a numeric arg mid-palette).
-- Endpoint pagination / infinite-scroll (`loadMore`, scroll sentinel).
-- Sequence completions view (SequenceModal-style) and recents highlighting.
-- Mode-scoped filtering nuances.
-- CSS parity: the spike reuses `kbd-omnibar*` classes loosely; a real migration needs the DOM-compat adapter (or a major bump), per Caveat 1.
+### Parity pass (steps 4-6, now wired + CIC-verified)
 
-**Recommendation**: worth pursuing to a full parity pass + a dogfood swap in a consumer (apvd/ctbk) before deciding merge-vs-drop. Kept on this branch, off `main`.
+`<OmnibarCmdk />` now covers the functional surface of `<Omnibar />`:
+
+- **ParamEntry** — selecting an action with a placeholder binding and no captured number (e.g. "Set counter to N", `s \d+`) swaps the cmdk input for the numeric param input (`useParamEntry`); Enter submits → `submitParam` → executes with the capture. CIC: entered 42 → counter set to 42, palette closed.
+- **Recents** — when the query is empty, recently-executed actions render in their own "Recent" group ahead of "Actions".
+- **Endpoint pagination** — scroll-mode endpoints load the next page via an `onScroll` near-bottom check on the (bounded, `overflow:auto`) cmdk list, calling `loadMore` per endpoint with `hasMore`. CIC: Fruits grew 8 → 24 across scroll. (An IntersectionObserver-sentinel approach was tried first but was fragile against cmdk's re-renders; the scroll handler is simpler and robust.)
+- Actions + async endpoints, ranked filtering, binding chips, execute/close — all working (CIC: `grape` → 1 result → handler fires).
+
+Full Playwright suite green on the branch (114 tests; the spike adds no e2e of its own yet).
+
+### Still not wired (deferred)
+
+- **Sequence-completions view** (the SequenceModal-style "what can come next" panel inside the palette) — lower value; SequenceModal covers sequences separately.
+- **Mode-scoped filtering nuances** — `useOmnibar.results` already applies the registry's mode filtering, so this is mostly inherited; needs a mode-heavy consumer to confirm parity.
+- **CSS parity** — reuses `kbd-omnibar*` classes loosely plus one inline `max-height/overflow` on the list; a real migration needs the DOM-compat adapter (or a major bump), per Caveat 1.
+- **Parity e2e tests** — CIC-verified but no automated specs yet.
+
+**Recommendation**: functional parity is essentially there. Next step before merge-vs-drop is a **dogfood swap in a consumer** (apvd/ctbk) + parity e2e + the CSS-compat decision. Kept on this branch, off `main`.

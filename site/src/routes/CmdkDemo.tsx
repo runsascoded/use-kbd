@@ -1,14 +1,16 @@
 /**
  * SPIKE demo (cmdk-delegation): mounts <OmnibarCmdk /> (cmdk-backed palette)
- * with a few registered actions + one async endpoint, so it can be compared
- * against the hand-rolled <Omnibar /> on the other routes. Open with ⌘K.
+ * with registered actions (incl. a param-entry action), an async paginated
+ * endpoint, and recents — to compare against the hand-rolled <Omnibar />.
+ * Open with ⌘K.
  */
 import { useMemo, useState } from 'react'
 import { OmnibarCmdk, ShortcutsModal, useAction, useOmnibarEndpoint } from 'use-kbd'
 import type { EndpointPagination, EndpointResponse } from 'use-kbd'
 import 'use-kbd/styles.css'
 
-const FRUITS = ['Apple', 'Banana', 'Cherry', 'Date', 'Elderberry', 'Fig', 'Grape', 'Honeydew', 'Kiwi', 'Lemon', 'Mango', 'Nectarine', 'Orange', 'Papaya', 'Quince']
+// 40 synthetic "fruits" so the endpoint paginates (pageSize 8, scroll mode).
+const FRUITS = Array.from({ length: 40 }, (_, i) => `Fruit-${String(i + 1).padStart(2, '0')}`)
 
 export function CmdkDemo() {
   const [count, setCount] = useState(0)
@@ -17,8 +19,16 @@ export function CmdkDemo() {
   useAction('cmdk:inc', { label: 'Increment', group: 'Counter', defaultBindings: ['+'], handler: () => setCount(c => c + 1) })
   useAction('cmdk:dec', { label: 'Decrement', group: 'Counter', defaultBindings: ['-'], handler: () => setCount(c => c - 1) })
   useAction('cmdk:reset', { label: 'Reset counter', group: 'Counter', defaultBindings: ['0'], handler: () => setCount(0) })
+  // Placeholder binding → selecting from the palette (no number given) prompts
+  // for a value via ParamEntry.
+  useAction('cmdk:setN', {
+    label: 'Set counter to N',
+    description: 'e.g. s 42',
+    group: 'Counter',
+    defaultBindings: ['s \\d+'],
+    handler: (_e, captures) => { const n = captures?.[0]; if (n !== undefined) setCount(n) },
+  })
 
-  // Async endpoint: search fruits (exercises the registry+endpoint bridge under cmdk).
   useOmnibarEndpoint('fruits', useMemo(() => ({
     fetch: async (query: string, _signal: AbortSignal, pagination: EndpointPagination): Promise<EndpointResponse> => {
       await new Promise(r => setTimeout(r, 60))
@@ -33,13 +43,14 @@ export function CmdkDemo() {
     },
     group: 'Fruits',
     minQueryLength: 0,
-    pageSize: 20,
+    pageSize: 8,
+    pagination: 'scroll',
   }), []))
 
   return (
     <div style={{ padding: 24 }}>
       <h1 id="demo">cmdk Omnibar Spike</h1>
-      <p>Press <kbd>⌘K</kbd> for the cmdk-backed palette. Actions (Counter) + async endpoint (Fruits).</p>
+      <p>Press <kbd>⌘K</kbd> for the cmdk-backed palette. Actions (Counter, incl. param entry) + paginated async endpoint (Fruits).</p>
       <p>Counter: <strong>{count}</strong>{picked && <> · Picked: <strong>{picked}</strong></>}</p>
       <OmnibarCmdk />
       <ShortcutsModal />
