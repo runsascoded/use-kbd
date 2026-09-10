@@ -9,7 +9,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "scrns": "scrns -h 5174 -o .",
+    "scrns": "scrns -h 3752 -o .",
     "test": "playwright test",
     "test:ui": "playwright test --ui"
   },

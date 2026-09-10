@@ -26,7 +26,7 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
-    port: 5174,
+    port: 3752,  // hash("use-kbd") into 3000-9999; ≈unique, avoids Vite's 5173 default
     ...(allowedHosts.length > 0 && { allowedHosts }),
   }
 })

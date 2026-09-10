@@ -1,7 +1,7 @@
 #!/usr/bin/env -S npx tsx
 /**
  * Take screenshots for the og:image mosaic.
- * Requires dev server running on port 5174.
+ * Requires dev server running on port 3752.
  *
  * Showcases use-kbd library components:
  *   og-omnibar.png — command palette with search results
@@ -11,7 +11,7 @@
  */
 import { chromium } from '@playwright/test'
 
-const BASE = 'http://localhost:5174'
+const BASE = 'http://localhost:3752'
 
 type Page = Awaited<ReturnType<Awaited<ReturnType<typeof chromium.launch>>['newPage']>>
 
