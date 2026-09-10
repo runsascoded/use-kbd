@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useHotkeysContext } from './HotkeysProvider'
+import { useHotkeysContext, useSequenceState } from './HotkeysProvider'
 import { renderKeySeq, renderModifierIcons, renderKeyContent } from './KeyElements'
 import type { KeyCombination, SequenceCompletion } from './types'
 
@@ -30,15 +30,17 @@ import type { KeyCombination, SequenceCompletion } from './types'
  */
 export function SequenceModal() {
   const {
+    getCompletions,
+    registry,
+    executeAction,
+  } = useHotkeysContext()
+  const {
     pendingKeys,
     isAwaitingSequence,
     cancelSequence,
     sequenceTimeoutStartedAt: timeoutStartedAt,
     sequenceTimeout,
-    getCompletions,
-    registry,
-    executeAction,
-  } = useHotkeysContext()
+  } = useSequenceState()
 
   const [selectedIndex, setSelectedIndex] = useState(0)
   // Track if user has interacted with arrows - cancels timeout

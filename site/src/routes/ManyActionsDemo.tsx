@@ -91,6 +91,14 @@ function KeystrokeProbe() {
     defaultBindings: ['y'],
     handler: () => {},
   })
+  // Two-key sequence: pressing `g` enters sequence mode (pendingKeys changes),
+  // exercising the sequence-state-context split.
+  useAction('probe:seq', {
+    label: 'Probe sequence',
+    group: 'Probe',
+    defaultBindings: ['g y'],
+    handler: () => {},
+  })
   return null
 }
 

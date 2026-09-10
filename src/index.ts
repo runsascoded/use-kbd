@@ -52,8 +52,8 @@ export { createTwoColumnRenderer } from './TwoColumnRenderer'
 export type { OmnibarProps, OmnibarRenderProps } from './Omnibar'
 
 // HotkeysProvider (high-level integration with dynamic action registration)
-export type { HotkeysConfig, HotkeysContextValue, HotkeysProviderProps } from './HotkeysProvider'
-export { HotkeysProvider, useHotkeysContext, useMaybeHotkeysContext } from './HotkeysProvider'
+export type { HotkeysConfig, HotkeysContextValue, HotkeysProviderProps, SequenceStateValue } from './HotkeysProvider'
+export { HotkeysProvider, useHotkeysContext, useMaybeHotkeysContext, useSequenceState, useMaybeSequenceState } from './HotkeysProvider'
 
 // Action registration
 export type { ActionConfig, ActionHandler } from './useAction'

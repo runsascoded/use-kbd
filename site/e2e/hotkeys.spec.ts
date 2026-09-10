@@ -3024,6 +3024,27 @@ test.describe('Registration render isolation', () => {
 
     expect(await displayRenders()).toBe(before)
   })
+
+  test('a multi-key sequence keystroke does not re-render non-sequence consumers', async ({ page }) => {
+    await page.goto('/many-actions?n=6&keyProbe=1')
+    await page.waitForSelector('#demo', { timeout: 5000 })
+
+    const displayRenders = () =>
+      page.evaluate(() => (window.__renders ?? {})['__display'] ?? 0)
+    await expect.poll(displayRenders).toBeGreaterThan(0)
+
+    await page.locator('body').click({ position: { x: 5, y: 5 } })
+    const before = await displayRenders()
+
+    // `g` starts the `g y` sequence → pendingKeys changes. Sequence state lives
+    // in its own context now, so DisplayProbe (useHotkeysContext) must not
+    // re-render on sequence input.
+    await page.keyboard.press('g')
+    await page.waitForTimeout(200)
+    expect(await displayRenders()).toBe(before)
+
+    await page.keyboard.press('Escape')
+  })
 })
 
 test.describe('Arrow group conflict tooltip', () => {

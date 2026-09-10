@@ -82,14 +82,6 @@ export interface HotkeysContextValue {
   executeAction: (id: string, captures?: number[]) => void
   /** Recently executed action IDs (most recent first) */
   recentActionIds: string[]
-  /** Sequence state: pending key combinations */
-  pendingKeys: HotkeySequence
-  /** Sequence state: whether waiting for more keys */
-  isAwaitingSequence: boolean
-  /** Sequence state: when the timeout started */
-  sequenceTimeoutStartedAt: number | null
-  /** Sequence state: timeout duration in ms */
-  sequenceTimeout: number
   /** Map of key -> actions[] for keys with multiple actions bound */
   conflicts: Map<string, string[]>
   /** Whether there are any conflicts */
@@ -98,8 +90,6 @@ export interface HotkeysContextValue {
   searchActions: (query: string) => ReturnType<typeof searchActions>
   /** Get sequence completions for pending keys */
   getCompletions: (pendingKeys: HotkeySequence) => ReturnType<typeof getSequenceCompletions>
-  /** Cancel the current sequence */
-  cancelSequence: () => void
   /** Currently active mode ID (null if none) */
   activeMode: string | null
   /** All registered modes */
@@ -113,6 +103,28 @@ export interface HotkeysContextValue {
 }
 
 const HotkeysContext = createContext<HotkeysContextValue | null>(null)
+
+/**
+ * The in-progress key-sequence state. Kept in its own context (separate from
+ * {@link HotkeysContextValue}) because it changes on every keystroke of a
+ * multi-key sequence — isolating it means only components that render the
+ * sequence (e.g. SequenceModal) re-render on sequence input, not every hotkeys
+ * consumer (Omnibar, SpeedDial, Kbd, …).
+ */
+export interface SequenceStateValue {
+  /** Sequence state: pending key combinations */
+  pendingKeys: HotkeySequence
+  /** Sequence state: whether waiting for more keys */
+  isAwaitingSequence: boolean
+  /** Sequence state: when the timeout started */
+  sequenceTimeoutStartedAt: number | null
+  /** Sequence state: timeout duration in ms */
+  sequenceTimeout: number
+  /** Cancel the current sequence */
+  cancelSequence: () => void
+}
+
+const SequenceStateContext = createContext<SequenceStateValue | null>(null)
 
 const DEFAULT_CONFIG: Required<HotkeysConfig> = {
   storageKey: 'use-kbd',
@@ -508,11 +520,6 @@ export function HotkeysProvider({
     setIsEditingBinding,
     executeAction,
     recentActionIds,
-    pendingKeys,
-    isAwaitingSequence,
-    cancelSequence,
-    sequenceTimeoutStartedAt,
-    sequenceTimeout,
     conflicts,
     hasConflicts,
     searchActions: searchActionsHelper,
@@ -544,11 +551,6 @@ export function HotkeysProvider({
     isEditingBinding,
     executeAction,
     recentActionIds,
-    pendingKeys,
-    isAwaitingSequence,
-    cancelSequence,
-    sequenceTimeoutStartedAt,
-    sequenceTimeout,
     conflicts,
     hasConflicts,
     searchActionsHelper,
@@ -556,13 +558,25 @@ export function HotkeysProvider({
     modesRegistry,
   ])
 
+  // In-progress sequence state — its own context so keystrokes don't re-render
+  // every hotkeys consumer (only sequence renderers subscribe to this).
+  const sequenceState = useMemo<SequenceStateValue>(() => ({
+    pendingKeys,
+    isAwaitingSequence,
+    cancelSequence,
+    sequenceTimeoutStartedAt,
+    sequenceTimeout,
+  }), [pendingKeys, isAwaitingSequence, cancelSequence, sequenceTimeoutStartedAt, sequenceTimeout])
+
   return (
     <ActionsRegistryContext.Provider value={registry}>
       <ActionsRegistryApiContext.Provider value={registry.api}>
         <ModesRegistryContext.Provider value={modesRegistry}>
           <OmnibarEndpointsRegistryContext.Provider value={endpointsRegistry}>
             <HotkeysContext.Provider value={value}>
-              {children}
+              <SequenceStateContext.Provider value={sequenceState}>
+                {children}
+              </SequenceStateContext.Provider>
             </HotkeysContext.Provider>
           </OmnibarEndpointsRegistryContext.Provider>
         </ModesRegistryContext.Provider>
@@ -588,4 +602,25 @@ export function useHotkeysContext(): HotkeysContextValue {
  */
 export function useMaybeHotkeysContext(): HotkeysContextValue | null {
   return useContext(HotkeysContext)
+}
+
+/**
+ * Hook to access the in-progress key-sequence state (pending keys, timeout, …).
+ * Subscribe to this — rather than {@link useHotkeysContext} — when you render
+ * the current sequence, so you re-render on keystrokes without dragging in every
+ * other hotkeys consumer. Must be used within a HotkeysProvider.
+ */
+export function useSequenceState(): SequenceStateValue {
+  const context = useContext(SequenceStateContext)
+  if (!context) {
+    throw new Error('useSequenceState must be used within a HotkeysProvider')
+  }
+  return context
+}
+
+/**
+ * Hook to optionally access the in-progress key-sequence state.
+ */
+export function useMaybeSequenceState(): SequenceStateValue | null {
+  return useContext(SequenceStateContext)
 }
