@@ -5969,12 +5969,47 @@ function SeqElemDisplay2({ elem, className }) {
   }
   return /* @__PURE__ */ jsxRuntime.jsx(KeyDisplay, { combo: { key: elem.key, modifiers: elem.modifiers }, className });
 }
+var CONFLICT_RELATIONS = [
+  ["conflicts with: ", "also matches"],
+  ["has prefix: ", "shares a prefix with"],
+  ["prefix of: ", "is a prefix of"]
+];
+function buildConflictTitle(actionId, conflictActions, keymap, actionRegistry) {
+  const labelFor = (key) => {
+    const a = keymap[key];
+    const ids = Array.isArray(a) ? a : a != null ? [a] : [];
+    const labels = ids.map((id) => actionRegistry?.[id]?.label).filter((l) => !!l);
+    return labels.length ? ` (${labels.join(", ")})` : "";
+  };
+  const lines = [];
+  const seen = /* @__PURE__ */ new Set();
+  const alsoTriggers = [];
+  for (const entry of conflictActions) {
+    const relation = CONFLICT_RELATIONS.find(([prefix]) => entry.startsWith(prefix));
+    if (relation) {
+      const otherKey = entry.slice(relation[0].length);
+      const line = `${relation[1]} ${formatBinding(otherKey)}${labelFor(otherKey)}`;
+      if (!seen.has(line)) {
+        seen.add(line);
+        lines.push(line);
+      }
+    } else if (entry !== actionId) {
+      const label = actionRegistry?.[entry]?.label;
+      if (label && !alsoTriggers.includes(label)) alsoTriggers.push(label);
+    }
+  }
+  if (alsoTriggers.length) lines.unshift(`also triggers ${alsoTriggers.join(", ")}`);
+  if (!lines.length) return "";
+  return `Binding conflict:
+${lines.map((l) => `\u2022 ${l}`).join("\n")}`;
+}
 function BindingDisplay2({
   binding,
   className,
   editable,
   isEditing,
   isConflict,
+  conflictDetails,
   isPendingConflict,
   isDefault,
   onEdit,
@@ -5984,6 +6019,7 @@ function BindingDisplay2({
   activeKeys,
   timeoutDuration = DEFAULT_SEQUENCE_TIMEOUT
 }) {
+  const Tooltip = react.useContext(TooltipContext);
   const sequence = parseHotkeyString(binding);
   const keySeq = parseKeySeq(binding);
   let kbdClassName = "kbd-kbd";
@@ -6028,7 +6064,7 @@ function BindingDisplay2({
       )
     ] });
   }
-  return /* @__PURE__ */ jsxRuntime.jsxs("kbd", { className: kbdClassName, onClick: handleClick, tabIndex: editable ? 0 : void 0, onKeyDown: editable && onEdit ? (e) => {
+  const kbdEl = /* @__PURE__ */ jsxRuntime.jsxs("kbd", { className: kbdClassName, onClick: handleClick, tabIndex: editable ? 0 : void 0, onKeyDown: editable && onEdit ? (e) => {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       onEdit();
@@ -6066,6 +6102,7 @@ function BindingDisplay2({
       }
     )
   ] });
+  return isConflict && conflictDetails ? /* @__PURE__ */ jsxRuntime.jsx(Tooltip, { title: conflictDetails, children: kbdEl }) : kbdEl;
 }
 function parseModifierPrefix(prefix) {
   const p = prefix.toLowerCase();
@@ -6719,6 +6756,7 @@ function ShortcutsModal({
       const isEditingThis = editingAction === actionId && editingKey === key && !addingAction;
       const conflictActions = conflicts.get(key);
       const isConflict = conflictActions && conflictActions.length > 1;
+      const conflictDetails = isConflict ? buildConflictTitle(actionId, conflictActions, keymap, ctx?.registry.actionRegistry) : void 0;
       const isDefault = defaults ? (() => {
         const defaultAction = defaults[key];
         if (!defaultAction) return false;
@@ -6734,6 +6772,7 @@ function ShortcutsModal({
           editable,
           isEditing: isEditingThis,
           isConflict,
+          conflictDetails,
           isPendingConflict,
           isDefault,
           onEdit: () => {
@@ -6762,7 +6801,7 @@ function ShortcutsModal({
         key
       );
     },
-    [editingAction, editingKey, addingAction, conflicts, defaults, editable, startEditingBinding, startAddingAfter, removeBinding, pendingKeys, activeKeys, isRecording, cancel, handleBindingAdd, handleBindingChange, sequenceTimeout, pendingConflictInfo, multipleBindings, ctx?.registry.actionRegistry]
+    [editingAction, editingKey, addingAction, conflicts, keymap, defaults, editable, startEditingBinding, startAddingAfter, removeBinding, pendingKeys, activeKeys, isRecording, cancel, handleBindingAdd, handleBindingChange, sequenceTimeout, pendingConflictInfo, multipleBindings, ctx?.registry.actionRegistry]
   );
   const renderAddButton = react.useCallback(
     (actionId) => {

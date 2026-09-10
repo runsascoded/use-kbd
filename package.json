@@ -1,6 +1,6 @@
 {
   "name": "use-kbd",
-  "version": "0.13.0-dist.f3d5a3d",
+  "version": "0.13.0-dist.14a2071",
   "description": "Omnibars, editable hotkeys, search, and keyboard-navigation for React apps",
   "type": "module",
   "main": "./index.cjs",
