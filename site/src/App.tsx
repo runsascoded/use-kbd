@@ -16,6 +16,7 @@ import { TableDemo } from './routes/TableDemo'
 import { CanvasDemo } from './routes/CanvasDemo'
 import { CalendarDemo } from './routes/CalendarDemo'
 import { ThreeDDemo } from './routes/ThreeDDemo'
+import { CmdkDemo } from './routes/CmdkDemo'
 
 function AppNav() {
   const location = useLocation()
@@ -114,6 +115,7 @@ function AppContent() {
           <Route path="/3d" element={<ThreeDDemo />} />
           <Route path="/calendar" element={<CalendarDemo />} />
           <Route path="/many-actions" element={<ManyActionsDemo />} />
+          <Route path="/cmdk" element={<CmdkDemo />} />
         </Routes>
       </main>
       <Omnibar />

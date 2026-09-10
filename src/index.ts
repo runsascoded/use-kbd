@@ -109,6 +109,8 @@ export type { SpeedDialAction, SpeedDialProps, SpeedDialTooltipProps } from './S
 export { SearchTrigger, SearchIcon } from './SearchTrigger'
 export type { SearchTriggerProps } from './SearchTrigger'
 export { Omnibar } from './Omnibar'
+// SPIKE (cmdk-delegation): cmdk-backed palette, parallel to <Omnibar />
+export { OmnibarCmdk } from './OmnibarCmdk'
 export { SequenceModal } from './SequenceModal'
 export { ShortcutsModal } from './ShortcutsModal'
 export {
