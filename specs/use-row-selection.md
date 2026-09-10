@@ -63,7 +63,7 @@ Default bindings (all overridable / disable-able per action, and re-groupable):
 | `first` / `last` | `⌘↑` / `⌘↓` | `moveCursor('first'|'last')` |
 | `extend-first` / `extend-last` | `⌘⇧↑` / `⌘⇧↓` | `moveCursor('first'|'last', true)` |
 | `all` | `⌃a` | `selectPage()` |
-| `clear` | `esc` | `clear()` |
+| `clear` | `esc` | `clear()` (only enabled while `sel.count > 0`, so `esc` falls through when nothing is selected) |
 
 Options: `enabled`, `numeric` (default true), `idPrefix` (default `'select'`), `group` (default `'Selection'`), `selectionGroup` (defaults to `group`; for `all`/`clear`), `labels`, `bindings` (override or `false` to skip), `hideFromModal`.
 

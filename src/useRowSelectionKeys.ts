@@ -106,11 +106,15 @@ export function useRowSelectionKeys<T>(
       const override = bindings?.[action]
       if (override === false) continue
       const keys = override ?? spec.bindings
+      // `clear` (Escape) is only enabled while something is selected, so with
+      // nothing selected the Escape keystroke falls through (to close a modal,
+      // drill up a treemap, etc.) instead of being consumed by a no-op clear.
+      const actionEnabled = action === 'clear' ? enabled && sel.count > 0 : enabled
       map[`${idPrefix}:${action}`] = {
         label: labels?.[action] ?? spec.label,
         group: spec.selection ? selectionGroup : group,
         defaultBindings: keys,
-        enabled,
+        enabled: actionEnabled,
         hideFromModal,
         handler: (_e, captures) => spec.run(sel, captures?.[0] ?? 1),
       }

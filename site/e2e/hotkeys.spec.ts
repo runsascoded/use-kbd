@@ -530,6 +530,28 @@ test.describe('Data Table Demo', () => {
     expect(await lastPrevented()).toBe(true)
   })
 
+  test('Escape falls through when nothing is selected (clear gated on selection)', async ({ page }) => {
+    // Select a row so the built-in clear (Escape) is enabled.
+    await page.locator('.data-table tbody tr').first().click()
+    await expect(page.locator('.data-table tbody tr.selected')).toHaveCount(1)
+
+    await page.evaluate(() => {
+      const w = window as unknown as { __pd: boolean | null }
+      w.__pd = null
+      window.addEventListener('keydown', (e) => { w.__pd = e.defaultPrevented }, { passive: true })
+    })
+    const lastPrevented = () => page.evaluate(() => (window as unknown as { __pd: boolean | null }).__pd)
+
+    // With a selection, Escape clears it and IS consumed.
+    await page.keyboard.press('Escape')
+    expect(await lastPrevented()).toBe(true)
+    await expect(page.locator('.data-table tbody tr.selected')).toHaveCount(0)
+
+    // Now nothing is selected → clear is disabled → Escape falls through.
+    await page.keyboard.press('Escape')
+    expect(await lastPrevented()).toBe(false)
+  })
+
   test('can edit shortcut in modal', async ({ page }) => {
     await page.locator('body').click({ position: { x: 10, y: 10 } })
 
