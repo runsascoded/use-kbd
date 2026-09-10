@@ -46,6 +46,13 @@ export interface UseHotkeysOptions {
   onSequenceProgress?: (keys: HotkeySequence) => void
   /** Called when sequence is cancelled (timeout with 'cancel' mode, or no match) */
   onSequenceCancel?: () => void
+  /**
+   * Predicate for whether an action is currently enabled. Consulted *before*
+   * `preventDefault`: a key whose only matching actions are disabled is neither
+   * consumed nor treated as a sequence start, so it falls through to the browser
+   * / other handlers. Defaults to "everything enabled" when omitted.
+   */
+  isActionEnabled?: (id: string) => boolean
 }
 
 export interface UseHotkeysResult {
@@ -387,6 +394,7 @@ export function useHotkeys(
     onSequenceStart,
     onSequenceProgress,
     onSequenceCancel,
+    isActionEnabled,
   } = options
 
   const [pendingKeys, setPendingKeys] = useState<HotkeySequence>([])
@@ -396,6 +404,11 @@ export function useHotkeys(
   // Use refs for handlers to avoid re-attaching listeners
   const handlersRef = useRef(handlers)
   handlersRef.current = handlers
+
+  // Ref the enabled predicate so the keydown handler always sees the live check
+  // without re-attaching listeners.
+  const isActionEnabledRef = useRef(isActionEnabled)
+  isActionEnabledRef.current = isActionEnabled
 
   const keymapRef = useRef(keymap)
   keymapRef.current = keymap
@@ -426,6 +439,18 @@ export function useHotkeys(
     }))
   }, [keymap])
 
+  // Live enabled checks (default: everything enabled). Consulted before any
+  // `preventDefault` so disabled actions don't consume their keys.
+  const actionEnabled = useCallback((id: string): boolean => {
+    const fn = isActionEnabledRef.current
+    return fn ? fn(id) : true
+  }, [])
+  const entryHasEnabledAction = useCallback((entry: { actions: string[] }): boolean => {
+    const fn = isActionEnabledRef.current
+    if (!fn) return true
+    return entry.actions.some(fn)
+  }, [])
+
   const clearPending = useCallback(() => {
     setPendingKeys([])
     setIsAwaitingSequence(false)
@@ -451,6 +476,7 @@ export function useHotkeys(
     for (const entry of parsedKeymapRef.current) {
       if (sequencesMatch(sequence, entry.sequence)) {
         for (const action of entry.actions) {
+          if (!actionEnabled(action)) continue
           const handler = handlersRef.current[action]
           if (handler) {
             if (preventDefault) {
@@ -466,7 +492,7 @@ export function useHotkeys(
       }
     }
     return false
-  }, [preventDefault, stopPropagation])
+  }, [preventDefault, stopPropagation, actionEnabled])
 
   // Try to execute using KeySeq matching (with digit placeholders)
   const tryExecuteKeySeq = useCallback((
@@ -477,6 +503,7 @@ export function useHotkeys(
     for (const entry of parsedKeymapRef.current) {
       if (entry.key === matchKey) {
         for (const action of entry.actions) {
+          if (!actionEnabled(action)) continue
           const handler = handlersRef.current[action]
           if (handler) {
             if (preventDefault) {
@@ -492,27 +519,29 @@ export function useHotkeys(
       }
     }
     return false
-  }, [preventDefault, stopPropagation])
+  }, [preventDefault, stopPropagation, actionEnabled])
 
   // Check if sequence has any potential matches (partial or full)
   const hasPotentialMatch = useCallback((sequence: HotkeySequence): boolean => {
     for (const entry of parsedKeymapRef.current) {
+      if (!entryHasEnabledAction(entry)) continue
       if (isPartialMatch(sequence, entry.sequence) || sequencesMatch(sequence, entry.sequence)) {
         return true
       }
     }
     return false
-  }, [])
+  }, [entryHasEnabledAction])
 
   // Check if there are any sequences that start with current pending
   const hasSequenceExtension = useCallback((sequence: HotkeySequence): boolean => {
     for (const entry of parsedKeymapRef.current) {
+      if (!entryHasEnabledAction(entry)) continue
       if (entry.sequence.length > sequence.length && isPartialMatch(sequence, entry.sequence)) {
         return true
       }
     }
     return false
-  }, [])
+  }, [entryHasEnabledAction])
 
   useEffect(() => {
     if (!enabled) return
@@ -668,6 +697,13 @@ export function useHotkeys(
       const hadPartialMatches = matchStates.size > 0
 
       for (const entry of parsedKeymapRef.current) {
+        // Disabled actions don't match (so their keys aren't consumed / don't
+        // enter sequence mode). Drop any stale state for a now-disabled entry.
+        if (!entryHasEnabledAction(entry)) {
+          matchStates.delete(entry.key)
+          continue
+        }
+
         // Get existing match state for this pattern
         let state = matchStates.get(entry.key)
 
@@ -903,6 +939,7 @@ export function useHotkeys(
     tryExecuteKeySeq,
     hasPotentialMatch,
     hasSequenceExtension,
+    entryHasEnabledAction,
     onSequenceStart,
     onSequenceProgress,
     onSequenceCancel,

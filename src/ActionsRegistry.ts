@@ -22,6 +22,14 @@ export interface ActionsRegistryValue {
   execute: (id: string, captures?: number[]) => void
   /** Check if an action is enabled (defaults to true if not set or not found) */
   isActionEnabled: (id: string) => boolean
+  /**
+   * Update an action's live enabled state without re-registering it (so toggling
+   * `enabled` never bumps the registry version / re-renders consumers). Read back
+   * by `isActionEnabled`, which the keydown path consults before consuming a key.
+   */
+  setActionEnabled: (id: string, enabled: boolean) => void
+  /** Stable API subset (register/unregister/setActionEnabled) for pure registrants */
+  api: ActionsRegistryApi
   /** Currently registered actions */
   actions: Map<string, RegisteredAction>
   /** Computed keymap from registered actions + user overrides */
@@ -60,6 +68,21 @@ export interface ActionsRegistryValue {
 
 export const ActionsRegistryContext = createContext<ActionsRegistryValue | null>(null)
 
+/**
+ * The stable subset of the registry that `useAction`/`useActions` need. Its
+ * value never changes identity after mount (all three methods are stable), so
+ * pure registrants that consume it don't re-render when the registry version
+ * bumps (i.e. when *any* action registers/unregisters). Display consumers that
+ * need the live `actions`/`keymap`/`conflicts` keep using the full context.
+ */
+export interface ActionsRegistryApi {
+  register: (id: string, config: ActionConfig) => void
+  unregister: (id: string) => void
+  setActionEnabled: (id: string, enabled: boolean) => void
+}
+
+export const ActionsRegistryApiContext = createContext<ActionsRegistryApi | null>(null)
+
 export interface UseActionsRegistryOptions {
   /** localStorage key for persisting user overrides */
   storageKey?: string
@@ -75,6 +98,11 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
   // Registered actions (mutable for perf, state for re-renders)
   const actionsRef = useRef<Map<string, RegisteredAction>>(new Map())
   const [actionsVersion, setActionsVersion] = useState(0)
+
+  // Live per-action enabled overrides, updated out-of-band (no version bump) so
+  // toggling `enabled` doesn't re-register / re-render. `isActionEnabled` reads
+  // this first, falling back to the registered config's initial `enabled`.
+  const enabledRef = useRef<Map<string, boolean>>(new Map())
 
   // User overrides (persisted)
   // Format: { bindings: { key: action }, removedDefaults: { action: [keys] } }
@@ -357,21 +385,28 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
   const unregister = useCallback((id: string) => {
     dbg.registry('unregister: %s', id)
     actionsRef.current.delete(id)
+    enabledRef.current.delete(id)
     setActionsVersion(v => v + 1)
+  }, [])
+
+  const isActionEnabled = useCallback((id: string) => {
+    const live = enabledRef.current.get(id)
+    if (live !== undefined) return live
+    const action = actionsRef.current.get(id)
+    return action?.config.enabled !== false
+  }, [])
+
+  const setActionEnabled = useCallback((id: string, enabled: boolean) => {
+    enabledRef.current.set(id, enabled)
   }, [])
 
   const execute = useCallback((id: string, captures?: number[]) => {
     const action = actionsRef.current.get(id)
-    if (action && (action.config.enabled ?? true)) {
+    if (action && isActionEnabled(id)) {
       dbg.registry('execute: %s (captures: %o)', id, captures)
       action.config.handler(undefined, captures)
     }
-  }, [])
-
-  const isActionEnabled = useCallback((id: string) => {
-    const action = actionsRef.current.get(id)
-    return action?.config.enabled !== false
-  }, [])
+  }, [isActionEnabled])
 
   // Compute keymap from registered actions + overrides
   const keymap = useMemo(() => {
@@ -588,12 +623,21 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [actionsVersion])
 
+  // Stable API subset for pure registrants (never changes identity after mount).
+  const api = useMemo<ActionsRegistryApi>(() => ({
+    register,
+    unregister,
+    setActionEnabled,
+  }), [register, unregister, setActionEnabled])
+
   // Memoize return object to minimize context changes
   return useMemo(() => ({
     register,
     unregister,
     execute,
     isActionEnabled,
+    setActionEnabled,
+    api,
     actions,
     keymap,
     actionRegistry,
@@ -616,6 +660,8 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
     unregister,
     execute,
     isActionEnabled,
+    setActionEnabled,
+    api,
     actions,
     keymap,
     actionRegistry,

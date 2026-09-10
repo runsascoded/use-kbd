@@ -1,5 +1,5 @@
 import { useContext, useEffect, useRef } from 'react'
-import { ActionsRegistryContext } from './ActionsRegistry'
+import { ActionsRegistryApiContext } from './ActionsRegistry'
 import type { Direction } from './types'
 
 /**
@@ -81,7 +81,9 @@ export interface ActionConfig {
  * ```
  */
 export function useAction(id: string, config: ActionConfig): void {
-  const registry = useContext(ActionsRegistryContext)
+  // Consume the stable API context (not the full registry): registering an
+  // action must not re-render every other useAction/useActions caller.
+  const registry = useContext(ActionsRegistryApiContext)
   if (!registry) {
     throw new Error('useAction must be used within a HotkeysProvider')
   }
@@ -128,6 +130,13 @@ export function useAction(id: string, config: ActionConfig): void {
     JSON.stringify(config.actionTriplet),
     config.sortOrder,
   ])
+
+  // Sync live enabled state out-of-band: toggling `enabled` must not re-register
+  // (which would bump the registry version and re-render every consumer). The
+  // keydown path reads this via `isActionEnabled` before consuming a key.
+  useEffect(() => {
+    registryRef.current.setActionEnabled(id, config.enabled ?? true)
+  }, [id, config.enabled])
 }
 
 /**
@@ -143,7 +152,9 @@ export function useAction(id: string, config: ActionConfig): void {
  * ```
  */
 export function useActions(actions: Record<string, ActionConfig>): void {
-  const registry = useContext(ActionsRegistryContext)
+  // Consume the stable API context (see useAction): registering must not
+  // re-render every other useAction/useActions caller on the registry version.
+  const registry = useContext(ActionsRegistryApiContext)
   if (!registry) {
     throw new Error('useActions must be used within a HotkeysProvider')
   }
@@ -198,4 +209,16 @@ export function useActions(actions: Record<string, ActionConfig>): void {
       ])
     ),
   ])
+
+  // Sync live enabled state out-of-band (no re-register / no version bump).
+  const enabledKey = JSON.stringify(
+    Object.entries(actions).map(([id, c]) => [id, c.enabled ?? true])
+  )
+  useEffect(() => {
+    for (const [id, config] of Object.entries(actions)) {
+      registryRef.current.setActionEnabled(id, config.enabled ?? true)
+    }
+    // actions read through a stable key; deliberately keyed on enabledKey only
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabledKey])
 }

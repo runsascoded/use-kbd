@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { ActionsRegistryContext, useActionsRegistry } from './ActionsRegistry'
+import { ActionsRegistryApiContext, ActionsRegistryContext, useActionsRegistry } from './ActionsRegistry'
 import { dbg } from './debug'
 import { ModesRegistryContext, useModesRegistry } from './ModesRegistry'
 import { OmnibarEndpointsRegistryContext, useOmnibarEndpointsRegistry } from './OmnibarEndpointsRegistry'
@@ -24,7 +24,7 @@ export interface HotkeysConfig {
   /** Group name for built-in actions: shortcuts modal, omnibar, key lookup (default: "Meta") */
   builtinGroup?: string
 
-  /** When true, keys with conflicts are disabled (default: true) */
+  /** When true, keys with conflicts are disabled (default: false — SeqM disambiguates) */
   disableConflicts?: boolean
 
   /** Minimum viewport width to enable hotkeys (default: false = no viewport restriction) */
@@ -453,6 +453,7 @@ export function HotkeysProvider({
   } = useHotkeys(effectiveKeymap, handlers, {
     enabled: hotkeysEnabled,
     sequenceTimeout: config.sequenceTimeout,
+    isActionEnabled: registry.isActionEnabled,
   })
 
   // Close modal when a sequence starts (so SequenceModal can show)
@@ -557,13 +558,15 @@ export function HotkeysProvider({
 
   return (
     <ActionsRegistryContext.Provider value={registry}>
-      <ModesRegistryContext.Provider value={modesRegistry}>
-        <OmnibarEndpointsRegistryContext.Provider value={endpointsRegistry}>
-          <HotkeysContext.Provider value={value}>
-            {children}
-          </HotkeysContext.Provider>
-        </OmnibarEndpointsRegistryContext.Provider>
-      </ModesRegistryContext.Provider>
+      <ActionsRegistryApiContext.Provider value={registry.api}>
+        <ModesRegistryContext.Provider value={modesRegistry}>
+          <OmnibarEndpointsRegistryContext.Provider value={endpointsRegistry}>
+            <HotkeysContext.Provider value={value}>
+              {children}
+            </HotkeysContext.Provider>
+          </OmnibarEndpointsRegistryContext.Provider>
+        </ModesRegistryContext.Provider>
+      </ActionsRegistryApiContext.Provider>
     </ActionsRegistryContext.Provider>
   )
 }
