@@ -712,15 +712,16 @@ const CONFLICT_RELATIONS: [prefix: string, phrase: string][] = [
 ]
 
 /**
- * Build the hover-tooltip text for a conflicting binding: what it collides with
- * (other bindings, resolved to their action labels) and how.
+ * Build the bullet lines describing what a binding collides with (other
+ * bindings, resolved to their action labels) and how. Shared by regular rows
+ * and arrow groups; the latter unions the lines across its directions.
  */
-function buildConflictTitle(
+function conflictLines(
   actionId: string,
   conflictActions: string[],
   keymap: HotkeyMap,
   actionRegistry: Record<string, { label?: string } | undefined> | undefined,
-): string {
+): string[] {
   const labelFor = (key: string): string => {
     const a = keymap[key]
     const ids = Array.isArray(a) ? a : a != null ? [a] : []
@@ -744,8 +745,26 @@ function buildConflictTitle(
     }
   }
   if (alsoTriggers.length) lines.unshift(`also triggers ${alsoTriggers.join(', ')}`)
+  return lines
+}
+
+/** Wrap `conflictLines` into the "Binding conflict:" tooltip block (or ''). */
+function formatConflictTitle(lines: string[]): string {
   if (!lines.length) return ''
   return `Binding conflict:\n${lines.map(l => `• ${l}`).join('\n')}`
+}
+
+/**
+ * Build the hover-tooltip text for a conflicting binding: what it collides with
+ * (other bindings, resolved to their action labels) and how.
+ */
+function buildConflictTitle(
+  actionId: string,
+  conflictActions: string[],
+  keymap: HotkeyMap,
+  actionRegistry: Record<string, { label?: string } | undefined> | undefined,
+): string {
+  return formatConflictTitle(conflictLines(actionId, conflictActions, keymap, actionRegistry))
 }
 
 /**
@@ -907,6 +926,8 @@ function ArrowGroupRow({
   arrowGroupEditState,
   arrowGroupActiveKeys,
   conflicts,
+  keymap,
+  actionRegistry,
   ArrowIconComponent,
 }: {
   entry: ArrowGroupShortcut
@@ -917,6 +938,8 @@ function ArrowGroupRow({
   arrowGroupEditState: { groupId: string } | null
   arrowGroupActiveKeys: KeyCombination | null
   conflicts: Map<string, string[]>
+  keymap: HotkeyMap
+  actionRegistry: Record<string, { label?: string } | undefined> | undefined
   ArrowIconComponent: ComponentType<KeyIconProps> | null
 }) {
   const isEditing = arrowGroupEditState?.groupId === entry.groupId
@@ -932,6 +955,24 @@ function ArrowGroupRow({
     const binding = `${entry.modifierPrefix}${arrowKeys[dir]}`
     return conflicts.has(binding)
   })
+
+  // Aggregate conflict details across the conflicting directions into one
+  // tooltip (mirrors what BindingDisplay shows for regular rows).
+  const conflictDetails = (() => {
+    if (!hasConflict) return undefined
+    const lines: string[] = []
+    const seen = new Set<string>()
+    for (const dir of DIRECTION_ORDER) {
+      const binding = `${entry.modifierPrefix}${arrowKeys[dir]}`
+      const conflictActions = conflicts.get(binding)
+      if (conflictActions && conflictActions.length > 1) {
+        for (const line of conflictLines(entry.actionIds[dir], conflictActions, keymap, actionRegistry)) {
+          if (!seen.has(line)) { seen.add(line); lines.push(line) }
+        }
+      }
+    }
+    return formatConflictTitle(lines) || undefined
+  })()
 
   // Collect extra bindings across all directions
   const hasExtras = DIRECTION_ORDER.some(d => (entry.extraBindings[d]?.length ?? 0) > 0)
@@ -951,6 +992,36 @@ function ArrowGroupRow({
     )
   }
 
+  const kbdEl = (
+    <kbd
+      className={`kbd-kbd kbd-arrow-group-binding${editable ? ' editable' : ''}${isEditing ? ' editing' : ''}${hasConflict ? ' conflict' : ''}`}
+      onClick={editable ? () => onStartEditing(entry.groupId) : undefined}
+      tabIndex={editable ? 0 : undefined}
+      onKeyDown={editable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onStartEditing(entry.groupId) } } : undefined}
+    >
+      {isEditing ? (
+        <>
+          {arrowGroupActiveKeys && (arrowGroupActiveKeys.modifiers.ctrl || arrowGroupActiveKeys.modifiers.alt || arrowGroupActiveKeys.modifiers.shift || arrowGroupActiveKeys.modifiers.meta) ? (
+            <>
+              {renderModifierIcons(arrowGroupActiveKeys.modifiers)}
+            </>
+          ) : null}
+          {renderArrows()}
+          <span>...</span>
+        </>
+      ) : (
+        <>
+          {hasModifiers && (
+            <>
+              {renderModifierIcons(modifiers)}
+            </>
+          )}
+          {renderArrows()}
+        </>
+      )}
+    </kbd>
+  )
+
   return (
     <div className="kbd-action kbd-arrow-group-row" data-arrow-group={entry.groupId}>
       {entry.description ? (
@@ -961,33 +1032,9 @@ function ArrowGroupRow({
         <span className="kbd-action-label">{entry.label}</span>
       )}
       <span className="kbd-action-bindings">
-        <kbd
-          className={`kbd-kbd kbd-arrow-group-binding${editable ? ' editable' : ''}${isEditing ? ' editing' : ''}${hasConflict ? ' conflict' : ''}`}
-          onClick={editable ? () => onStartEditing(entry.groupId) : undefined}
-          tabIndex={editable ? 0 : undefined}
-          onKeyDown={editable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onStartEditing(entry.groupId) } } : undefined}
-        >
-          {isEditing ? (
-            <>
-              {arrowGroupActiveKeys && (arrowGroupActiveKeys.modifiers.ctrl || arrowGroupActiveKeys.modifiers.alt || arrowGroupActiveKeys.modifiers.shift || arrowGroupActiveKeys.modifiers.meta) ? (
-                <>
-                  {renderModifierIcons(arrowGroupActiveKeys.modifiers)}
-                </>
-              ) : null}
-              {renderArrows()}
-              <span>...</span>
-            </>
-          ) : (
-            <>
-              {hasModifiers && (
-                <>
-                  {renderModifierIcons(modifiers)}
-                </>
-              )}
-              {renderArrows()}
-            </>
-          )}
-        </kbd>
+        {hasConflict && conflictDetails
+          ? <Tooltip title={conflictDetails}>{kbdEl}</Tooltip>
+          : kbdEl}
         {hasExtras && DIRECTION_ORDER.map(dir => {
           const extras = entry.extraBindings[dir]
           if (!extras || extras.length === 0) return null
@@ -2183,6 +2230,8 @@ export function ShortcutsModal({
           arrowGroupEditState={arrowGroupEditState}
           arrowGroupActiveKeys={arrowGroupActiveKeys}
           conflicts={conflicts}
+          keymap={keymap}
+          actionRegistry={ctx?.registry.actionRegistry}
           ArrowIconComponent={ArrowIconComponent}
         />
       )

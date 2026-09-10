@@ -2982,3 +2982,30 @@ test.describe('Registration render isolation', () => {
     expect((after['__display'] ?? 0)).toBeGreaterThan(before['__display'] ?? 0)
   })
 })
+
+test.describe('Arrow group conflict tooltip', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.removeItem('use-kbd-demo')
+      localStorage.removeItem('use-kbd-demo-removed')
+    })
+    // ?arrowConflict mounts an arrow group whose Up (arrowup) collides with a
+    // regular "Clashing up" action.
+    await page.goto('/many-actions?n=6&arrowConflict=1')
+    await page.waitForSelector('#demo', { timeout: 5000 })
+  })
+
+  test('a conflicting arrow-group binding shows details on hover', async ({ page }) => {
+    await page.keyboard.press('?')
+    await page.waitForSelector('.kbd-modal', { timeout: 5000 })
+
+    const chip = page.locator('.kbd-arrow-group-binding.conflict').first()
+    await expect(chip).toBeVisible()
+
+    // This route uses the default tooltip, which sets the conflict details as a
+    // native `title` on the wrapping span. (Before the fix the arrow-group chip
+    // had no conflict tooltip at all.)
+    const wrapper = chip.locator('xpath=..')
+    await expect(wrapper).toHaveAttribute('title', 'Binding conflict:\n• also triggers Clashing up')
+  })
+})

@@ -8,7 +8,7 @@
  * registrant (a registry version bump). Existing registrants must not re-render.
  */
 import { useEffect, useState } from 'react'
-import { KbdOmnibar, ShortcutsModal, useAction, useHotkeysContext } from 'use-kbd'
+import { KbdOmnibar, ShortcutsModal, useAction, useArrowGroup, useHotkeysContext } from 'use-kbd'
 
 declare global {
   interface Window {
@@ -57,10 +57,34 @@ function RegisterExtraToggle() {
   )
 }
 
+/**
+ * An arrow group plus a regular action that collides with its Up (`arrowup`),
+ * so the arrow-group binding chip is flagged as conflicting. Used by the e2e
+ * that checks the conflict-detail tooltip works on the arrow-group render path.
+ * Gated behind `?arrowConflict` so it doesn't perturb the other /many-actions tests.
+ */
+function ArrowGroupConflictProbe() {
+  useArrowGroup('probe:pan', {
+    label: 'Pan',
+    group: 'Probe',
+    defaultModifiers: [],
+    handlers: { left: () => {}, right: () => {}, up: () => {}, down: () => {} },
+  })
+  useAction('probe:clash-up', {
+    label: 'Clashing up',
+    group: 'Probe',
+    defaultBindings: ['arrowup'],
+    handler: () => {},
+  })
+  return null
+}
+
 const GROUPS = ['Navigation', 'Editing', 'View', 'Tools']
 
 export function ManyActionsDemo() {
-  const count = Number(new URLSearchParams(window.location.search).get('n') || '50')
+  const params = new URLSearchParams(window.location.search)
+  const count = Number(params.get('n') || '50')
+  const showArrowConflict = params.has('arrowConflict')
   const actions = Array.from({ length: count }, (_, i) => ({
     id: `test-action-${i}`,
     label: `Action ${i + 1}`,
@@ -73,6 +97,7 @@ export function ManyActionsDemo() {
       <p>Press <kbd>?</kbd> for shortcuts, <kbd>⌘K</kbd> for omnibar.</p>
       <RegisterExtraToggle />
       <DisplayProbe />
+      {showArrowConflict && <ArrowGroupConflictProbe />}
       {actions.map(a => <DummyAction key={a.id} {...a} />)}
       <ShortcutsModal />
       <KbdOmnibar />
