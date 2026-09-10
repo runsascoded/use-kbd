@@ -1657,9 +1657,9 @@ function useHotkeys(keymap, handlers, options = {}) {
     return entry.actions.some(fn);
   }, []);
   const clearPending = react.useCallback(() => {
-    setPendingKeys([]);
-    setIsAwaitingSequence(false);
-    setTimeoutStartedAt(null);
+    setPendingKeys((prev) => prev.length === 0 ? prev : []);
+    setIsAwaitingSequence((prev) => prev ? false : prev);
+    setTimeoutStartedAt((prev) => prev === null ? prev : null);
     matchStatesRef.current.clear();
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
@@ -2764,11 +2764,12 @@ function useRowSelectionKeys(sel, options = {}) {
       const override = bindings?.[action];
       if (override === false) continue;
       const keys = override ?? spec.bindings;
+      const actionEnabled = action === "clear" ? enabled && sel.count > 0 : enabled;
       map[`${idPrefix}:${action}`] = {
         label: labels?.[action] ?? spec.label,
         group: spec.selection ? selectionGroup : group,
         defaultBindings: keys,
-        enabled,
+        enabled: actionEnabled,
         hideFromModal,
         handler: (_e, captures) => spec.run(sel, captures?.[0] ?? 1)
       };
