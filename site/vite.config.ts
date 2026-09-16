@@ -3,8 +3,6 @@ import react from '@vitejs/plugin-react'
 import mdx from '@mdx-js/rollup'
 import rehypeExternalLinks from 'rehype-external-links'
 
-const allowedHosts = process.env.VITE_ALLOWED_HOSTS?.split(',') ?? []
-
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
@@ -27,6 +25,7 @@ export default defineConfig({
   },
   server: {
     port: 3752,  // hash("use-kbd") into 3000-9999; ≈unique, avoids Vite's 5173 default
-    ...(allowedHosts.length > 0 && { allowedHosts }),
+    host: true,
+    allowedHosts: true,  // accept any Host; trusted-tailnet dev server, reached by bare MagicDNS name (e.g. m3:3752)
   }
 })
