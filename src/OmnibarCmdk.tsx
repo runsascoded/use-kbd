@@ -157,8 +157,6 @@ export function OmnibarCmdk({ defaultBinding = 'meta+k' }: { defaultBinding?: st
             className="kbd-omnibar-list"
             hidden={inParamEntry}
             onScroll={onListScroll}
-            // Bound the list so it scrolls (drives scroll-mode pagination).
-            style={{ maxHeight: '55vh', overflowY: 'auto' }}
           >
             <Command.Empty className="kbd-omnibar-empty">
               {isLoadingRemote ? 'Searching…' : 'No results.'}

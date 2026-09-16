@@ -3106,6 +3106,24 @@ test.describe('cmdk Omnibar (spike)', () => {
     await expect(fruitItems(page)).toHaveText(['Fruit-07'])
   })
 
+  test('arrow keys move the highlight, which is styled (accent border)', async ({ page }) => {
+    await openPalette(page)
+    const selected = page.locator('[cmdk-item][aria-selected="true"]')
+    await expect(selected).toHaveCount(1)
+    const first = await selected.textContent()
+    await page.locator('[cmdk-input]').press('ArrowDown')
+    await expect(selected).not.toHaveText(first ?? '')  // selection moved to another row
+    // The selected row is visually distinguished (accent left-border) from the rest.
+    const borders = await page.locator('[cmdk-item]').evaluateAll(els =>
+      els.map(el => ({
+        active: el.getAttribute('aria-selected') === 'true',
+        border: getComputedStyle(el).borderLeftColor,
+      })))
+    const active = borders.find(b => b.active)!
+    expect(active.border).not.toBe('rgba(0, 0, 0, 0)')
+    expect(borders.filter(b => !b.active).every(b => b.border === 'rgba(0, 0, 0, 0)')).toBe(true)
+  })
+
   test('ParamEntry: a placeholder action prompts for a value, then executes', async ({ page }) => {
     await openPalette(page)
     // Filter to the placeholder action and select it via keyboard (cmdk items

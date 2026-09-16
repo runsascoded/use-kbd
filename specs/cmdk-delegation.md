@@ -142,13 +142,30 @@ Implemented steps 1-3 of the branch plan as a working proof:
 - **Endpoint pagination** — scroll-mode endpoints load the next page via an `onScroll` near-bottom check on the (bounded, `overflow:auto`) cmdk list, calling `loadMore` per endpoint with `hasMore`. CIC: Fruits grew 8 → 24 across scroll. (An IntersectionObserver-sentinel approach was tried first but was fragile against cmdk's re-renders; the scroll handler is simpler and robust.)
 - Actions + async endpoints, ranked filtering, binding chips, execute/close — all working (CIC: `grape` → 1 result → handler fires).
 
-Full Playwright suite green on the branch (114 tests; the spike adds no e2e of its own yet).
+### Parity e2e (done)
+
+`site/e2e/hotkeys.spec.ts` › "cmdk Omnibar (spike)" — 6 specs on `/cmdk`: lists
+registry actions + async endpoint results; filtering narrows via refetch+rank;
+arrow keys move the highlight and the active row is visually styled (accent
+left-border, others transparent); ParamEntry prompts then executes; scroll-mode
+pagination (8→16→24); recents render in their own group when the query is empty.
+Full Playwright suite green on the branch (126 tests).
+
+### CSS parity (done)
+
+`src/styles.css` now maps cmdk's DOM onto the hand-rolled look: `[cmdk-list]`
+(via `.kbd-omnibar-list`) gets the scroll container (`--kbd-omnibar-max-height`,
+`overflow:auto`); `[cmdk-group-heading]` gets the group-label styling;
+`[cmdk-item][aria-selected="true"]` gets the accent left-border + `--kbd-bg-secondary`
+(cmdk marks the active row with `aria-selected`, not a `.selected` class); and
+`[cmdk-empty]` gets the empty/loading text. The inline `max-height/overflow` on
+the list was removed in favor of the class. CIC-verified in Chrome: the highlight
+follows arrow selection and the palette matches `<Omnibar />`'s aesthetic.
 
 ### Still not wired (deferred)
 
 - **Sequence-completions view** (the SequenceModal-style "what can come next" panel inside the palette) — lower value; SequenceModal covers sequences separately.
 - **Mode-scoped filtering nuances** — `useOmnibar.results` already applies the registry's mode filtering, so this is mostly inherited; needs a mode-heavy consumer to confirm parity.
-- **CSS parity** — reuses `kbd-omnibar*` classes loosely plus one inline `max-height/overflow` on the list; a real migration needs the DOM-compat adapter (or a major bump), per Caveat 1.
-- **Parity e2e tests** — CIC-verified but no automated specs yet.
+- **DOM-compat adapter** — the styling reuses the `kbd-omnibar*` class names, but the internal DOM shape differs from `<Omnibar />` (cmdk's `[cmdk-*]` structure). Consumers styling *into* the internal DOM would need adapters, or a major-version bump — the merge-path decision from Caveat 1.
 
-**Recommendation**: functional parity is essentially there. Next step before merge-vs-drop is a **dogfood swap in a consumer** (apvd/ctbk) + parity e2e + the CSS-compat decision. Kept on this branch, off `main`.
+**Recommendation**: functional + visual parity is there, with automated e2e. `<OmnibarCmdk />` is shippable **side-by-side** as an opt-in export today. The remaining decision (replace `<Omnibar />`'s internals vs keep side-by-side vs drop) is best made after a **dogfood swap in a consumer** (apvd/ctbk) — its own session. Kept on this branch, off `main`.
