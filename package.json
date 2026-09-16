@@ -3,6 +3,7 @@
   "version": "0.13.0",
   "description": "Omnibars, editable hotkeys, search, and keyboard-navigation for React apps",
   "type": "module",
+  "sideEffects": false,
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -47,6 +48,7 @@
     "@eslint/js": "^9.39.2",
     "@rdub/eslint-config": "^0.0.3",
     "@types/react": "^18.3.27",
+    "cmdk": "^1.1.1",
     "eslint": "^9.39.2",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.26",
@@ -58,10 +60,13 @@
     "typescript-eslint": "^8.50.1"
   },
   "peerDependencies": {
+    "cmdk": ">=1.0.0",
     "react": ">=18.0.0",
     "react-dom": ">=18.0.0"
   },
-  "dependencies": {
-    "cmdk": "^1.1.1"
+  "peerDependenciesMeta": {
+    "cmdk": {
+      "optional": true
+    }
   }
 }

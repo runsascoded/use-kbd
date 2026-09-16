@@ -3085,36 +3085,43 @@ test.describe('cmdk Omnibar (spike)', () => {
     await page.waitForSelector('#demo', { timeout: 5000 })
   })
 
+  // /cmdk mounts two <OmnibarCmdk> instances: a modal (⌘K) and an always-visible
+  // inline one. Scope locators to each container so they don't collide.
+  const modal = (page: import('@playwright/test').Page) => page.locator('.kbd-omnibar-backdrop')
+  const inlineBar = (page: import('@playwright/test').Page) => page.locator('.kbd-omnibar-inline')
+  type Scope = import('@playwright/test').Locator
+
   const openPalette = async (page: import('@playwright/test').Page) => {
     await page.locator('body').click({ position: { x: 5, y: 5 } })
     await page.keyboard.press('Meta+k')
-    await page.waitForSelector('[cmdk-input]', { timeout: 5000 })
+    await modal(page).locator('[cmdk-input]').waitFor({ timeout: 5000 })
   }
-  const fruitItems = (page: import('@playwright/test').Page) =>
-    page.locator('[cmdk-item]').filter({ hasText: /^Fruit-/ })
+  const fruitItems = (scope: Scope) => scope.locator('[cmdk-item]').filter({ hasText: /^Fruit-/ })
 
   test('lists registry actions and async endpoint results', async ({ page }) => {
     await openPalette(page)
-    await expect(page.locator('[cmdk-item]', { hasText: 'Increment' })).toHaveCount(1)
-    await expect(page.locator('[cmdk-group-heading]', { hasText: 'Fruits' })).toBeVisible()
-    await expect(fruitItems(page).first()).toBeVisible()
+    const m = modal(page)
+    await expect(m.locator('[cmdk-item]', { hasText: 'Increment' })).toHaveCount(1)
+    await expect(m.locator('[cmdk-group-heading]', { hasText: 'Fruits' })).toBeVisible()
+    await expect(fruitItems(m).first()).toBeVisible()
   })
 
   test('filtering narrows via endpoint refetch + rank', async ({ page }) => {
     await openPalette(page)
-    await page.locator('[cmdk-input]').fill('Fruit-07')
-    await expect(fruitItems(page)).toHaveText(['Fruit-07'])
+    await modal(page).locator('[cmdk-input]').fill('Fruit-07')
+    await expect(fruitItems(modal(page))).toHaveText(['Fruit-07'])
   })
 
   test('arrow keys move the highlight, which is styled (accent border)', async ({ page }) => {
     await openPalette(page)
-    const selected = page.locator('[cmdk-item][aria-selected="true"]')
+    const m = modal(page)
+    const selected = m.locator('[cmdk-item][aria-selected="true"]')
     await expect(selected).toHaveCount(1)
     const first = await selected.textContent()
-    await page.locator('[cmdk-input]').press('ArrowDown')
+    await m.locator('[cmdk-input]').press('ArrowDown')
     await expect(selected).not.toHaveText(first ?? '')  // selection moved to another row
     // The selected row is visually distinguished (accent left-border) from the rest.
-    const borders = await page.locator('[cmdk-item]').evaluateAll(els =>
+    const borders = await m.locator('[cmdk-item]').evaluateAll(els =>
       els.map(el => ({
         active: el.getAttribute('aria-selected') === 'true',
         border: getComputedStyle(el).borderLeftColor,
@@ -3126,43 +3133,73 @@ test.describe('cmdk Omnibar (spike)', () => {
 
   test('ParamEntry: a placeholder action prompts for a value, then executes', async ({ page }) => {
     await openPalette(page)
+    const m = modal(page)
     // Filter to the placeholder action and select it via keyboard (cmdk items
     // re-render, so a Playwright .click() races; Enter on the highlighted item
     // is the intended interaction).
-    await page.locator('[cmdk-input]').fill('Set counter to N')
-    await expect(page.locator('[cmdk-item]')).toHaveText([/Set counter to N/])
+    await m.locator('[cmdk-input]').fill('Set counter to N')
+    await expect(m.locator('[cmdk-item]')).toHaveText([/Set counter to N/])
     await page.keyboard.press('Enter')
-    const param = page.locator('.kbd-omnibar-param-input')
+    const param = m.locator('.kbd-omnibar-param-input')
     await expect(param).toBeVisible()
     await param.fill('42')
     await param.press('Enter')
     await expect(page.getByTestId('count')).toHaveText('42')
-    // palette closed
-    await expect(page.locator('[cmdk-input]')).toHaveCount(0)
+    // modal palette closed (inline input remains)
+    await expect(modal(page).locator('[cmdk-input]')).toHaveCount(0)
   })
 
   test('endpoint pagination loads more on scroll', async ({ page }) => {
     await openPalette(page)
-    await expect(fruitItems(page)).toHaveCount(8)
-    const list = page.locator('.kbd-omnibar-list')
+    const m = modal(page)
+    await expect(fruitItems(m)).toHaveCount(8)
+    const list = m.locator('.kbd-omnibar-list')
     await list.evaluate(el => { el.scrollTop = el.scrollHeight })
-    await expect(fruitItems(page)).toHaveCount(16)
+    await expect(fruitItems(m)).toHaveCount(16)
     await list.evaluate(el => { el.scrollTop = el.scrollHeight })
-    await expect(fruitItems(page)).toHaveCount(24)
+    await expect(fruitItems(m)).toHaveCount(24)
   })
 
   test('recents appear in their own group when the query is empty', async ({ page }) => {
     await openPalette(page)
+    const m = modal(page)
     // Filter to Increment and execute via Enter (see ParamEntry test re: clicks).
-    await page.locator('[cmdk-input]').fill('Increment')
+    await m.locator('[cmdk-input]').fill('Increment')
     // Item text includes the binding chip ("Increment" + "+"), so anchor a regex.
-    await expect(page.locator('[cmdk-item]')).toHaveText([/^Increment/])
+    await expect(m.locator('[cmdk-item]')).toHaveText([/^Increment/])
     await page.keyboard.press('Enter')
     await expect(page.getByTestId('count')).toHaveText('1')
     await openPalette(page)
-    const recentGroup = page.locator('[cmdk-group]').filter({
+    const recentGroup = modal(page).locator('[cmdk-group]').filter({
       has: page.locator('[cmdk-group-heading]', { hasText: 'Recent' }),
     })
     await expect(recentGroup.locator('[cmdk-item]')).toHaveText([/^Increment/])
+  })
+
+  // The inline form factor: the same <OmnibarCmdk inline> rendered always-visible
+  // in the page flow (no ⌘K, no backdrop). This is the cmdk-cheap capability the
+  // modal <Omnibar> lacks.
+  test('inline palette is visible and lists actions without opening anything', async ({ page }) => {
+    // No ⌘K: the inline input is present on load.
+    const bar = inlineBar(page)
+    await expect(bar.locator('[cmdk-input]')).toBeVisible()
+    await expect(modal(page)).toHaveCount(0)  // modal is not open
+    await expect(bar.locator('[cmdk-item]', { hasText: 'Increment' })).toHaveCount(1)
+  })
+
+  test('inline filtering narrows to endpoint results', async ({ page }) => {
+    const bar = inlineBar(page)
+    await bar.locator('[cmdk-input]').fill('Fruit-07')
+    await expect(fruitItems(bar)).toHaveText(['Fruit-07'])
+  })
+
+  test('modal and inline coexist: ⌘K still opens the modal (no toggle-action collision)', async ({ page }) => {
+    // If the inline instance had clobbered the shared ACTION_OMNIBAR registration,
+    // ⌘K would no longer open the modal.
+    await expect(inlineBar(page).locator('[cmdk-input]')).toBeVisible()
+    await openPalette(page)
+    await expect(modal(page).locator('[cmdk-input]')).toBeVisible()
+    // Both palettes are present simultaneously.
+    await expect(page.locator('[cmdk-input]')).toHaveCount(2)
   })
 })

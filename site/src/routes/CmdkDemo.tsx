@@ -48,11 +48,39 @@ export function CmdkDemo() {
   }), []))
 
   return (
-    <div style={{ padding: 24 }}>
+    <div style={{ padding: 24, maxWidth: 760 }}>
       <h1 id="demo">cmdk Omnibar Spike</h1>
-      <p>Press <kbd>⌘K</kbd> for the cmdk-backed palette. Actions (Counter, incl. param entry) + paginated async endpoint (Fruits).</p>
-      <p>Counter: <strong data-testid="count">{count}</strong>{picked && <> · Picked: <strong data-testid="picked">{picked}</strong></>}</p>
-      <OmnibarCmdk />
+      <p>
+        Both widgets below are the <strong>same</strong> <code>&lt;OmnibarCmdk&gt;</code> component,
+        fed by the <strong>same</strong> use-kbd action registry (Counter, incl. a param-entry
+        action) + a paginated async endpoint (Fruits). cmdk owns the input, list, keyboard-nav
+        and a11y; use-kbd owns the registry, endpoints, ranking and ParamEntry.
+      </p>
+      <p style={{ fontSize: '1.05rem' }}>
+        Counter: <strong data-testid="count">{count}</strong>
+        {picked && <> · Picked: <strong data-testid="picked">{picked}</strong></>}
+      </p>
+
+      <section style={{ marginTop: 28 }}>
+        <h2 style={{ fontSize: '1.05rem', marginBottom: 6 }}>1 · Modal palette</h2>
+        <p style={{ marginTop: 0, color: 'var(--kbd-fg-secondary, #888)' }}>
+          Press <kbd>⌘K</kbd> — the classic command-palette form factor (backdrop + dialog).
+        </p>
+        <OmnibarCmdk />
+      </section>
+
+      <section style={{ marginTop: 28 }} data-testid="inline-section">
+        <h2 style={{ fontSize: '1.05rem', marginBottom: 6 }}>2 · Inline / stationary search</h2>
+        <p style={{ marginTop: 0, color: 'var(--kbd-fg-secondary, #888)' }}>
+          The same palette rendered <strong>inline</strong> (<code>inline</code> prop) — no modal,
+          always visible, in the page flow. This is the form factor cmdk makes cheap and the
+          hand-rolled modal <code>&lt;Omnibar&gt;</code> does not. Type to filter; scroll for more Fruits.
+        </p>
+        <div style={{ maxWidth: 460 }}>
+          <OmnibarCmdk inline placeholder="Search actions & fruits…" />
+        </div>
+      </section>
+
       <ShortcutsModal />
     </div>
   )

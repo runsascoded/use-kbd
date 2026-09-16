@@ -168,4 +168,26 @@ follows arrow selection and the palette matches `<Omnibar />`'s aesthetic.
 - **Mode-scoped filtering nuances** — `useOmnibar.results` already applies the registry's mode filtering, so this is mostly inherited; needs a mode-heavy consumer to confirm parity.
 - **DOM-compat adapter** — the styling reuses the `kbd-omnibar*` class names, but the internal DOM shape differs from `<Omnibar />` (cmdk's `[cmdk-*]` structure). Consumers styling *into* the internal DOM would need adapters, or a major-version bump — the merge-path decision from Caveat 1.
 
-**Recommendation**: functional + visual parity is there, with automated e2e. `<OmnibarCmdk />` is shippable **side-by-side** as an opt-in export today. The remaining decision (replace `<Omnibar />`'s internals vs keep side-by-side vs drop) is best made after a **dogfood swap in a consumer** (apvd/ctbk) — its own session. Kept on this branch, off `main`.
+**Recommendation**: functional + visual parity is there, with automated e2e. `<OmnibarCmdk />` is shippable **side-by-side** as an opt-in export today. The remaining decision (replace `<Omnibar />`'s internals vs keep side-by-side vs drop) is best made after a **dogfood swap in a consumer** (apvd/ctbk) — its own session.
+
+## Decision: (A) ship side-by-side on `main` (2026-09-16)
+
+Chosen path: ship `<OmnibarCmdk />` as an **opt-in export** alongside the hand-rolled `<Omnibar />` (which stays the default). Rationale — the honest version: the spike is functional + visual *parity*, so this is **optionality/de-risking, not a feature win**. It buys a low-commitment way to dogfood cmdk in a real consumer before committing to replace `<Omnibar />`'s internals. Treated as a **bet with a decision date**, not a permanent second UI: the failure mode to avoid is two palette implementations maintained forever.
+
+### Packaging (the real work of shipping opt-in)
+
+`cmdk` must not be forced on consumers who only use `<Omnibar />`:
+- **`external: ['react', 'cmdk']`** in `tsup.config.ts` — cmdk is no longer bundled into `dist` (it was, ~inlined; the earlier spike notes were wrong to call it external). `dist/index.js` now emits a bare `import { Command } from 'cmdk'`.
+- **`cmdk` is an optional peer dep** (`peerDependencies` + `peerDependenciesMeta.cmdk.optional`), plus a `devDependency` for the lib's own build/tests. Consumers who use `<OmnibarCmdk />` add `cmdk` themselves; others don't pay for it.
+- **`"sideEffects": false`** on the package so a consumer's bundler tree-shakes the unused `OmnibarCmdk` export (and thus the cmdk import) when it isn't used. Safe here — no `src` module imports CSS; `styles.css` is a separate consumer-side import.
+- The demo site (`site/`) is the reference consumer and now depends on `cmdk` explicitly.
+
+### Inline / stationary form factor (net-new capability)
+
+`<OmnibarCmdk inline>` renders the same palette **always-visible, non-modal** (no backdrop, dialog, open-gating, or ⌘K toggle) — an in-flow search box. This is the concrete thing cmdk makes cheap that the hand-rolled **modal** `<Omnibar />` does not: `<Command>` is not inherently a dialog, so inline is "just don't wrap it." Details:
+- The ⌘K toggle registration was split into an `<OmnibarToggleAction>` child that only the modal mounts — the registry is last-write-wins (not ref-counted), so an inline instance mounting the same `ACTION_OMNIBAR` would clobber the modal's binding. e2e covers modal+inline coexistence.
+- `/cmdk` demos both form factors from the same registry + endpoint; e2e has 9 specs (6 modal-scoped, 3 inline).
+
+### Explicit goal: delegate fully, eventually (gated)
+
+The intended end-state **is** full delegation (→ replace `<Omnibar />`'s internals with cmdk and delete the hand-rolled input/list/keyboard-nav/item-rendering). What gets removed is a *widget renderer*, not a system — the registry, endpoints, ParamEntry, hotkey engine, and all modals stay. This is **gated on a consumer dogfood**, not committed now, because of Caveat 1 (consumers styling into `.kbd-omnibar` internals break; needs adapter coverage or a major bump).

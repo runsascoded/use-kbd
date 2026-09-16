@@ -21,6 +21,7 @@
     "@mui/material": "^7.3.6",
     "@shikijs/rehype": "^3.20.0",
     "@shikijs/transformers": "^3.20.0",
+    "cmdk": "^1.1.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-icons": "^5.5.0",

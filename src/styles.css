@@ -570,6 +570,13 @@
   overflow: hidden;
 }
 
+/* Inline (non-modal) variant: an in-flow, always-visible search box. No
+   backdrop to separate it from the page, so it carries its own border. */
+.kbd-omnibar-inline {
+  border: 1px solid var(--kbd-border);
+  box-shadow: none;
+}
+
 .kbd-omnibar-header {
   display: flex;
   align-items: center;

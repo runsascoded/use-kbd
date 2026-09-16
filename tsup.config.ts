@@ -8,5 +8,8 @@ export default defineConfig({
   sourcemap: true,
   clean: true,
   treeshake: true,
-  external: ['react'],
+  // cmdk is an optional peer dep (only <OmnibarCmdk> pulls it) — keep it out of
+  // the bundle so consumers who use the hand-rolled <Omnibar> don't pay for it,
+  // and so cmdk's React context isn't duplicated.
+  external: ['react', 'cmdk'],
 })
