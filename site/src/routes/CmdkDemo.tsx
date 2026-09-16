@@ -51,7 +51,7 @@ export function CmdkDemo() {
     <div style={{ padding: 24 }}>
       <h1 id="demo">cmdk Omnibar Spike</h1>
       <p>Press <kbd>⌘K</kbd> for the cmdk-backed palette. Actions (Counter, incl. param entry) + paginated async endpoint (Fruits).</p>
-      <p>Counter: <strong>{count}</strong>{picked && <> · Picked: <strong>{picked}</strong></>}</p>
+      <p>Counter: <strong data-testid="count">{count}</strong>{picked && <> · Picked: <strong data-testid="picked">{picked}</strong></>}</p>
       <OmnibarCmdk />
       <ShortcutsModal />
     </div>

@@ -3073,3 +3073,78 @@ test.describe('Arrow group conflict tooltip', () => {
     await expect(wrapper).toHaveAttribute('title', 'Binding conflict:\n• also triggers Clashing up')
   })
 })
+
+test.describe('cmdk Omnibar (spike)', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.removeItem('use-kbd-demo')
+      localStorage.removeItem('use-kbd-demo-removed')
+      localStorage.removeItem('use-kbd-demo-recents')
+    })
+    await page.goto('/cmdk')
+    await page.waitForSelector('#demo', { timeout: 5000 })
+  })
+
+  const openPalette = async (page: import('@playwright/test').Page) => {
+    await page.locator('body').click({ position: { x: 5, y: 5 } })
+    await page.keyboard.press('Meta+k')
+    await page.waitForSelector('[cmdk-input]', { timeout: 5000 })
+  }
+  const fruitItems = (page: import('@playwright/test').Page) =>
+    page.locator('[cmdk-item]').filter({ hasText: /^Fruit-/ })
+
+  test('lists registry actions and async endpoint results', async ({ page }) => {
+    await openPalette(page)
+    await expect(page.locator('[cmdk-item]', { hasText: 'Increment' })).toHaveCount(1)
+    await expect(page.locator('[cmdk-group-heading]', { hasText: 'Fruits' })).toBeVisible()
+    await expect(fruitItems(page).first()).toBeVisible()
+  })
+
+  test('filtering narrows via endpoint refetch + rank', async ({ page }) => {
+    await openPalette(page)
+    await page.locator('[cmdk-input]').fill('Fruit-07')
+    await expect(fruitItems(page)).toHaveText(['Fruit-07'])
+  })
+
+  test('ParamEntry: a placeholder action prompts for a value, then executes', async ({ page }) => {
+    await openPalette(page)
+    // Filter to the placeholder action and select it via keyboard (cmdk items
+    // re-render, so a Playwright .click() races; Enter on the highlighted item
+    // is the intended interaction).
+    await page.locator('[cmdk-input]').fill('Set counter to N')
+    await expect(page.locator('[cmdk-item]')).toHaveText([/Set counter to N/])
+    await page.keyboard.press('Enter')
+    const param = page.locator('.kbd-omnibar-param-input')
+    await expect(param).toBeVisible()
+    await param.fill('42')
+    await param.press('Enter')
+    await expect(page.getByTestId('count')).toHaveText('42')
+    // palette closed
+    await expect(page.locator('[cmdk-input]')).toHaveCount(0)
+  })
+
+  test('endpoint pagination loads more on scroll', async ({ page }) => {
+    await openPalette(page)
+    await expect(fruitItems(page)).toHaveCount(8)
+    const list = page.locator('.kbd-omnibar-list')
+    await list.evaluate(el => { el.scrollTop = el.scrollHeight })
+    await expect(fruitItems(page)).toHaveCount(16)
+    await list.evaluate(el => { el.scrollTop = el.scrollHeight })
+    await expect(fruitItems(page)).toHaveCount(24)
+  })
+
+  test('recents appear in their own group when the query is empty', async ({ page }) => {
+    await openPalette(page)
+    // Filter to Increment and execute via Enter (see ParamEntry test re: clicks).
+    await page.locator('[cmdk-input]').fill('Increment')
+    // Item text includes the binding chip ("Increment" + "+"), so anchor a regex.
+    await expect(page.locator('[cmdk-item]')).toHaveText([/^Increment/])
+    await page.keyboard.press('Enter')
+    await expect(page.getByTestId('count')).toHaveText('1')
+    await openPalette(page)
+    const recentGroup = page.locator('[cmdk-group]').filter({
+      has: page.locator('[cmdk-group-heading]', { hasText: 'Recent' }),
+    })
+    await expect(recentGroup.locator('[cmdk-item]')).toHaveText([/^Increment/])
+  })
+})
