@@ -831,6 +831,11 @@ export function getSequenceCompletions(
   pendingKeys: HotkeySequence,
   keymap: Record<string, string | string[]>,
   actionRegistry?: ActionRegistry,
+  /**
+   * Live enabled check (e.g. the registry's `isActionEnabled`). Preferred over
+   * `actionRegistry[id].enabled`, which is only the registration-time value.
+   */
+  isEnabled?: (id: string) => boolean,
 ): SequenceCompletion[] {
   if (pendingKeys.length === 0) return []
 
@@ -931,10 +936,12 @@ export function getSequenceCompletions(
 
     const allActions = Array.isArray(actionOrActions) ? actionOrActions : [actionOrActions]
 
-    // Filter out disabled actions if registry is provided
-    const actions = actionRegistry
-      ? allActions.filter(id => actionRegistry[id]?.enabled !== false)
-      : allActions
+    // Filter out disabled actions: live check if given, else the registry snapshot
+    const actions = isEnabled
+      ? allActions.filter(id => isEnabled(id))
+      : actionRegistry
+        ? allActions.filter(id => actionRegistry[id]?.enabled !== false)
+        : allActions
 
     // Skip if no enabled actions remain
     if (actions.length === 0) continue
@@ -1167,6 +1174,11 @@ export function searchActions(
   query: string,
   actions: ActionRegistry,
   keymap?: Record<string, string | string[]>,
+  /**
+   * Live enabled check (e.g. the registry's `isActionEnabled`). Preferred over
+   * `action.enabled`, which is only the registration-time value.
+   */
+  isEnabled?: (id: string) => boolean,
 ): ActionSearchResult[] {
   const actionBindings = keymap ? getActionBindings(keymap) : new Map<string, string[]>()
   const results: ActionSearchResult[] = []
@@ -1176,7 +1188,7 @@ export function searchActions(
 
   for (const [id, action] of Object.entries(actions)) {
     // Skip disabled actions
-    if (action.enabled === false) continue
+    if (isEnabled ? !isEnabled(id) : action.enabled === false) continue
 
     const bindings = actionBindings.get(id) ?? []
     const hasPlaceholders = hasAnyPlaceholderBindings(bindings)

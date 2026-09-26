@@ -2962,6 +2962,68 @@ test.describe('Omnibar Infinite Scroll', () => {
   })
 })
 
+test.describe('Omnibar live enabled state', () => {
+  // `enabled` flips are tracked out-of-band (`setActionEnabled`, no registry
+  // version bump), so the omnibar must read live state, not the registration-
+  // time `actionRegistry[id].enabled` snapshot.
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.removeItem('use-kbd-demo-recents')
+    })
+    await page.goto('/many-actions?enabledProbe&n=5')
+    await page.waitForSelector('#demo', { timeout: 5000 })
+  })
+
+  const openOmnibar = async (page: import('@playwright/test').Page) => {
+    await page.locator('body').click({ position: { x: 5, y: 5 } })
+    await page.keyboard.press('Meta+k')
+    await page.waitForSelector('.kbd-omnibar-input', { timeout: 5000 })
+  }
+  const probeRow = (page: import('@playwright/test').Page) =>
+    page.locator('.kbd-omnibar-result-label').filter({ hasText: /^Flippable probe$/ })
+  const labels = (page: import('@playwright/test').Page) => page.locator('.kbd-omnibar-result-label')
+
+  test('omnibar reflects enabled flips made after registration', async ({ page }) => {
+    const flip = page.getByTestId('enabled-flip')
+
+    // Registered disabled: absent.
+    await openOmnibar(page)
+    await page.locator('.kbd-omnibar-input').fill('Flippable')
+    await expect(labels(page)).toHaveText([])
+    await page.keyboard.press('Escape')
+
+    // Flip on (re-render only): present on open (empty query) and when searched.
+    await flip.click()
+    await expect(flip).toHaveText('Flippable probe: enabled')
+    await openOmnibar(page)
+    await expect(probeRow(page)).toHaveCount(1)
+    await page.locator('.kbd-omnibar-input').fill('Flippable')
+    await expect(labels(page)).toHaveText(['Flippable probe'])
+    // Execute it, so it's also in recents for the next step.
+    await page.keyboard.press('Enter')
+    await expect(page.locator('.kbd-omnibar-input')).toHaveCount(0)
+
+    // Flip off: gone from the empty-query list (incl. recents) and from search.
+    await flip.click()
+    await expect(flip).toHaveText('Flippable probe: disabled')
+    await openOmnibar(page)
+    await expect(probeRow(page)).toHaveCount(0)
+    await page.locator('.kbd-omnibar-input').fill('Flippable')
+    await expect(labels(page)).toHaveText([])
+  })
+
+  test('reopening with an unchanged (empty) query re-reads enabled state', async ({ page }) => {
+    // No typing between opens, so `query` never changes — only reopening can
+    // trigger the recompute (the `refreshKey` path).
+    await openOmnibar(page)
+    await expect(probeRow(page)).toHaveCount(0)
+    await page.keyboard.press('Escape')
+    await page.getByTestId('enabled-flip').click()
+    await openOmnibar(page)
+    await expect(probeRow(page)).toHaveCount(1)
+  })
+})
+
 test.describe('Registration render isolation', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {

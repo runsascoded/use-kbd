@@ -17,3 +17,15 @@ Observed in jc-taxes (`www/src/useKeyboardShortcuts.ts`): "Previous year" / "Nex
 ## Tests
 
 - Register an action with `enabled: false`, then flip it to `true` via re-render (no re-registration); open the omnibar and search: the action appears. Reverse case: it disappears.
+
+## Implementation (done)
+
+- `searchActions(query, actions, keymap?, isEnabled?)` and `getSequenceCompletions(pending, keymap, actionRegistry?, isEnabled?)` take an optional live check; absent → the snapshot `enabled` check as before (standalone use unchanged).
+- `useOmnibar` gains two options:
+  - `isEnabled` — threaded into `searchActions` / `getSequenceCompletions`.
+  - `refreshKey` — local results recompute when it changes. `isActionEnabled` is ref-backed, so a flip alone never invalidates the results memo; if the query is unchanged between opens (e.g. empty → close → flip → reopen), only this forces the re-read. `<Omnibar>` passes its external open state (`isOpen` prop ?? `ctx.isOmnibarOpen`), `<OmnibarCmdk>` passes `ctx.isOmnibarOpen`. The internal `isOpen` is also a dep, for standalone `useOmnibar` users.
+- **Recents bug** (found while implementing): the empty-query recents branch in `useOmnibar` only checked `actions[id]` existed — it ignored `enabled` entirely, so a disabled recent action still showed. Now filtered the same way.
+- `HotkeysProvider`'s context `searchActions` / `getCompletions` pass `registry.isActionEnabled` (called imperatively, so live reads just work).
+- Kept `enabled` in the `ActionRegistry` snapshot (standalone callers pass their own `ActionDefinition`s), but `ActionDefinition.enabled`'s doc now says it's the *registration-time* value in a registry snapshot, pointing at `isActionEnabled` for live state.
+
+e2e (`/many-actions?enabledProbe`, an action registered disabled whose `enabled` flips via a button): "Omnibar live enabled state" — (1) flip on → present on open and in search; execute (→ recents); flip off → absent from the empty-query list incl. recents, and from search; (2) empty-query reopen with no typing re-reads state. TFFP: (1) failed pre-fix; (2) failed with `refreshKey` removed.

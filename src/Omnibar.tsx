@@ -281,6 +281,9 @@ export function Omnibar({
     maxResults,
     endpointsRegistry: ctx?.endpointsRegistry,
     recentActionIds: ctx?.recentActionIds,
+    isEnabled: ctx?.registry.isActionEnabled,
+    // Re-read live `enabled` state each time the (externally owned) omnibar opens
+    refreshKey: isOpenProp ?? ctx?.isOmnibarOpen,
   })
 
   // Use prop, then context, then internal state

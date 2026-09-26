@@ -477,14 +477,15 @@ export function HotkeysProvider({
 
   // Search helper
   const searchActionsHelper = useCallback(
-    (query: string) => searchActions(query, registry.actionRegistry, keymap),
-    [registry.actionRegistry, keymap]
+    (query: string) => searchActions(query, registry.actionRegistry, keymap, registry.isActionEnabled),
+    [registry.actionRegistry, registry.isActionEnabled, keymap]
   )
 
   // Completions helper
   const getCompletions = useCallback(
-    (pending: HotkeySequence) => getSequenceCompletions(pending, keymap, registry.actionRegistry),
-    [keymap, registry.actionRegistry]
+    (pending: HotkeySequence) =>
+      getSequenceCompletions(pending, keymap, registry.actionRegistry, registry.isActionEnabled),
+    [keymap, registry.actionRegistry, registry.isActionEnabled]
   )
 
   // Wrap execute to track recents + auto-activate mode for mode-scoped actions

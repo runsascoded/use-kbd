@@ -102,6 +102,26 @@ function KeystrokeProbe() {
   return null
 }
 
+/**
+ * An action registered disabled whose `enabled` then flips via re-render (no
+ * re-registration) — like jc-taxes' "Previous year" before the URL year
+ * resolves. The omnibar must reflect the live state. Gated behind `?enabledProbe`.
+ */
+function EnabledFlipProbe() {
+  const [on, setOn] = useState(false)
+  useAction('probe:flip', {
+    label: 'Flippable probe',
+    group: 'Probe',
+    enabled: on,
+    handler: () => {},
+  })
+  return (
+    <button data-testid="enabled-flip" onClick={() => setOn(v => !v)}>
+      Flippable probe: {on ? 'enabled' : 'disabled'}
+    </button>
+  )
+}
+
 const GROUPS = ['Navigation', 'Editing', 'View', 'Tools']
 
 export function ManyActionsDemo() {
@@ -109,6 +129,7 @@ export function ManyActionsDemo() {
   const count = Number(params.get('n') || '50')
   const showArrowConflict = params.has('arrowConflict')
   const showKeyProbe = params.has('keyProbe')
+  const showEnabledProbe = params.has('enabledProbe')
   const actions = Array.from({ length: count }, (_, i) => ({
     id: `test-action-${i}`,
     label: `Action ${i + 1}`,
@@ -123,6 +144,7 @@ export function ManyActionsDemo() {
       <DisplayProbe />
       {showArrowConflict && <ArrowGroupConflictProbe />}
       {showKeyProbe && <KeystrokeProbe />}
+      {showEnabledProbe && <EnabledFlipProbe />}
       {actions.map(a => <DummyAction key={a.id} {...a} />)}
       <ShortcutsModal />
       <KbdOmnibar />

@@ -78,6 +78,18 @@ export interface UseOmnibarOptions {
   debounceMs?: number
   /** Recently executed action IDs to show first when query is empty */
   recentActionIds?: string[]
+  /**
+   * Live enabled check (e.g. the registry's `isActionEnabled`). `enabled` is
+   * tracked out-of-band (toggling it doesn't bump the registry), so without this
+   * results use the registration-time `actions[id].enabled` snapshot.
+   */
+  isEnabled?: (id: string) => boolean
+  /**
+   * Local results recompute when this changes. Pass the omnibar's (externally
+   * owned) open state, so a live `isEnabled` is re-read each time it opens —
+   * `isEnabled` is ref-backed, so its changes don't otherwise trigger a recompute.
+   */
+  refreshKey?: unknown
 }
 
 export interface UseOmnibarResult {
@@ -201,6 +213,8 @@ export function useOmnibar(options: UseOmnibarOptions): UseOmnibarResult {
     endpointsRegistry,
     debounceMs = DEFAULT_DEBOUNCE_MS,
     recentActionIds = [],
+    isEnabled,
+    refreshKey,
   } = options
 
   const [isOpen, setIsOpen] = useState(false)
@@ -253,20 +267,21 @@ export function useOmnibar(options: UseOmnibarOptions): UseOmnibarResult {
 
   // Search results (local actions)
   const results = useMemo(() => {
-    const allResults = searchActions(query, actions, keymap)
+    const allResults = searchActions(query, actions, keymap, isEnabled)
 
     // When query is empty, show recent actions first
     if (!query.trim() && recentActionIds.length > 0) {
       // Build a map of action -> bindings for lookup
       const actionBindings = getActionBindings(keymap)
 
-      // Build results for recent actions that still exist
+      // Build results for recent actions that still exist and are enabled
       const recentResults: ActionSearchResult[] = []
       const recentIdSet = new Set<string>()
 
       for (const actionId of recentActionIds) {
         const action = actions[actionId]
-        if (action) {
+        const actionEnabled = isEnabled ? isEnabled(actionId) : action?.enabled !== false
+        if (action && actionEnabled) {
           const bindings = actionBindings.get(actionId) ?? []
           const hasPlaceholders = hasAnyPlaceholderBindings(bindings)
           recentResults.push({
@@ -289,7 +304,10 @@ export function useOmnibar(options: UseOmnibarOptions): UseOmnibarResult {
     }
 
     return maxResults != null ? allResults.slice(0, maxResults) : allResults
-  }, [query, actions, keymap, maxResults, recentActionIds])
+    // `isOpen` / `refreshKey` aren't read: they're recompute triggers, so a
+    // ref-backed `isEnabled` is re-read when the omnibar opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, actions, keymap, maxResults, recentActionIds, isEnabled, isOpen, refreshKey])
 
   // Query endpoints - sync immediately, async debounced
   useEffect(() => {
@@ -576,8 +594,8 @@ export function useOmnibar(options: UseOmnibarOptions): UseOmnibarResult {
 
   // Sequence completions (based on pending keys from main hotkey handler, not omnibar)
   const completions = useMemo(() => {
-    return getSequenceCompletions(pendingKeys, keymap, actions)
-  }, [pendingKeys, keymap, actions])
+    return getSequenceCompletions(pendingKeys, keymap, actions, isEnabled)
+  }, [pendingKeys, keymap, actions, isEnabled])
 
   // Reset selection when results change
   useEffect(() => {

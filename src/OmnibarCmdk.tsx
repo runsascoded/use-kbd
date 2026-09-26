@@ -82,6 +82,9 @@ export function OmnibarCmdk({
     onExecuteRemote: handleExecuteRemote,
     endpointsRegistry: ctx?.endpointsRegistry,
     recentActionIds: ctx?.recentActionIds,
+    isEnabled: ctx?.registry.isActionEnabled,
+    // Re-read live `enabled` state each time the modal opens
+    refreshKey: ctx?.isOmnibarOpen,
   })
 
   // Parameter entry (an action that needs a captured numeric arg).

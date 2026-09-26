@@ -162,7 +162,12 @@ export interface ActionDefinition {
   keywords?: string[]
   /** Icon identifier (user provides rendering) */
   icon?: string
-  /** Whether the action is currently enabled (default: true) */
+  /**
+   * Whether the action is enabled (default: true). In a registry's
+   * `actionRegistry` snapshot this is only the *registration-time* value —
+   * later `enabled` changes are tracked out-of-band (no re-register), so read
+   * live state via the registry's `isActionEnabled`.
+   */
   enabled?: boolean
   /** Hide from ShortcutsModal (still searchable in omnibar) */
   hideFromModal?: boolean
