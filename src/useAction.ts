@@ -1,6 +1,6 @@
 import { useContext, useEffect, useRef } from 'react'
 import { ActionsRegistryApiContext } from './ActionsRegistry'
-import type { Direction } from './types'
+import type { ActionPairMeta, ActionTripletMeta, Direction } from './types'
 
 /**
  * Handler function for actions.
@@ -45,10 +45,10 @@ export interface ActionConfig {
   protected?: boolean
   /** Arrow group metadata (set by useArrowGroup) */
   arrowGroup?: { groupId: string; direction: Direction }
-  /** Action pair metadata (set by useActionPair) */
-  actionPair?: { pairId: string; index: 0 | 1 }
-  /** Action triplet metadata (set by useActionTriplet) */
-  actionTriplet?: { tripletId: string; index: 0 | 1 | 2 }
+  /** Action pair metadata (set by useActionPair, or pass manually) */
+  actionPair?: ActionPairMeta
+  /** Action triplet metadata (set by useActionTriplet, or pass manually) */
+  actionTriplet?: ActionTripletMeta
   /** Sort order within group in ShortcutsModal (default: 0, lower = earlier; registration order breaks ties) */
   sortOrder?: number
 }

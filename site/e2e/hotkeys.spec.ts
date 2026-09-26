@@ -3024,6 +3024,56 @@ test.describe('Omnibar live enabled state', () => {
   })
 })
 
+test.describe('Action pair / triplet entry labels', () => {
+  // Members of a pair/triplet carry their own labels ("Previous year"), while the
+  // group label ("Previous / Next year") labels the collapsed ShortcutsModal row.
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/many-actions?pairProbe&n=5')
+    await page.waitForSelector('#demo', { timeout: 5000 })
+  })
+
+  const searchLabels = async (page: import('@playwright/test').Page, query: string) => {
+    await page.locator('body').click({ position: { x: 5, y: 5 } })
+    await page.keyboard.press('Meta+k')
+    await page.waitForSelector('.kbd-omnibar-input', { timeout: 5000 })
+    await page.locator('.kbd-omnibar-input').fill(query)
+    // Ranking order is a scoring detail; compare the sorted set of labels.
+    return () => page.locator('.kbd-omnibar-result-label').allTextContents().then(ls => ls.sort())
+  }
+
+  test('ShortcutsModal collapses each group into one row with the group label', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 5, y: 5 } })
+    await page.keyboard.press('?')
+    await page.waitForSelector('.kbd-modal', { timeout: 5000 })
+    const modal = page.locator('.kbd-modal')
+    await expect(modal.locator('[data-action-pair="probe:year"] .kbd-action-label')).toHaveText('Previous / Next year')
+    await expect(modal.locator('[data-action-triplet="probe:quality"] .kbd-action-label')).toHaveText('Low / Mid / High quality')
+    // Manual `useAction` registrations passing `actionPair.label`
+    await expect(modal.locator('[data-action-pair="probe:size"] .kbd-action-label')).toHaveText('Shrink / Grow')
+  })
+
+  test('omnibar lists members by their own labels', async ({ page }) => {
+    const labels = await searchLabels(page, 'year')
+    await expect.poll(labels).toEqual(['Next year', 'Previous year'])
+  })
+
+  test('omnibar lists triplet members by their own labels', async ({ page }) => {
+    const labels = await searchLabels(page, 'quality')
+    await expect.poll(labels).toEqual(['High quality', 'Low quality', 'Mid quality'])
+  })
+
+  test('searching the group label finds every member', async ({ page }) => {
+    // "Previous / Next" appears in neither member label — only the group label.
+    const labels = await searchLabels(page, 'Previous / Next')
+    await expect.poll(labels).toEqual(['Next year', 'Previous year'])
+  })
+
+  test('manual `actionPair.label`: members keep their labels, group label is searchable', async ({ page }) => {
+    const labels = await searchLabels(page, 'Shrink / Grow')
+    await expect.poll(labels).toEqual(['Grow', 'Shrink'])
+  })
+})
+
 test.describe('Registration render isolation', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {

@@ -3,6 +3,12 @@ import type { ActionConfig, ActionHandler } from './useAction'
 import { useActions } from './useAction'
 
 export interface ActionTripletEntry {
+  /**
+   * This member's own label, shown in the omnibar (e.g. "Slice along X").
+   * Absent → `` `${triplet.label} a|b|c` ``. The triplet's `label` labels the
+   * ShortcutsModal row.
+   */
+  label?: string
   defaultBindings?: string[]
   handler: ActionHandler
   keywords?: string[]
@@ -57,7 +63,7 @@ export function useActionTriplet(id: string, config: ActionTripletConfig): void 
     const result: Record<string, ActionConfig> = {}
 
     const makeConfig = (entry: ActionTripletEntry, index: 0 | 1 | 2): ActionConfig => ({
-      label: `${label} ${SUFFIXES[index]}`,
+      label: entry.label ?? `${label} ${SUFFIXES[index]}`,
       group,
       mode,
       description,
@@ -68,7 +74,7 @@ export function useActionTriplet(id: string, config: ActionTripletConfig): void 
       ],
       handler: entry.handler,
       enabled: entry.enabled ?? enabled,
-      actionTriplet: { tripletId: id, index },
+      actionTriplet: { tripletId: id, index, label },
     })
 
     result[`${id}-a`] = makeConfig(actionA, 0)
@@ -83,6 +89,9 @@ export function useActionTriplet(id: string, config: ActionTripletConfig): void 
     mode,
     description,
     JSON.stringify(keywords),
+    actionA.label,
+    actionB.label,
+    actionC.label,
     JSON.stringify(actionA.defaultBindings),
     JSON.stringify(actionA.keywords),
     actionA.enabled,

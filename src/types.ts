@@ -146,6 +146,27 @@ export interface RecordHotkeyOptions {
   pauseTimeout?: boolean
 }
 
+/** Membership of an action in a pair (two inverse actions, one ShortcutsModal row) */
+export interface ActionPairMeta {
+  pairId: string
+  index: 0 | 1
+  /**
+   * The pair's collapsed-row label in ShortcutsModal (e.g. "Previous / Next
+   * year"); also searchable in the omnibar. The member's own `label` is what the
+   * omnibar shows. Absent → ShortcutsModal strips an " a" / " b" suffix from the
+   * first member's label.
+   */
+  label?: string
+}
+
+/** Membership of an action in a triplet (three related actions, one ShortcutsModal row) */
+export interface ActionTripletMeta {
+  tripletId: string
+  index: 0 | 1 | 2
+  /** The triplet's collapsed-row label; see `ActionPairMeta.label`. */
+  label?: string
+}
+
 /**
  * Definition of an action that can be triggered by hotkeys or omnibar
  */
@@ -176,9 +197,9 @@ export interface ActionDefinition {
   /** Arrow group metadata (set by useArrowGroup) */
   arrowGroup?: { groupId: string; direction: Direction }
   /** Action pair metadata (set by useActionPair) */
-  actionPair?: { pairId: string; index: 0 | 1 }
+  actionPair?: ActionPairMeta
   /** Action triplet metadata (set by useActionTriplet) */
-  actionTriplet?: { tripletId: string; index: 0 | 1 | 2 }
+  actionTriplet?: ActionTripletMeta
   /** Sort order within group in ShortcutsModal (default: 0, lower = earlier; registration order breaks ties) */
   sortOrder?: number
 }

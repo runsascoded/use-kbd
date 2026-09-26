@@ -532,8 +532,9 @@ function organizeShortcuts(
           return ai - bi
         })
 
-        // Strip " a" / " b" suffix from label
-        const label = entries[0].label.replace(/\s+[ab]$/i, '')
+        // Pair label if given, else strip the default " a" / " b" member suffix
+        const label = actionRegistry[entries[0].actionId]!.actionPair!.label
+          ?? entries[0].label.replace(/\s+[ab]$/i, '')
 
         toInsertPair.push({
           type: 'actionPair',
@@ -593,8 +594,9 @@ function organizeShortcuts(
           return ai - bi
         })
 
-        // Strip " a" / " b" / " c" suffix from label
-        const label = entries[0].label.replace(/\s+[abc]$/i, '')
+        // Triplet label if given, else strip the default " a" / " b" / " c" member suffix
+        const label = actionRegistry[entries[0].actionId]!.actionTriplet!.label
+          ?? entries[0].label.replace(/\s+[abc]$/i, '')
 
         toInsertTriplet.push({
           type: 'actionTriplet',

@@ -3,6 +3,11 @@ import type { ActionConfig, ActionHandler } from './useAction'
 import { useActions } from './useAction'
 
 export interface ActionPairEntry {
+  /**
+   * This member's own label, shown in the omnibar (e.g. "Next year"). Absent →
+   * `` `${pair.label} a|b` ``. The pair's `label` labels the ShortcutsModal row.
+   */
+  label?: string
   defaultBindings?: string[]
   handler: ActionHandler
   keywords?: string[]
@@ -54,7 +59,7 @@ export function useActionPair(id: string, config: ActionPairConfig): void {
     const result: Record<string, ActionConfig> = {}
 
     const makeConfig = (entry: ActionPairEntry, index: 0 | 1): ActionConfig => ({
-      label: `${label} ${index === 0 ? 'a' : 'b'}`,
+      label: entry.label ?? `${label} ${index === 0 ? 'a' : 'b'}`,
       group,
       mode,
       description,
@@ -65,7 +70,7 @@ export function useActionPair(id: string, config: ActionPairConfig): void {
       ],
       handler: entry.handler,
       enabled: entry.enabled ?? enabled,
-      actionPair: { pairId: id, index },
+      actionPair: { pairId: id, index, label },
     })
 
     result[`${id}-a`] = makeConfig(actionA, 0)
@@ -79,6 +84,8 @@ export function useActionPair(id: string, config: ActionPairConfig): void {
     mode,
     description,
     JSON.stringify(keywords),
+    actionA.label,
+    actionB.label,
     JSON.stringify(actionA.defaultBindings),
     JSON.stringify(actionA.keywords),
     actionA.enabled,

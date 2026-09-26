@@ -8,7 +8,7 @@
  * registrant (a registry version bump). Existing registrants must not re-render.
  */
 import { useEffect, useState } from 'react'
-import { KbdOmnibar, ShortcutsModal, useAction, useArrowGroup, useHotkeysContext } from 'use-kbd'
+import { KbdOmnibar, ShortcutsModal, useAction, useActionPair, useActionTriplet, useArrowGroup, useHotkeysContext } from 'use-kbd'
 
 declare global {
   interface Window {
@@ -122,6 +122,47 @@ function EnabledFlipProbe() {
   )
 }
 
+/**
+ * Pairs / triplets whose members have their own labels: ShortcutsModal shows
+ * one collapsed row with the group label; the omnibar shows each member's own
+ * label (not "Previous / Next year b"). Gated behind `?pairProbe`.
+ */
+function PairLabelsProbe() {
+  useActionPair('probe:year', {
+    label: 'Previous / Next year',
+    group: 'Probe',
+    actions: [
+      { label: 'Previous year', defaultBindings: ['['], handler: () => {} },
+      { label: 'Next year', defaultBindings: [']'], handler: () => {} },
+    ],
+  })
+  useActionTriplet('probe:quality', {
+    label: 'Low / Mid / High quality',
+    group: 'Probe',
+    actions: [
+      { label: 'Low quality', defaultBindings: ['alt+1'], handler: () => {} },
+      { label: 'Mid quality', defaultBindings: ['alt+2'], handler: () => {} },
+      { label: 'High quality', defaultBindings: ['alt+3'], handler: () => {} },
+    ],
+  })
+  // Manual registration of a pair, passing the group label via `actionPair`
+  useAction('probe:size-a', {
+    label: 'Shrink',
+    group: 'Probe',
+    defaultBindings: ['alt+-'],
+    handler: () => {},
+    actionPair: { pairId: 'probe:size', index: 0, label: 'Shrink / Grow' },
+  })
+  useAction('probe:size-b', {
+    label: 'Grow',
+    group: 'Probe',
+    defaultBindings: ['alt+='],
+    handler: () => {},
+    actionPair: { pairId: 'probe:size', index: 1, label: 'Shrink / Grow' },
+  })
+  return null
+}
+
 const GROUPS = ['Navigation', 'Editing', 'View', 'Tools']
 
 export function ManyActionsDemo() {
@@ -130,6 +171,7 @@ export function ManyActionsDemo() {
   const showArrowConflict = params.has('arrowConflict')
   const showKeyProbe = params.has('keyProbe')
   const showEnabledProbe = params.has('enabledProbe')
+  const showPairProbe = params.has('pairProbe')
   const actions = Array.from({ length: count }, (_, i) => ({
     id: `test-action-${i}`,
     label: `Action ${i + 1}`,
@@ -145,6 +187,7 @@ export function ManyActionsDemo() {
       {showArrowConflict && <ArrowGroupConflictProbe />}
       {showKeyProbe && <KeystrokeProbe />}
       {showEnabledProbe && <EnabledFlipProbe />}
+      {showPairProbe && <PairLabelsProbe />}
       {actions.map(a => <DummyAction key={a.id} {...a} />)}
       <ShortcutsModal />
       <KbdOmnibar />

@@ -1,8 +1,10 @@
 // Types
 export type {
   ActionDefinition,
+  ActionPairMeta,
   ActionRegistry,
   ActionSearchResult,
+  ActionTripletMeta,
   BindingsExport,
   EndpointPagination,
   EndpointPaginationMode,

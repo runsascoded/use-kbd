@@ -1207,10 +1207,13 @@ export function searchActions(
     const groupMatch = action.group ? fuzzyMatch(effectiveQuery, action.group) : { matched: false, score: 0, ranges: [] }
     const idMatch = fuzzyMatch(effectiveQuery, id)
 
-    // Check keywords
+    // Check keywords (a pair/triplet's group label counts as one, so searching
+    // "Previous / Next year" finds each member)
     let keywordScore = 0
-    if (action.keywords) {
-      for (const keyword of action.keywords) {
+    const groupLabel = action.actionPair?.label ?? action.actionTriplet?.label
+    const keywords = groupLabel ? [...(action.keywords ?? []), groupLabel] : action.keywords
+    if (keywords) {
+      for (const keyword of keywords) {
         const kwMatch = fuzzyMatch(effectiveQuery, keyword)
         if (kwMatch.matched) {
           keywordScore = max(keywordScore, kwMatch.score)
