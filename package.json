@@ -1,6 +1,6 @@
 {
   "name": "use-kbd",
-  "version": "0.13.0-dist.ef820a1",
+  "version": "0.13.0-dist.c9dfd8e",
   "description": "Omnibars, editable hotkeys, search, and keyboard-navigation for React apps",
   "type": "module",
   "main": "./index.cjs",
@@ -34,10 +34,8 @@
     "url": "https://github.com/runsascoded/use-kbd"
   },
   "peerDependencies": {
+    "cmdk": ">=1.0.0",
     "react": ">=18.0.0",
     "react-dom": ">=18.0.0"
-  },
-  "dependencies": {
-    "debug": "^4.4.3"
   }
 }

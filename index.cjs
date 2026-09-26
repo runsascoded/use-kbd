@@ -2,6 +2,7 @@
 
 var jsxRuntime = require('react/jsx-runtime');
 var react = require('react');
+var cmdk = require('cmdk');
 
 // src/types.ts
 function extractCaptures(state) {
@@ -5583,6 +5584,168 @@ function Omnibar({
     ] }) })
   ] }) });
 }
+function OmnibarToggleAction({ defaultBinding }) {
+  const ctx = useMaybeHotkeysContext();
+  useAction(ACTION_OMNIBAR, {
+    label: "Command palette",
+    group: ctx?.builtinGroup ?? DEFAULT_BUILTIN_GROUP,
+    sortOrder: 1,
+    defaultBindings: defaultBinding ? [defaultBinding] : [],
+    handler: react.useCallback(() => ctx?.toggleOmnibar(), [ctx])
+  });
+  return null;
+}
+function OmnibarCmdk({
+  defaultBinding = "meta+k",
+  inline = false,
+  placeholder = "Type a command\u2026"
+}) {
+  const ctx = useMaybeHotkeysContext();
+  const actions = ctx?.registry.actionRegistry ?? {};
+  const keymap = ctx?.registry.keymap ?? {};
+  const handleExecuteRemote = react.useCallback((entry) => {
+    if ("href" in entry && entry.href) window.location.href = entry.href;
+  }, []);
+  const {
+    query,
+    setQuery,
+    results,
+    remoteResults,
+    execute,
+    isLoadingRemote,
+    endpointPagination,
+    loadMore,
+    pendingParamAction,
+    submitParam,
+    cancelParam
+  } = useOmnibar({
+    actions,
+    keymap,
+    openKey: "",
+    // trigger handled via useAction above
+    enabled: false,
+    onClose: () => ctx?.closeOmnibar(),
+    onExecute: (id, captures) => ctx?.executeAction(id, captures),
+    onExecuteRemote: handleExecuteRemote,
+    endpointsRegistry: ctx?.endpointsRegistry,
+    recentActionIds: ctx?.recentActionIds
+  });
+  const paramEntry = useParamEntry({
+    onSubmit: (_actionId, captures) => submitParam(captures[0]),
+    onCancel: cancelParam
+  });
+  react.useEffect(() => {
+    if (pendingParamAction) {
+      const label = results.find((r) => r.id === pendingParamAction)?.action.label ?? pendingParamAction;
+      paramEntry.startParamEntry({ id: pendingParamAction, label });
+    }
+  }, [pendingParamAction]);
+  const isOpen = ctx?.isOmnibarOpen ?? false;
+  const recentIds = ctx?.recentActionIds;
+  const { recentResults, actionResults } = react.useMemo(() => {
+    if (query !== "" || !recentIds?.length) return { recentResults: [], actionResults: results };
+    const recentSet = new Set(recentIds);
+    return {
+      recentResults: results.filter((r) => recentSet.has(r.id)),
+      actionResults: results.filter((r) => !recentSet.has(r.id))
+    };
+  }, [query, results, recentIds]);
+  const remoteGroups = react.useMemo(() => {
+    const byGroup = /* @__PURE__ */ new Map();
+    for (const r of remoteResults) {
+      const g = r.entry.group ?? r.endpointId;
+      const bucket = byGroup.get(g) ?? { endpointId: r.endpointId, items: [] };
+      bucket.items.push(r);
+      byGroup.set(g, bucket);
+    }
+    return byGroup;
+  }, [remoteResults]);
+  const onListScroll = react.useCallback((e) => {
+    const el = e.currentTarget;
+    if (el.scrollTop + el.clientHeight < el.scrollHeight - 120) return;
+    for (const [id, info] of endpointPagination) {
+      if (info.mode === "scroll" && info.hasMore && !info.isLoading) loadMore(id);
+    }
+  }, [endpointPagination, loadMore]);
+  const inParamEntry = pendingParamAction != null;
+  const body = /* @__PURE__ */ jsxRuntime.jsxs(
+    cmdk.Command,
+    {
+      shouldFilter: false,
+      loop: true,
+      onKeyDown: (e) => {
+        if (e.key === "Escape" && !inParamEntry && !inline) {
+          e.preventDefault();
+          ctx?.closeOmnibar();
+        }
+      },
+      children: [
+        /* @__PURE__ */ jsxRuntime.jsx("div", { className: "kbd-omnibar-header", children: inParamEntry ? /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "kbd-omnibar-param-entry", children: [
+          /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-omnibar-param-label", children: paramEntry.pendingAction?.label ?? pendingParamAction }),
+          /* @__PURE__ */ jsxRuntime.jsx(
+            "input",
+            {
+              ref: paramEntry.paramInputRef,
+              type: "text",
+              inputMode: "decimal",
+              pattern: "[0-9.]*",
+              className: "kbd-omnibar-param-input",
+              value: paramEntry.paramValue,
+              onChange: (e) => paramEntry.setParamValue(e.target.value),
+              onKeyDown: paramEntry.handleParamKeyDown,
+              placeholder: "Enter value\u2026",
+              autoComplete: "off",
+              autoCorrect: "off",
+              autoCapitalize: "off",
+              spellCheck: false
+            }
+          ),
+          /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-omnibar-param-hint", children: "\u21B5 to confirm \xB7 Esc to cancel" })
+        ] }) : /* @__PURE__ */ jsxRuntime.jsx(
+          cmdk.Command.Input,
+          {
+            autoFocus: !inline,
+            className: "kbd-omnibar-input",
+            placeholder,
+            value: query,
+            onValueChange: setQuery
+          }
+        ) }),
+        /* @__PURE__ */ jsxRuntime.jsxs(
+          cmdk.Command.List,
+          {
+            className: "kbd-omnibar-list",
+            hidden: inParamEntry,
+            onScroll: onListScroll,
+            children: [
+              /* @__PURE__ */ jsxRuntime.jsx(cmdk.Command.Empty, { className: "kbd-omnibar-empty", children: isLoadingRemote ? "Searching\u2026" : "No results." }),
+              recentResults.length > 0 && /* @__PURE__ */ jsxRuntime.jsx(cmdk.Command.Group, { heading: "Recent", className: "kbd-omnibar-group", children: recentResults.map((r) => /* @__PURE__ */ jsxRuntime.jsxs(cmdk.Command.Item, { value: r.id, className: "kbd-omnibar-result", onSelect: () => execute(r.id, r.captures), children: [
+                /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-omnibar-result-label", children: r.action.label }),
+                r.bindings[0] && /* @__PURE__ */ jsxRuntime.jsx("kbd", { className: "kbd-omnibar-binding", children: r.bindings[0] })
+              ] }, r.id)) }),
+              actionResults.length > 0 && /* @__PURE__ */ jsxRuntime.jsx(cmdk.Command.Group, { heading: "Actions", className: "kbd-omnibar-group", children: actionResults.map((r) => /* @__PURE__ */ jsxRuntime.jsxs(cmdk.Command.Item, { value: r.id, className: "kbd-omnibar-result", onSelect: () => execute(r.id, r.captures), children: [
+                /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-omnibar-result-label", children: r.action.label }),
+                r.bindings[0] && /* @__PURE__ */ jsxRuntime.jsx("kbd", { className: "kbd-omnibar-binding", children: r.bindings[0] })
+              ] }, r.id)) }),
+              Array.from(remoteGroups.entries()).map(([group, { items }]) => /* @__PURE__ */ jsxRuntime.jsx(cmdk.Command.Group, { heading: group, className: "kbd-omnibar-group", children: items.map((r) => /* @__PURE__ */ jsxRuntime.jsxs(cmdk.Command.Item, { value: r.id, className: "kbd-omnibar-result", onSelect: () => execute(r.id), children: [
+                /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-omnibar-result-label", children: r.entry.label }),
+                r.entry.description && /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-omnibar-result-description", children: r.entry.description })
+              ] }, r.id)) }, group)),
+              isLoadingRemote && /* @__PURE__ */ jsxRuntime.jsx("div", { className: "kbd-omnibar-loading", "aria-hidden": true, children: "Loading\u2026" })
+            ]
+          }
+        )
+      ]
+    }
+  );
+  if (inline) {
+    return /* @__PURE__ */ jsxRuntime.jsx("div", { className: "kbd-omnibar kbd-omnibar-inline", children: body });
+  }
+  return /* @__PURE__ */ jsxRuntime.jsxs(jsxRuntime.Fragment, { children: [
+    /* @__PURE__ */ jsxRuntime.jsx(OmnibarToggleAction, { defaultBinding }),
+    isOpen && /* @__PURE__ */ jsxRuntime.jsx("div", { className: "kbd-omnibar-backdrop", onClick: () => ctx?.closeOmnibar(), children: /* @__PURE__ */ jsxRuntime.jsx("div", { className: "kbd-omnibar", role: "dialog", "aria-modal": "true", onClick: (e) => e.stopPropagation(), children: body }) })
+  ] });
+}
 function SequenceModal() {
   const {
     getCompletions,
@@ -7374,6 +7537,7 @@ exports.ModeIndicator = ModeIndicator;
 exports.ModesRegistryContext = ModesRegistryContext;
 exports.ModifierIcon = ModifierIcon;
 exports.Omnibar = Omnibar;
+exports.OmnibarCmdk = OmnibarCmdk;
 exports.OmnibarEndpointsRegistryContext = OmnibarEndpointsRegistryContext;
 exports.Option = Option;
 exports.Right = Right;

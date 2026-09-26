@@ -570,6 +570,13 @@
   overflow: hidden;
 }
 
+/* Inline (non-modal) variant: an in-flow, always-visible search box. No
+   backdrop to separate it from the page, so it carries its own border. */
+.kbd-omnibar-inline {
+  border: 1px solid var(--kbd-border);
+  box-shadow: none;
+}
+
 .kbd-omnibar-header {
   display: flex;
   align-items: center;
@@ -766,6 +773,44 @@
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 150px;
+}
+
+/* === cmdk-backed omnibar (<OmnibarCmdk />) ===
+   cmdk owns the list/selection DOM (`[cmdk-list]`, `[cmdk-item]`,
+   `[cmdk-group-heading]`, `[cmdk-empty]`) and marks the active row with
+   `aria-selected` rather than a `.selected` class — map those onto the same
+   look as the hand-rolled `<Omnibar />`. */
+.kbd-omnibar-list {
+  max-height: var(--kbd-omnibar-max-height);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.kbd-omnibar [cmdk-group-heading] {
+  padding: 8px var(--kbd-padding) 2px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--kbd-text-secondary);
+}
+
+/* Transparent border always present so selection colors it without a shift. */
+.kbd-omnibar [cmdk-item] {
+  border-left: 3px solid transparent;
+  padding-left: calc(var(--kbd-padding) - 3px);
+}
+
+.kbd-omnibar [cmdk-item][aria-selected="true"] {
+  background-color: var(--kbd-bg-secondary);
+  border-left-color: var(--kbd-accent);
+}
+
+.kbd-omnibar [cmdk-empty] {
+  padding: var(--kbd-padding);
+  text-align: center;
+  color: var(--kbd-text-secondary);
+  font-size: 0.875rem;
 }
 
 /* === Sequence Modal === */
