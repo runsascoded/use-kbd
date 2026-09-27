@@ -8,6 +8,7 @@ export type {
   BindingsExport,
   EndpointPagination,
   EndpointPaginationMode,
+  EndpointSortMode,
   EndpointResponse,
   HotkeySequence,
   KeyCombination,

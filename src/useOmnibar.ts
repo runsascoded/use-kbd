@@ -506,11 +506,14 @@ export function useOmnibar(options: UseOmnibarOptions): UseOmnibarResult {
     }
   }, [endpointsRegistry, endpointStates])
 
-  // Compute flattened remote results from endpoint states
+  // Compute flattened remote results from endpoint states. Each endpoint's
+  // entries form one contiguous block: rows render grouped by endpoint, and
+  // keyboard selection indexes this flat list, so the two orders must agree
+  // (no interleaving of same-priority endpoints by score).
   const remoteResults = useMemo(() => {
     if (!endpointsRegistry) return []
 
-    const processed: RemoteOmnibarResult[] = []
+    const blocks: Array<{ priority: number; best: number; results: RemoteOmnibarResult[] }> = []
 
     for (const [endpointId, state] of endpointStates) {
       // Skip entries for endpoints that no longer exist (were unregistered)
@@ -518,6 +521,7 @@ export function useOmnibar(options: UseOmnibarOptions): UseOmnibarResult {
       if (!endpoint) continue
 
       const priority = endpoint.config.priority ?? 0
+      const processed: RemoteOmnibarResult[] = []
 
       for (const entry of state.entries) {
         // Score the entry against the query
@@ -550,15 +554,19 @@ export function useOmnibar(options: UseOmnibarOptions): UseOmnibarResult {
           labelMatches,
         })
       }
+      if (processed.length === 0) continue
+
+      // Within an endpoint: fuzzy score (desc, stable), unless it keeps its own order
+      if (endpoint.config.sort !== 'none') {
+        processed.sort((a, b) => b.score - a.score)
+      }
+      const best = processed.reduce((m, r) => Math.max(m, r.score), 0)
+      blocks.push({ priority, best, results: processed })
     }
 
-    // Sort by priority (desc) then score (desc)
-    processed.sort((a, b) => {
-      if (a.priority !== b.priority) return b.priority - a.priority
-      return b.score - a.score
-    })
-
-    return processed
+    // Endpoints: priority (desc), then best match (desc); ties keep registration order
+    blocks.sort((a, b) => b.priority - a.priority || b.best - a.best)
+    return blocks.flatMap(b => b.results)
   }, [endpointStates, endpointsRegistry, query])
 
   // Compute isLoadingRemote

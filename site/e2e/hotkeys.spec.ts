@@ -3074,6 +3074,60 @@ test.describe('Action pair / triplet entry labels', () => {
   })
 })
 
+test.describe('Endpoint `sort` option', () => {
+  // Three sync endpoints return the same query-independent entries. "ROUTE 501"
+  // matches "kennedy" only via a keyword (×2), "Kennedy St" via its label (×3).
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/many-actions?sortProbe&n=5')
+    await page.waitForSelector('#demo', { timeout: 5000 })
+    await page.locator('body').click({ position: { x: 5, y: 5 } })
+    await page.keyboard.press('Meta+k')
+    await page.waitForSelector('.kbd-omnibar-input', { timeout: 5000 })
+    await page.locator('.kbd-omnibar-input').fill('kennedy')
+  })
+
+  // Endpoint result rows in display order, as [category, label]
+  const endpointRows = (page: import('@playwright/test').Page) => () =>
+    page.locator('.kbd-omnibar-result:has(.kbd-omnibar-result-category)').evaluateAll(els =>
+      els.map(el => [
+        el.querySelector('.kbd-omnibar-result-category')!.textContent,
+        el.querySelector('.kbd-omnibar-result-label')!.textContent,
+      ]))
+  const inGroup = (rows: (string | null)[][], group: string) =>
+    rows.filter(([g]) => g === group).map(([, label]) => label)
+
+  test("`sort: 'none'` keeps the endpoint's order, despite a better fuzzy score", async ({ page }) => {
+    await expect.poll(async () => inGroup(await endpointRows(page)(), 'Ranked')).toEqual(['ROUTE 501', 'Kennedy St'])
+  })
+
+  test('default endpoints still re-rank by fuzzy score', async ({ page }) => {
+    await expect.poll(async () => inGroup(await endpointRows(page)(), 'Scored')).toEqual(['Kennedy St', 'ROUTE 501'])
+  })
+
+  test('priority across endpoints is still respected', async ({ page }) => {
+    await expect.poll(async () => (await endpointRows(page)()).map(([g]) => g)).toEqual(
+      ['Top', 'Ranked', 'Ranked', 'Scored', 'Scored'],
+    )
+  })
+
+  test('Enter executes the highlighted endpoint row', async ({ page }) => {
+    // Rows render grouped by endpoint; selection must index that same order
+    // (not a score-interleaved flat list across same-priority endpoints).
+    await expect.poll(async () => (await endpointRows(page)()).length).toBe(5)
+    const selected = page.locator('.kbd-omnibar-result.selected')
+    for (let i = 0; i < 20; i++) {
+      const cat = await selected.locator('.kbd-omnibar-result-category').textContent().catch(() => null)
+      const label = await selected.locator('.kbd-omnibar-result-label').textContent()
+      if (cat === 'Scored' && label === 'Kennedy St') break
+      await page.keyboard.press('ArrowDown')
+    }
+    await expect(selected.locator('.kbd-omnibar-result-label')).toHaveText('Kennedy St')
+    await expect(selected.locator('.kbd-omnibar-result-category')).toHaveText('Scored')
+    await page.keyboard.press('Enter')
+    await expect(page.getByTestId('picked')).toHaveText('Scored: Kennedy St')
+  })
+})
+
 test.describe('Registration render isolation', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {

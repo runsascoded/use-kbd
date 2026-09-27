@@ -88,6 +88,7 @@ export function useOmnibarEndpoint(id: string, config: OmnibarEndpointConfig): v
       enabled: config.enabled,
       pageSize: config.pageSize,
       pagination: config.pagination,
+      sort: config.sort,
       isSync: isSyncRef.current, // Track sync endpoints to skip debouncing
       fetch: async (query, signal, pagination) => {
         if (!enabledRef.current) return { entries: [] }
@@ -112,6 +113,7 @@ export function useOmnibarEndpoint(id: string, config: OmnibarEndpointConfig): v
     config.minQueryLength,
     config.pageSize,
     config.pagination,
+    config.sort,
     // Note: we use refs for fetch/filter and enabled, so they don't cause re-registration
   ])
 }

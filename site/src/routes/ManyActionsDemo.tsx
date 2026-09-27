@@ -7,8 +7,8 @@
  * `window.__renders[id]`, and the "Register extra action" button mounts one more
  * registrant (a registry version bump). Existing registrants must not re-render.
  */
-import { useEffect, useState } from 'react'
-import { KbdOmnibar, ShortcutsModal, useAction, useActionPair, useActionTriplet, useArrowGroup, useHotkeysContext } from 'use-kbd'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { KbdOmnibar, ShortcutsModal, useAction, useActionPair, useActionTriplet, useArrowGroup, useHotkeysContext, useOmnibarEndpoint } from 'use-kbd'
 
 declare global {
   interface Window {
@@ -163,6 +163,42 @@ function PairLabelsProbe() {
   return null
 }
 
+/**
+ * Endpoints for the `sort` option, modelled on nj-crashes' road search: the
+ * server ranks "ROUTE 501" (alias "Kennedy Blvd", many crashes) above "Kennedy
+ * St", but the fuzzy score prefers the label match. Gated behind `?sortProbe`.
+ */
+const RANKED_ROADS = [
+  { id: 'r501', label: 'ROUTE 501', keywords: ['Kennedy Blvd'] },
+  { id: 'kst', label: 'Kennedy St' },
+]
+function EndpointSortProbe() {
+  const [picked, setPicked] = useState<string | null>(null)
+  const entries = useCallback((group: string) => RANKED_ROADS.map(r => ({
+    ...r,
+    group,
+    handler: () => setPicked(`${group}: ${r.label}`),
+  })), [])
+  useOmnibarEndpoint('probe-ranked', useMemo(() => ({
+    group: 'Ranked',
+    sort: 'none' as const,
+    minQueryLength: 1,
+    filter: () => ({ entries: entries('Ranked') }),
+  }), [entries]))
+  useOmnibarEndpoint('probe-scored', useMemo(() => ({
+    group: 'Scored',
+    minQueryLength: 1,
+    filter: () => ({ entries: entries('Scored') }),
+  }), [entries]))
+  useOmnibarEndpoint('probe-top', useMemo(() => ({
+    group: 'Top',
+    priority: 10,
+    minQueryLength: 1,
+    filter: () => ({ entries: [{ id: 'top', label: 'Kennedy (top)', group: 'Top', handler: () => setPicked('Top: Kennedy (top)') }] }),
+  }), []))
+  return <p>Picked: <span data-testid="picked">{picked ?? '—'}</span></p>
+}
+
 const GROUPS = ['Navigation', 'Editing', 'View', 'Tools']
 
 export function ManyActionsDemo() {
@@ -172,6 +208,7 @@ export function ManyActionsDemo() {
   const showKeyProbe = params.has('keyProbe')
   const showEnabledProbe = params.has('enabledProbe')
   const showPairProbe = params.has('pairProbe')
+  const showSortProbe = params.has('sortProbe')
   const actions = Array.from({ length: count }, (_, i) => ({
     id: `test-action-${i}`,
     label: `Action ${i + 1}`,
@@ -188,6 +225,7 @@ export function ManyActionsDemo() {
       {showKeyProbe && <KeystrokeProbe />}
       {showEnabledProbe && <EnabledFlipProbe />}
       {showPairProbe && <PairLabelsProbe />}
+      {showSortProbe && <EndpointSortProbe />}
       {actions.map(a => <DummyAction key={a.id} {...a} />)}
       <ShortcutsModal />
       <KbdOmnibar />

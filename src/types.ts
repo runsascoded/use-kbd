@@ -401,7 +401,17 @@ export interface OmnibarEndpointConfigBase {
   pageSize?: number
   /** Pagination mode (default: 'none') */
   pagination?: EndpointPaginationMode
+  /**
+   * How to order this endpoint's entries: `'score'` (default) re-ranks them by
+   * the omnibar's fuzzy score; `'none'` keeps the order the endpoint returned
+   * (e.g. it already ranks server-side). Either way, entries are never filtered
+   * by score, and endpoints are still ordered by `priority`.
+   */
+  sort?: EndpointSortMode
 }
+
+/** See `OmnibarEndpointConfigBase.sort` */
+export type EndpointSortMode = 'score' | 'none'
 
 /**
  * Configuration for an async omnibar endpoint (remote API calls)
