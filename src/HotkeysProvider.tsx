@@ -5,11 +5,12 @@ import { ModesRegistryContext, useModesRegistry } from './ModesRegistry'
 import { OmnibarEndpointsRegistryContext, useOmnibarEndpointsRegistry } from './OmnibarEndpointsRegistry'
 import { ACTION_MODE_PREFIX, DEFAULT_BUILTIN_GROUP, DEFAULT_SEQUENCE_TIMEOUT } from './constants'
 import { useHotkeys } from './useHotkeys'
+import { useMode } from './useMode'
 import { findConflicts, getSequenceCompletions, searchActions } from './utils'
 import type { ActionsRegistryValue } from './ActionsRegistry'
 import type { ModesRegistryValue } from './ModesRegistry'
 import type { OmnibarEndpointsRegistryValue } from './OmnibarEndpointsRegistry'
-import type { HotkeySequence, RegisteredMode } from './types'
+import type { HotkeySequence, RegisteredMode, UserModeConfig } from './types'
 
 /**
  * Configuration for the HotkeysProvider.
@@ -189,28 +190,6 @@ export function HotkeysProvider({
 
   // Create the omnibar endpoints registry
   const endpointsRegistry = useOmnibarEndpointsRegistry()
-
-  // Register user-created modes dynamically
-  const userModes = registry.modeCustomizations.userModes
-  useEffect(() => {
-    const ids: string[] = []
-    for (const [id, config] of Object.entries(userModes)) {
-      modesRegistry.register(id, {
-        label: config.label,
-        color: config.color,
-        defaultBindings: config.bindings ?? [],
-        toggle: true,
-        escapeExits: true,
-        passthrough: true,
-      })
-      ids.push(id)
-    }
-    return () => {
-      for (const id of ids) {
-        modesRegistry.unregister(id)
-      }
-    }
-  }, [userModes, modesRegistry])
 
   // Check if hotkeys should be enabled
   const [isEnabled, setIsEnabled] = useState(true)
@@ -576,6 +555,9 @@ export function HotkeysProvider({
           <OmnibarEndpointsRegistryContext.Provider value={endpointsRegistry}>
             <HotkeysContext.Provider value={value}>
               <SequenceStateContext.Provider value={sequenceState}>
+                {Object.entries(registry.modeCustomizations.userModes).map(([id, config]) => (
+                  <UserModeRegistration key={id} id={id} config={config} />
+                ))}
                 {children}
               </SequenceStateContext.Provider>
             </HotkeysContext.Provider>
@@ -584,6 +566,20 @@ export function HotkeysProvider({
       </ActionsRegistryApiContext.Provider>
     </ActionsRegistryContext.Provider>
   )
+}
+
+/**
+ * Registers one user-created mode (from persisted `modeCustomizations`) exactly
+ * as `useMode` would in app code: activation action (`__mode:{id}`), toggle,
+ * Escape exits, passthrough.
+ */
+function UserModeRegistration({ id, config }: { id: string; config: UserModeConfig }) {
+  useMode(id, {
+    label: config.label,
+    color: config.color,
+    defaultBindings: config.bindings ?? [],
+  })
+  return null
 }
 
 /**

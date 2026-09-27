@@ -201,6 +201,12 @@ export interface ShortcutsModalProps {
   defaultBinding?: string
   /** Enable editing mode */
   editable?: boolean
+  /**
+   * Whether (when `editable`) users can create their own modes via "+ New mode"
+   * in the Modes section. Default: only if the app has modes (developer- or
+   * user-defined); `true` shows it even in apps with none, `false` never does.
+   */
+  userModes?: boolean
   /** Called when a binding changes (required if editable) */
   onBindingChange?: (action: string, oldKey: string | null, newKey: string) => void
   /** Called when a binding is added (required if editable) */
@@ -1150,18 +1156,112 @@ function ActionTripletRow({
 
 interface ModesSectionProps {
   modeGroups: ShortcutGroup[]
+  /** All registered modes (developer- and user-defined), incl. ones with no actions */
+  modes: Map<string, RegisteredMode>
   editable: boolean
+  /** Show "+ New mode" (user-created modes) */
+  allowNewModes: boolean
   registry: ActionsRegistryValue
   actionRegistry: ActionRegistry
   renderShortcutEntry: (entry: ShortcutEntry) => ReactNode
+  /** Editable bindings cell (used for mode activation bindings) */
+  renderCell: (actionId: string, keys: string[]) => ReactNode
 }
 
-function ModesSection({ modeGroups, editable, registry, actionRegistry, renderShortcutEntry }: ModesSectionProps) {
+const USER_MODE_COLORS = ['#ff9800', '#ab47bc', '#26a69a', '#ef5350', '#5c6bc0', '#9ccc65']
+
+/** Mode-editor form state: `modeId` null → creating a new mode */
+interface ModeForm {
+  modeId: string | null
+  label: string
+  color: string
+}
+
+function ModesSection({ modeGroups, modes, editable, allowNewModes, registry, actionRegistry, renderShortcutEntry, renderCell }: ModesSectionProps) {
   const [addingToMode, setAddingToMode] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(-1)
+  const [form, setForm] = useState<ModeForm | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
-  const { getEffectiveMode, addActionToMode, removeActionFromMode } = registry
+  const {
+    getEffectiveMode, addActionToMode, removeActionFromMode, getBindingsForAction,
+    modeCustomizations, createUserMode, updateUserMode, deleteUserMode,
+  } = registry
+  const userModes = modeCustomizations.userModes
+
+  // Every registered mode gets an entry — incl. modes with no actions yet (e.g.
+  // a just-created user mode), which `organizeShortcuts` yields no group for.
+  const modeEntries = useMemo(() => {
+    const grouped = new Set(modeGroups.map(g => g.mode!.id))
+    const empty: ShortcutGroup[] = []
+    for (const [id, mode] of modes) {
+      if (grouped.has(id)) continue
+      empty.push({
+        name: mode.config.label,
+        shortcuts: [],
+        mode: {
+          id,
+          color: mode.config.color,
+          active: false,
+          activationBindings: getBindingsForAction(`${ACTION_MODE_PREFIX}${id}`),
+        },
+      })
+    }
+    return [...modeGroups, ...empty]
+  }, [modeGroups, modes, getBindingsForAction])
+
+  const submitForm = useCallback(() => {
+    if (!form) return
+    const label = form.label.trim()
+    if (!label) return
+    if (form.modeId) {
+      updateUserMode(form.modeId, { label, color: form.color })
+    } else {
+      // `user:{slug}`, de-duplicated against every registered / stored mode
+      const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'mode'
+      let id = `user:${slug}`
+      for (let n = 2; modes.has(id) || userModes[id]; n++) id = `user:${slug}-${n}`
+      createUserMode(id, { label, color: form.color, actions: [] })
+    }
+    setForm(null)
+  }, [form, modes, userModes, createUserMode, updateUserMode])
+
+  const renderForm = () => form && (
+    <form
+      className="kbd-modes-form"
+      onSubmit={e => { e.preventDefault(); submitForm() }}
+    >
+      <input
+        type="color"
+        className="kbd-modes-form-color"
+        aria-label="Mode color"
+        value={form.color}
+        onChange={e => setForm({ ...form, color: e.target.value })}
+      />
+      <input
+        type="text"
+        className="kbd-modes-form-label"
+        placeholder="Mode name"
+        aria-label="Mode name"
+        autoFocus
+        value={form.label}
+        onChange={e => setForm({ ...form, label: e.target.value })}
+        onKeyDown={e => {
+          if (e.key === 'Escape') {
+            // Cancel the form, not the whole modal
+            e.stopPropagation()
+            setForm(null)
+          }
+        }}
+      />
+      <button type="submit" className="kbd-modes-form-save" disabled={!form.label.trim()}>
+        {form.modeId ? 'Save' : 'Create'}
+      </button>
+      <button type="button" className="kbd-modes-form-cancel" onClick={() => setForm(null)}>
+        Cancel
+      </button>
+    </form>
+  )
 
   // Focus search input when opening add-action panel
   useEffect(() => {
@@ -1203,33 +1303,75 @@ function ModesSection({ modeGroups, editable, registry, actionRegistry, renderSh
 
   return (
     <div className="kbd-modes-section">
-      <h3 className="kbd-modes-title">Modes</h3>
-      {modeGroups.map(group => {
+      <div className="kbd-modes-title-row">
+        <h3 className="kbd-modes-title">Modes</h3>
+        {editable && allowNewModes && !form && (
+          <button
+            className="kbd-modes-new-btn"
+            onClick={() => setForm({
+              modeId: null,
+              label: '',
+              color: USER_MODE_COLORS[Object.keys(userModes).length % USER_MODE_COLORS.length],
+            })}
+          >
+            + New mode
+          </button>
+        )}
+      </div>
+      {form?.modeId === null && renderForm()}
+      {modeEntries.map(group => {
         const mode = group.mode!
+        const isUserMode = !!userModes[mode.id]
         return (
           <div
-            key={group.name}
+            key={mode.id}
             className="kbd-modes-entry"
+            data-mode-id={mode.id}
             style={mode.color ? { '--kbd-mode-color': mode.color } as React.CSSProperties : undefined}
           >
-            <div className="kbd-modes-header">
-              <span className="kbd-modes-label" style={mode.color ? { color: mode.color } : undefined}>
-                {group.name}
-              </span>
-              {mode.activationBindings.map(binding => (
-                <kbd key={binding} className="kbd-kbd kbd-modes-binding">
-                  {parseKeySeq(binding).map((elem, i) => (
-                    <Fragment key={i}>
-                      {i > 0 && <span className="kbd-sequence-sep"> </span>}
-                      <SeqElemDisplay elem={elem} />
-                    </Fragment>
-                  ))}
-                </kbd>
-              ))}
-              {mode.color && (
-                <span className="kbd-modes-color" style={{ backgroundColor: mode.color }} />
-              )}
-            </div>
+            {form?.modeId === mode.id ? renderForm() : (
+              <div className="kbd-modes-header">
+                <span className="kbd-modes-label" style={mode.color ? { color: mode.color } : undefined}>
+                  {group.name}
+                </span>
+                {editable ? (
+                  // Activation bindings, editable like any other binding
+                  <span className="kbd-modes-binding kbd-modes-activation">
+                    {renderCell(`${ACTION_MODE_PREFIX}${mode.id}`, mode.activationBindings)}
+                  </span>
+                ) : mode.activationBindings.map(binding => (
+                  <kbd key={binding} className="kbd-kbd kbd-modes-binding">
+                    {parseKeySeq(binding).map((elem, i) => (
+                      <Fragment key={i}>
+                        {i > 0 && <span className="kbd-sequence-sep"> </span>}
+                        <SeqElemDisplay elem={elem} />
+                      </Fragment>
+                    ))}
+                  </kbd>
+                ))}
+                {mode.color && (
+                  <span className="kbd-modes-color" style={{ backgroundColor: mode.color }} />
+                )}
+                {editable && isUserMode && (
+                  <span className="kbd-modes-user-actions">
+                    <button
+                      className="kbd-modes-edit"
+                      onClick={() => setForm({ modeId: mode.id, label: group.name, color: mode.color ?? USER_MODE_COLORS[0] })}
+                      aria-label={`Edit ${group.name} mode`}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      className="kbd-modes-delete"
+                      onClick={() => deleteUserMode(mode.id)}
+                      aria-label={`Delete ${group.name} mode`}
+                    >
+                      Delete
+                    </button>
+                  </span>
+                )}
+              </div>
+            )}
             <div className="kbd-modes-shortcuts">
               {group.shortcuts.map((entry) => {
                 const entryKey = entry.type === 'action' ? entry.actionId : entry.type === 'arrowGroup' ? entry.groupId : entry.type === 'actionPair' ? entry.pairId : entry.tripletId
@@ -1329,6 +1471,7 @@ export function ShortcutsModal({
   onClose: onCloseProp,
   defaultBinding = '?',
   editable: editableProp = false,
+  userModes: userModesProp,
   onBindingChange,
   onBindingAdd,
   onBindingRemove,
@@ -2323,16 +2466,20 @@ export function ShortcutsModal({
           ))}
 
           {/* Modes section: editable mode groups with add/remove */}
-          {ctx && ctx.modes.size > 0 && (() => {
-            const modeGroups = shortcutGroups.filter(g => g.mode)
-            if (modeGroups.length === 0) return null
+          {ctx && (() => {
+            // "+ New mode": by default only in apps that have modes
+            const allowNewModes = userModesProp ?? ctx.modes.size > 0
+            if (ctx.modes.size === 0 && !(editable && allowNewModes)) return null
             return (
               <ModesSection
-                modeGroups={modeGroups}
+                modeGroups={shortcutGroups.filter(g => g.mode)}
+                modes={ctx.modes}
                 editable={editable}
+                allowNewModes={allowNewModes}
                 registry={ctx.registry}
                 actionRegistry={ctx.registry.actionRegistry}
                 renderShortcutEntry={renderShortcutEntry}
+                renderCell={renderCell}
               />
             )
           })()}

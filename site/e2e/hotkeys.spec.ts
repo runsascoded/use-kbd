@@ -3128,6 +3128,147 @@ test.describe('Endpoint `sort` option', () => {
   })
 })
 
+test.describe('User-created modes', () => {
+  // On /3d: "Toggle wireframe" (`f`) is a global action whose effect shows in
+  // `data-testid="wireframe"`. Dev-defined modes there: Orbit, Pan.
+  const MODES_KEY = 'use-kbd-demo-modes'
+  const PRESENTATION = {
+    label: 'Presentation',
+    color: '#ff9800',
+    bindings: ['g p'],
+    actions: ['view:wireframe'],
+  }
+
+  const setup = async (page: import('@playwright/test').Page, userModes?: Record<string, object>) => {
+    await page.addInitScript(({ key, userModes }) => {
+      // Only seed on the first load, so reload tests see what the app persisted
+      if (sessionStorage.getItem('seeded')) return
+      sessionStorage.setItem('seeded', '1')
+      localStorage.removeItem('use-kbd-demo')
+      localStorage.removeItem('use-kbd-demo-removed')
+      localStorage.removeItem(key)
+      if (userModes) localStorage.setItem(key, JSON.stringify({ additions: {}, removals: {}, userModes }))
+    }, { key: MODES_KEY, userModes })
+    await page.goto('/3d')
+    await expect(page.locator('.kbd-speed-dial-primary')).toBeVisible()
+  }
+  const openModal = async (page: import('@playwright/test').Page) => {
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+    await page.keyboard.press('?')
+    await page.waitForSelector('.kbd-modal', { timeout: 5000 })
+  }
+  const storedUserModes = (page: import('@playwright/test').Page) =>
+    page.evaluate(key => JSON.parse(localStorage.getItem(key) ?? '{}').userModes, MODES_KEY)
+  const entry = (page: import('@playwright/test').Page, id: string) =>
+    page.locator(`.kbd-modes-entry[data-mode-id="${id}"]`)
+  const indicator = (page: import('@playwright/test').Page) => page.locator('.kbd-mode-indicator-label')
+  const wireframe = (page: import('@playwright/test').Page) => page.getByTestId('wireframe')
+
+  test('create a mode from the modes section, add an action, persist', async ({ page }) => {
+    await setup(page)
+    await openModal(page)
+    await page.locator('.kbd-modes-new-btn').click()
+    await page.locator('.kbd-modes-form-label').fill('Presentation')
+    await page.locator('.kbd-modes-form-color').fill('#ff9800')
+    await page.locator('.kbd-modes-form-save').click()
+
+    const mode = entry(page, 'user:presentation')
+    await expect(mode.locator('.kbd-modes-label')).toHaveText('Presentation')
+    await expect(mode.locator('.kbd-modes-label')).toHaveCSS('color', 'rgb(255, 152, 0)')
+    await expect(mode.locator('.kbd-modes-empty')).toHaveText('No actions')
+
+    // Add a global action to it
+    await mode.locator('.kbd-modes-add-btn').click()
+    await mode.locator('.kbd-modes-search').fill('wireframe')
+    await mode.locator('.kbd-modes-search-item', { hasText: 'Toggle wireframe' }).click()
+    await expect(mode.locator('.kbd-modes-action-row .kbd-action-label')).toHaveText(['Toggle wireframe'])
+
+    expect(await storedUserModes(page)).toEqual({
+      'user:presentation': { label: 'Presentation', color: '#ff9800', actions: ['view:wireframe'] },
+    })
+
+    // Survives a reload
+    await page.keyboard.press('Escape')
+    await page.reload()
+    await expect(page.locator('.kbd-speed-dial-primary')).toBeVisible()
+    await openModal(page)
+    await expect(entry(page, 'user:presentation').locator('.kbd-modes-action-row .kbd-action-label')).toHaveText(['Toggle wireframe'])
+  })
+
+  test('activation binding enters the mode; its actions fire only inside it; Escape exits', async ({ page }) => {
+    await setup(page, { 'user:presentation': PRESENTATION })
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+
+    // Outside the mode, `f` (now scoped to Presentation) does nothing
+    await page.keyboard.press('f')
+    await expect(wireframe(page)).toHaveText('Wireframe: off')
+
+    await page.keyboard.press('g')
+    await page.keyboard.press('p')
+    await expect(indicator(page)).toHaveText('Presentation')
+    await page.keyboard.press('f')
+    await expect(wireframe(page)).toHaveText('Wireframe: on')
+
+    await page.keyboard.press('Escape')
+    await expect(indicator(page)).toHaveCount(0)
+    await page.keyboard.press('f')
+    await expect(wireframe(page)).toHaveText('Wireframe: on')
+  })
+
+  test('set an activation binding from the modes section', async ({ page }) => {
+    await setup(page, { 'user:presentation': { ...PRESENTATION, bindings: [] } })
+    await openModal(page)
+    const mode = entry(page, 'user:presentation')
+    await mode.locator('.kbd-modes-activation .kbd-add-btn').click()
+    await expect(mode.locator('.kbd-modes-activation .kbd-kbd.editing')).toBeVisible()
+    await page.keyboard.press('g')
+    await page.keyboard.press('p')
+    await page.keyboard.press('Enter')
+    await expect(mode.locator('.kbd-modes-activation .kbd-kbd.editing')).toHaveCount(0)
+
+    await page.keyboard.press('Escape')
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+    await page.keyboard.press('g')
+    await page.keyboard.press('p')
+    await expect(indicator(page)).toHaveText('Presentation')
+  })
+
+  test('only user modes can be deleted; deleting returns their actions to global', async ({ page }) => {
+    await setup(page, { 'user:presentation': PRESENTATION })
+    await openModal(page)
+    // Dev-defined modes have no Edit/Delete
+    await expect(entry(page, 'view:orbit').locator('.kbd-modes-delete')).toHaveCount(0)
+    await expect(entry(page, 'view:orbit').locator('.kbd-modes-edit')).toHaveCount(0)
+
+    await entry(page, 'user:presentation').locator('.kbd-modes-delete').click()
+    await expect(entry(page, 'user:presentation')).toHaveCount(0)
+    expect(await storedUserModes(page)).toEqual(undefined)  // storage key removed when empty
+
+    // `f` is global again
+    await page.keyboard.press('Escape')
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+    await page.keyboard.press('f')
+    await expect(wireframe(page)).toHaveText('Wireframe: on')
+  })
+
+  test('edit renames a user mode', async ({ page }) => {
+    await setup(page, { 'user:presentation': PRESENTATION })
+    await openModal(page)
+    const mode = entry(page, 'user:presentation')
+    await mode.locator('.kbd-modes-edit').click()
+    await expect(page.locator('.kbd-modes-form-label')).toHaveValue('Presentation')
+    await page.locator('.kbd-modes-form-label').fill('Demo')
+    await page.locator('.kbd-modes-form-save').click()
+    await expect(mode.locator('.kbd-modes-label')).toHaveText('Demo')
+
+    await page.keyboard.press('Escape')
+    await page.locator('body').click({ position: { x: 10, y: 10 } })
+    await page.keyboard.press('g')
+    await page.keyboard.press('p')
+    await expect(indicator(page)).toHaveText('Demo')
+  })
+})
+
 test.describe('Registration render isolation', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {

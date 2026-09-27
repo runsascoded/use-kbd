@@ -13,11 +13,21 @@
 - Modes section in ShortcutsModal: view mode membership, add/remove actions from modes
 - E2e tests for add/remove/persist/reset
 
-### Remaining
-- **User-created modes**: `createUserMode` / `deleteUserMode` / `updateUserMode` methods not yet implemented
-- **"New mode..." UI**: no inline mode creation flow in ShortcutsModal yet
-- **Dynamic mode registration in HotkeysProvider**: user modes in `userModes` storage aren't auto-registered as active modes
-- **Delete mode button**: not yet rendered (only developer-defined modes exist currently)
+### Done in phase 2 (user-created modes)
+- **Registry methods**: `createUserMode(id, config)` (upsert), `updateUserMode(id, partial)`, `deleteUserMode(id)`. Deleting leaves the mode's actions global (adding them had already recorded removal from any developer-default mode) and drops binding overrides targeting its `__mode:{id}` activation action.
+- **Registration**: `HotkeysProvider` renders an internal `<UserModeRegistration>` per stored user mode, which just calls `useMode` — so user modes get exactly the developer-mode behavior (activation action `__mode:{id}`, toggle, Escape exits, passthrough) with no special-casing.
+  - This **replaced a broken partial implementation**: a provider `useEffect` registered user modes with `modesRegistry` in its deps. `modesRegistry`'s identity changes with `modes` / `activeMode`, so (a) registering looped (register → `modesVersion` bump → re-run), and (b) activating the mode re-ran the effect, whose cleanup *unregistered* — and so deactivated — the mode. It also never registered the activation action, so the binding couldn't work anyway (hence this item was still listed as remaining).
+- **Modes section UI** (`ShortcutsModal`, when `editable`):
+  - "+ New mode" in the section's title row → inline form (color swatch, name, Create/Cancel; Escape cancels the form, not the modal). IDs are `user:{slug}`, de-duplicated (`-2`, `-3`, …).
+  - User modes get Edit (same form, prefilled → `updateUserMode`) and Delete; developer modes get neither.
+  - Every registered mode gets an entry, incl. modes with no actions — `organizeShortcuts` only yields groups from actions, so a just-created mode would otherwise be invisible (and the "No actions" state was unreachable).
+  - Activation bindings in each mode header render with the modal's editable binding cell (`renderCell`), so they're added / recorded / removed like any other binding (stored as overrides; "Reset" clears them). This also makes developer modes' activation bindings editable — previously impossible, since `__mode:*` actions are `hideFromModal`.
+- **`userModes` prop** on `ShortcutsModal`: "+ New mode" shows by default only in apps that have modes (developer or user), so consumers without modes see no new UI; `true` shows it regardless, `false` never.
+- E2e ("User-created modes", `/3d`): create via UI + add an action + persist across reload; seeded mode's activation binding enters it, its action fires only inside it, Escape exits; set an activation binding via the header cell; only user modes have Edit/Delete, and deleting returns actions to global; Edit renames (label shows in the ModeIndicator). TFFP: all 5 failed before implementation.
+
+### Not done (deliberately)
+- Per-action-row mode pills / dropdown ("Editing mode membership" below): the spec's recommended option 2 (the Modes section) covers membership editing.
+- Test plan #16 (confirmation when adding an action that's in another mode): the add search lists only global actions, and `addActionToMode` already auto-removes from a previous mode.
 
 ## Problem
 

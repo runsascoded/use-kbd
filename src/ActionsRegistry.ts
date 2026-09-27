@@ -1,6 +1,7 @@
 import { createContext, useCallback, useMemo, useRef, useState } from 'react'
 import { dbg } from './debug'
-import type { ActionRegistry, BindingsExport, ModeCustomizations } from './types'
+import { ACTION_MODE_PREFIX } from './constants'
+import type { ActionRegistry, BindingsExport, ModeCustomizations, UserModeConfig } from './types'
 import { EMPTY_MODE_CUSTOMIZATIONS } from './types'
 import type { ActionConfig } from './useAction'
 import type { HotkeyMap } from './useHotkeys'
@@ -64,6 +65,19 @@ export interface ActionsRegistryValue {
   addActionToMode: (actionId: string, modeId: string) => void
   /** Remove an action from its mode */
   removeActionFromMode: (actionId: string, modeId: string) => void
+  /**
+   * Create (or replace) a user-defined mode. `HotkeysProvider` registers user
+   * modes like `useMode` does (activation action, Escape exits, toggle).
+   */
+  createUserMode: (id: string, config: UserModeConfig) => void
+  /**
+   * Delete a user-defined mode. Its actions become global (they were already
+   * recorded as removed from any developer-default mode when added to it), and
+   * binding overrides for its activation action are dropped.
+   */
+  deleteUserMode: (id: string) => void
+  /** Update a user-defined mode's config (label, color, bindings, actions) */
+  updateUserMode: (id: string, config: Partial<UserModeConfig>) => void
 }
 
 export const ActionsRegistryContext = createContext<ActionsRegistryValue | null>(null)
@@ -558,6 +572,37 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
     })
   }, [updateOverrides, updateRemovedDefaults])
 
+  const createUserMode = useCallback((id: string, config: UserModeConfig) => {
+    setModeCustomizations(prev => ({ ...prev, userModes: { ...prev.userModes, [id]: config } }))
+  }, [setModeCustomizations])
+
+  const updateUserMode = useCallback((id: string, config: Partial<UserModeConfig>) => {
+    setModeCustomizations(prev => {
+      const existing = prev.userModes[id]
+      if (!existing) return prev
+      return { ...prev, userModes: { ...prev.userModes, [id]: { ...existing, ...config } } }
+    })
+  }, [setModeCustomizations])
+
+  const deleteUserMode = useCallback((id: string) => {
+    setModeCustomizations(prev => {
+      if (!prev.userModes[id]) return prev
+      const { [id]: _deleted, ...userModes } = prev.userModes
+      return { ...prev, userModes }
+    })
+    // Drop user bindings for the deleted mode's activation action
+    const activationId = `${ACTION_MODE_PREFIX}${id}`
+    updateOverrides(prev => {
+      const next: Record<string, string | string[]> = {}
+      for (const [key, target] of Object.entries(prev)) {
+        const kept = (Array.isArray(target) ? target : [target]).filter(a => a !== activationId)
+        if (kept.length === 1) next[key] = kept[0]
+        else if (kept.length > 1) next[key] = kept
+      }
+      return next
+    })
+  }, [setModeCustomizations, updateOverrides])
+
   const resetOverrides = useCallback(() => {
     updateOverrides({})
     updateRemovedDefaults({})
@@ -655,6 +700,9 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
     getEffectiveMode,
     addActionToMode,
     removeActionFromMode,
+    createUserMode,
+    deleteUserMode,
+    updateUserMode,
   }), [
     register,
     unregister,
@@ -679,5 +727,8 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
     getEffectiveMode,
     addActionToMode,
     removeActionFromMode,
+    createUserMode,
+    deleteUserMode,
+    updateUserMode,
   ])
 }
