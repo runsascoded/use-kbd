@@ -2934,6 +2934,7 @@ function useOmnibarEndpoint(id, config) {
       enabled: config.enabled,
       pageSize: config.pageSize,
       pagination: config.pagination,
+      sort: config.sort,
       isSync: isSyncRef.current,
       // Track sync endpoints to skip debouncing
       fetch: async (query, signal, pagination) => {
@@ -2954,7 +2955,8 @@ function useOmnibarEndpoint(id, config) {
     config.priority,
     config.minQueryLength,
     config.pageSize,
-    config.pagination
+    config.pagination,
+    config.sort
     // Note: we use refs for fetch/filter and enabled, so they don't cause re-registration
   ]);
 }
@@ -3576,11 +3578,12 @@ function useOmnibar(options) {
   }, [endpointsRegistry, endpointStates]);
   const remoteResults = useMemo(() => {
     if (!endpointsRegistry) return [];
-    const processed = [];
+    const blocks = [];
     for (const [endpointId, state] of endpointStates) {
       const endpoint = endpointsRegistry.endpoints.get(endpointId);
       if (!endpoint) continue;
       const priority = endpoint.config.priority ?? 0;
+      const processed = [];
       for (const entry of state.entries) {
         const labelMatch = fuzzyMatch(query, entry.label);
         const descMatch = entry.description ? fuzzyMatch(query, entry.description) : null;
@@ -3608,12 +3611,15 @@ function useOmnibar(options) {
           labelMatches
         });
       }
+      if (processed.length === 0) continue;
+      if (endpoint.config.sort !== "none") {
+        processed.sort((a, b) => b.score - a.score);
+      }
+      const best = processed.reduce((m, r) => Math.max(m, r.score), 0);
+      blocks.push({ priority, best, results: processed });
     }
-    processed.sort((a, b) => {
-      if (a.priority !== b.priority) return b.priority - a.priority;
-      return b.score - a.score;
-    });
-    return processed;
+    blocks.sort((a, b) => b.priority - a.priority || b.best - a.best);
+    return blocks.flatMap((b) => b.results);
   }, [endpointStates, endpointsRegistry, query]);
   const isLoadingRemote = useMemo(() => {
     for (const [, state] of endpointStates) {
