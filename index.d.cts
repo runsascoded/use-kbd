@@ -1004,6 +1004,12 @@ interface ShortcutsModalProps {
     defaultBinding?: string;
     /** Enable editing mode */
     editable?: boolean;
+    /**
+     * Whether (when `editable`) users can create their own modes via "+ New mode"
+     * in the Modes section. Default: only if the app has modes (developer- or
+     * user-defined); `true` shows it even in apps with none, `false` never does.
+     */
+    userModes?: boolean;
     /** Called when a binding changes (required if editable) */
     onBindingChange?: (action: string, oldKey: string | null, newKey: string) => void;
     /** Called when a binding is added (required if editable) */
@@ -1068,7 +1074,7 @@ interface ShortcutsModalRenderProps {
     removeBinding: (action: string, key: string) => void;
     reset: () => void;
 }
-declare function ShortcutsModal({ keymap: keymapProp, defaults: defaultsProp, labels: labelsProp, descriptions: descriptionsProp, groups: groupNamesProp, groupOrder, groupRenderers, isOpen: isOpenProp, onClose: onCloseProp, defaultBinding, editable: editableProp, onBindingChange, onBindingAdd, onBindingRemove, onReset, onExport, onImport, multipleBindings, children, backdropClassName, modalClassName, title, hint, showUnbound, TooltipComponent: TooltipComponentProp, arrowIcon: arrowIconProp, footerContent, }: ShortcutsModalProps): react_jsx_runtime.JSX.Element | null;
+declare function ShortcutsModal({ keymap: keymapProp, defaults: defaultsProp, labels: labelsProp, descriptions: descriptionsProp, groups: groupNamesProp, groupOrder, groupRenderers, isOpen: isOpenProp, onClose: onCloseProp, defaultBinding, editable: editableProp, userModes: userModesProp, onBindingChange, onBindingAdd, onBindingRemove, onReset, onExport, onImport, multipleBindings, children, backdropClassName, modalClassName, title, hint, showUnbound, TooltipComponent: TooltipComponentProp, arrowIcon: arrowIconProp, footerContent, }: ShortcutsModalProps): react_jsx_runtime.JSX.Element | null;
 
 /**
  * Configuration for a row in a two-column table
@@ -1604,6 +1610,19 @@ interface ActionsRegistryValue {
     addActionToMode: (actionId: string, modeId: string) => void;
     /** Remove an action from its mode */
     removeActionFromMode: (actionId: string, modeId: string) => void;
+    /**
+     * Create (or replace) a user-defined mode. `HotkeysProvider` registers user
+     * modes like `useMode` does (activation action, Escape exits, toggle).
+     */
+    createUserMode: (id: string, config: UserModeConfig) => void;
+    /**
+     * Delete a user-defined mode. Its actions become global (they were already
+     * recorded as removed from any developer-default mode when added to it), and
+     * binding overrides for its activation action are dropped.
+     */
+    deleteUserMode: (id: string) => void;
+    /** Update a user-defined mode's config (label, color, bindings, actions) */
+    updateUserMode: (id: string, config: Partial<UserModeConfig>) => void;
 }
 declare const ActionsRegistryContext: react.Context<ActionsRegistryValue | null>;
 /**

@@ -70,6 +70,14 @@ var dbg = {
   modes: makeDebug("use-kbd:modes")
 };
 
+// src/constants.ts
+var DEFAULT_SEQUENCE_TIMEOUT = Infinity;
+var ACTION_MODAL = "__hotkeys:modal";
+var ACTION_OMNIBAR = "__hotkeys:omnibar";
+var ACTION_LOOKUP = "__hotkeys:lookup";
+var DEFAULT_BUILTIN_GROUP = "Meta";
+var ACTION_MODE_PREFIX = "__mode:";
+
 // src/ActionsRegistry.ts
 var EXPORT_VERSION = "0.8.0";
 var ActionsRegistryContext = react.createContext(null);
@@ -411,6 +419,33 @@ function useActionsRegistry(options = {}) {
       return prev;
     });
   }, [updateOverrides, updateRemovedDefaults]);
+  const createUserMode = react.useCallback((id, config) => {
+    setModeCustomizations((prev) => ({ ...prev, userModes: { ...prev.userModes, [id]: config } }));
+  }, [setModeCustomizations]);
+  const updateUserMode = react.useCallback((id, config) => {
+    setModeCustomizations((prev) => {
+      const existing = prev.userModes[id];
+      if (!existing) return prev;
+      return { ...prev, userModes: { ...prev.userModes, [id]: { ...existing, ...config } } };
+    });
+  }, [setModeCustomizations]);
+  const deleteUserMode = react.useCallback((id) => {
+    setModeCustomizations((prev) => {
+      if (!prev.userModes[id]) return prev;
+      const { [id]: _deleted, ...userModes } = prev.userModes;
+      return { ...prev, userModes };
+    });
+    const activationId = `${ACTION_MODE_PREFIX}${id}`;
+    updateOverrides((prev) => {
+      const next = {};
+      for (const [key, target] of Object.entries(prev)) {
+        const kept = (Array.isArray(target) ? target : [target]).filter((a) => a !== activationId);
+        if (kept.length === 1) next[key] = kept[0];
+        else if (kept.length > 1) next[key] = kept;
+      }
+      return next;
+    });
+  }, [setModeCustomizations, updateOverrides]);
   const resetOverrides = react.useCallback(() => {
     updateOverrides({});
     updateRemovedDefaults({});
@@ -489,7 +524,10 @@ function useActionsRegistry(options = {}) {
     setModeCustomizations,
     getEffectiveMode,
     addActionToMode,
-    removeActionFromMode
+    removeActionFromMode,
+    createUserMode,
+    deleteUserMode,
+    updateUserMode
   }), [
     register,
     unregister,
@@ -513,7 +551,10 @@ function useActionsRegistry(options = {}) {
     setModeCustomizations,
     getEffectiveMode,
     addActionToMode,
-    removeActionFromMode
+    removeActionFromMode,
+    createUserMode,
+    deleteUserMode,
+    updateUserMode
   ]);
 }
 var ModesRegistryContext = react.createContext(null);
@@ -656,14 +697,6 @@ function useOmnibarEndpointsRegistry() {
     queryEndpoint
   }), [register, unregister, endpoints, queryAll, queryEndpoint]);
 }
-
-// src/constants.ts
-var DEFAULT_SEQUENCE_TIMEOUT = Infinity;
-var ACTION_MODAL = "__hotkeys:modal";
-var ACTION_OMNIBAR = "__hotkeys:omnibar";
-var ACTION_LOOKUP = "__hotkeys:lookup";
-var DEFAULT_BUILTIN_GROUP = "Meta";
-var ACTION_MODE_PREFIX = "__mode:";
 
 // src/utils.ts
 var { max } = Math;
@@ -2028,6 +2061,168 @@ function useHotkeys(keymap, handlers, options = {}) {
   ]);
   return { pendingKeys, isAwaitingSequence, cancelSequence, timeoutStartedAt, sequenceTimeout };
 }
+function useAction(id, config) {
+  const registry = react.useContext(ActionsRegistryApiContext);
+  if (!registry) {
+    throw new Error("useAction must be used within a HotkeysProvider");
+  }
+  const registryRef = react.useRef(registry);
+  registryRef.current = registry;
+  const handlerRef = react.useRef(config.handler);
+  handlerRef.current = config.handler;
+  const enabledRef = react.useRef(config.enabled ?? true);
+  enabledRef.current = config.enabled ?? true;
+  react.useEffect(() => {
+    registryRef.current.register(id, {
+      ...config,
+      handler: (e, captures) => {
+        if (enabledRef.current) {
+          handlerRef.current(e, captures);
+        }
+      }
+    });
+    return () => {
+      registryRef.current.unregister(id);
+    };
+  }, [
+    id,
+    config.label,
+    config.description,
+    config.group,
+    config.mode,
+    // Compare bindings by value
+    JSON.stringify(config.defaultBindings),
+    JSON.stringify(config.keywords),
+    config.priority,
+    config.hideFromModal,
+    config.protected,
+    JSON.stringify(config.arrowGroup),
+    JSON.stringify(config.actionPair),
+    JSON.stringify(config.actionTriplet),
+    config.sortOrder
+  ]);
+  react.useEffect(() => {
+    registryRef.current.setActionEnabled(id, config.enabled ?? true);
+  }, [id, config.enabled]);
+}
+function useActions(actions) {
+  const registry = react.useContext(ActionsRegistryApiContext);
+  if (!registry) {
+    throw new Error("useActions must be used within a HotkeysProvider");
+  }
+  const registryRef = react.useRef(registry);
+  registryRef.current = registry;
+  const handlersRef = react.useRef({});
+  const enabledRef = react.useRef({});
+  for (const [id, config] of Object.entries(actions)) {
+    handlersRef.current[id] = config.handler;
+    enabledRef.current[id] = config.enabled ?? true;
+  }
+  react.useEffect(() => {
+    for (const [id, config] of Object.entries(actions)) {
+      registryRef.current.register(id, {
+        ...config,
+        handler: (e, captures) => {
+          if (enabledRef.current[id]) {
+            handlersRef.current[id]?.(e, captures);
+          }
+        }
+      });
+    }
+    return () => {
+      for (const id of Object.keys(actions)) {
+        registryRef.current.unregister(id);
+      }
+    };
+  }, [
+    // Re-register if action set changes
+    JSON.stringify(
+      Object.entries(actions).map(([id, c]) => [
+        id,
+        c.label,
+        c.group,
+        c.mode,
+        c.defaultBindings,
+        c.keywords,
+        c.priority,
+        c.hideFromModal,
+        c.protected,
+        c.arrowGroup,
+        c.actionPair,
+        c.actionTriplet,
+        c.sortOrder
+      ])
+    )
+  ]);
+  const enabledKey = JSON.stringify(
+    Object.entries(actions).map(([id, c]) => [id, c.enabled ?? true])
+  );
+  react.useEffect(() => {
+    for (const [id, config] of Object.entries(actions)) {
+      registryRef.current.setActionEnabled(id, config.enabled ?? true);
+    }
+  }, [enabledKey]);
+}
+
+// src/useMode.ts
+function useMode(id, config) {
+  const registry = react.useContext(ModesRegistryContext);
+  if (!registry) {
+    throw new Error("useMode must be used within a HotkeysProvider");
+  }
+  const registryRef = react.useRef(registry);
+  registryRef.current = registry;
+  const configRef = react.useRef(config);
+  configRef.current = config;
+  react.useEffect(() => {
+    registryRef.current.register(id, config);
+    return () => {
+      registryRef.current.unregister(id);
+    };
+  }, [
+    id,
+    config.label,
+    config.color,
+    JSON.stringify(config.defaultBindings),
+    config.toggle,
+    config.escapeExits,
+    config.passthrough
+  ]);
+  const toggle = config.toggle !== false;
+  const activationHandler = react.useCallback(() => {
+    if (toggle) {
+      registryRef.current.toggleMode(id);
+    } else {
+      registryRef.current.activateMode(id);
+    }
+  }, [id, toggle]);
+  useAction(`${ACTION_MODE_PREFIX}${id}`, {
+    label: `${config.label} mode`,
+    group: "Modes",
+    defaultBindings: config.defaultBindings ?? [],
+    handler: activationHandler,
+    hideFromModal: true
+  });
+  const active = registry.activeMode === id;
+  const activate = react.useCallback(() => {
+    registryRef.current.activateMode(id);
+  }, [id]);
+  const deactivate = react.useCallback(() => {
+    registryRef.current.deactivateMode();
+  }, []);
+  const toggleFn = react.useCallback(() => {
+    registryRef.current.toggleMode(id);
+  }, [id]);
+  return react.useMemo(() => ({
+    id,
+    active,
+    label: config.label,
+    color: config.color,
+    activate,
+    deactivate,
+    toggle: toggleFn
+  }), [id, active, config.label, config.color, activate, deactivate, toggleFn]);
+}
 var HotkeysContext = react.createContext(null);
 var SequenceStateContext = react.createContext(null);
 var DEFAULT_CONFIG = {
@@ -2051,26 +2246,6 @@ function HotkeysProvider({
   const registry = useActionsRegistry({ storageKey: config.storageKey });
   const modesRegistry = useModesRegistry();
   const endpointsRegistry = useOmnibarEndpointsRegistry();
-  const userModes = registry.modeCustomizations.userModes;
-  react.useEffect(() => {
-    const ids = [];
-    for (const [id, config2] of Object.entries(userModes)) {
-      modesRegistry.register(id, {
-        label: config2.label,
-        color: config2.color,
-        defaultBindings: config2.bindings ?? [],
-        toggle: true,
-        escapeExits: true,
-        passthrough: true
-      });
-      ids.push(id);
-    }
-    return () => {
-      for (const id of ids) {
-        modesRegistry.unregister(id);
-      }
-    };
-  }, [userModes, modesRegistry]);
   const [isEnabled, setIsEnabled] = react.useState(true);
   react.useEffect(() => {
     if (typeof window === "undefined") return;
@@ -2335,7 +2510,18 @@ function HotkeysProvider({
     sequenceTimeoutStartedAt,
     sequenceTimeout
   }), [pendingKeys, isAwaitingSequence, cancelSequence, sequenceTimeoutStartedAt, sequenceTimeout]);
-  return /* @__PURE__ */ jsxRuntime.jsx(ActionsRegistryContext.Provider, { value: registry, children: /* @__PURE__ */ jsxRuntime.jsx(ActionsRegistryApiContext.Provider, { value: registry.api, children: /* @__PURE__ */ jsxRuntime.jsx(ModesRegistryContext.Provider, { value: modesRegistry, children: /* @__PURE__ */ jsxRuntime.jsx(OmnibarEndpointsRegistryContext.Provider, { value: endpointsRegistry, children: /* @__PURE__ */ jsxRuntime.jsx(HotkeysContext.Provider, { value, children: /* @__PURE__ */ jsxRuntime.jsx(SequenceStateContext.Provider, { value: sequenceState, children }) }) }) }) }) });
+  return /* @__PURE__ */ jsxRuntime.jsx(ActionsRegistryContext.Provider, { value: registry, children: /* @__PURE__ */ jsxRuntime.jsx(ActionsRegistryApiContext.Provider, { value: registry.api, children: /* @__PURE__ */ jsxRuntime.jsx(ModesRegistryContext.Provider, { value: modesRegistry, children: /* @__PURE__ */ jsxRuntime.jsx(OmnibarEndpointsRegistryContext.Provider, { value: endpointsRegistry, children: /* @__PURE__ */ jsxRuntime.jsx(HotkeysContext.Provider, { value, children: /* @__PURE__ */ jsxRuntime.jsxs(SequenceStateContext.Provider, { value: sequenceState, children: [
+    Object.entries(registry.modeCustomizations.userModes).map(([id, config2]) => /* @__PURE__ */ jsxRuntime.jsx(UserModeRegistration, { id, config: config2 }, id)),
+    children
+  ] }) }) }) }) }) });
+}
+function UserModeRegistration({ id, config }) {
+  useMode(id, {
+    label: config.label,
+    color: config.color,
+    defaultBindings: config.bindings ?? []
+  });
+  return null;
 }
 function useHotkeysContext() {
   const context = react.useContext(HotkeysContext);
@@ -2356,108 +2542,6 @@ function useSequenceState() {
 }
 function useMaybeSequenceState() {
   return react.useContext(SequenceStateContext);
-}
-function useAction(id, config) {
-  const registry = react.useContext(ActionsRegistryApiContext);
-  if (!registry) {
-    throw new Error("useAction must be used within a HotkeysProvider");
-  }
-  const registryRef = react.useRef(registry);
-  registryRef.current = registry;
-  const handlerRef = react.useRef(config.handler);
-  handlerRef.current = config.handler;
-  const enabledRef = react.useRef(config.enabled ?? true);
-  enabledRef.current = config.enabled ?? true;
-  react.useEffect(() => {
-    registryRef.current.register(id, {
-      ...config,
-      handler: (e, captures) => {
-        if (enabledRef.current) {
-          handlerRef.current(e, captures);
-        }
-      }
-    });
-    return () => {
-      registryRef.current.unregister(id);
-    };
-  }, [
-    id,
-    config.label,
-    config.description,
-    config.group,
-    config.mode,
-    // Compare bindings by value
-    JSON.stringify(config.defaultBindings),
-    JSON.stringify(config.keywords),
-    config.priority,
-    config.hideFromModal,
-    config.protected,
-    JSON.stringify(config.arrowGroup),
-    JSON.stringify(config.actionPair),
-    JSON.stringify(config.actionTriplet),
-    config.sortOrder
-  ]);
-  react.useEffect(() => {
-    registryRef.current.setActionEnabled(id, config.enabled ?? true);
-  }, [id, config.enabled]);
-}
-function useActions(actions) {
-  const registry = react.useContext(ActionsRegistryApiContext);
-  if (!registry) {
-    throw new Error("useActions must be used within a HotkeysProvider");
-  }
-  const registryRef = react.useRef(registry);
-  registryRef.current = registry;
-  const handlersRef = react.useRef({});
-  const enabledRef = react.useRef({});
-  for (const [id, config] of Object.entries(actions)) {
-    handlersRef.current[id] = config.handler;
-    enabledRef.current[id] = config.enabled ?? true;
-  }
-  react.useEffect(() => {
-    for (const [id, config] of Object.entries(actions)) {
-      registryRef.current.register(id, {
-        ...config,
-        handler: (e, captures) => {
-          if (enabledRef.current[id]) {
-            handlersRef.current[id]?.(e, captures);
-          }
-        }
-      });
-    }
-    return () => {
-      for (const id of Object.keys(actions)) {
-        registryRef.current.unregister(id);
-      }
-    };
-  }, [
-    // Re-register if action set changes
-    JSON.stringify(
-      Object.entries(actions).map(([id, c]) => [
-        id,
-        c.label,
-        c.group,
-        c.mode,
-        c.defaultBindings,
-        c.keywords,
-        c.priority,
-        c.hideFromModal,
-        c.protected,
-        c.arrowGroup,
-        c.actionPair,
-        c.actionTriplet,
-        c.sortOrder
-      ])
-    )
-  ]);
-  const enabledKey = JSON.stringify(
-    Object.entries(actions).map(([id, c]) => [id, c.enabled ?? true])
-  );
-  react.useEffect(() => {
-    for (const [id, config] of Object.entries(actions)) {
-      registryRef.current.setActionEnabled(id, config.enabled ?? true);
-    }
-  }, [enabledKey]);
 }
 var DIRECTIONS = ["left", "right", "up", "down"];
 var ARROW_KEYS = {
@@ -2851,64 +2935,6 @@ function useActionTriplet(id, config) {
   actionConfigs[`${id}-b`].enabled = actionB.enabled ?? enabled;
   actionConfigs[`${id}-c`].enabled = actionC.enabled ?? enabled;
   useActions(actionConfigs);
-}
-function useMode(id, config) {
-  const registry = react.useContext(ModesRegistryContext);
-  if (!registry) {
-    throw new Error("useMode must be used within a HotkeysProvider");
-  }
-  const registryRef = react.useRef(registry);
-  registryRef.current = registry;
-  const configRef = react.useRef(config);
-  configRef.current = config;
-  react.useEffect(() => {
-    registryRef.current.register(id, config);
-    return () => {
-      registryRef.current.unregister(id);
-    };
-  }, [
-    id,
-    config.label,
-    config.color,
-    JSON.stringify(config.defaultBindings),
-    config.toggle,
-    config.escapeExits,
-    config.passthrough
-  ]);
-  const toggle = config.toggle !== false;
-  const activationHandler = react.useCallback(() => {
-    if (toggle) {
-      registryRef.current.toggleMode(id);
-    } else {
-      registryRef.current.activateMode(id);
-    }
-  }, [id, toggle]);
-  useAction(`${ACTION_MODE_PREFIX}${id}`, {
-    label: `${config.label} mode`,
-    group: "Modes",
-    defaultBindings: config.defaultBindings ?? [],
-    handler: activationHandler,
-    hideFromModal: true
-  });
-  const active = registry.activeMode === id;
-  const activate = react.useCallback(() => {
-    registryRef.current.activateMode(id);
-  }, [id]);
-  const deactivate = react.useCallback(() => {
-    registryRef.current.deactivateMode();
-  }, []);
-  const toggleFn = react.useCallback(() => {
-    registryRef.current.toggleMode(id);
-  }, [id]);
-  return react.useMemo(() => ({
-    id,
-    active,
-    label: config.label,
-    color: config.color,
-    activate,
-    deactivate,
-    toggle: toggleFn
-  }), [id, active, config.label, config.color, activate, deactivate, toggleFn]);
 }
 function useOmnibarEndpoint(id, config) {
   const registry = react.useContext(OmnibarEndpointsRegistryContext);
@@ -6485,12 +6511,98 @@ function ActionTripletRow({
     ] })
   ] });
 }
-function ModesSection({ modeGroups, editable, registry, actionRegistry, renderShortcutEntry }) {
+var USER_MODE_COLORS = ["#ff9800", "#ab47bc", "#26a69a", "#ef5350", "#5c6bc0", "#9ccc65"];
+function ModesSection({ modeGroups, modes, editable, allowNewModes, registry, actionRegistry, renderShortcutEntry, renderCell }) {
   const [addingToMode, setAddingToMode] = react.useState(null);
   const [searchQuery, setSearchQuery] = react.useState("");
   const [selectedIndex, setSelectedIndex] = react.useState(-1);
+  const [form, setForm] = react.useState(null);
   const searchInputRef = react.useRef(null);
-  const { getEffectiveMode, addActionToMode, removeActionFromMode } = registry;
+  const {
+    getEffectiveMode,
+    addActionToMode,
+    removeActionFromMode,
+    getBindingsForAction,
+    modeCustomizations,
+    createUserMode,
+    updateUserMode,
+    deleteUserMode
+  } = registry;
+  const userModes = modeCustomizations.userModes;
+  const modeEntries = react.useMemo(() => {
+    const grouped = new Set(modeGroups.map((g) => g.mode.id));
+    const empty = [];
+    for (const [id, mode] of modes) {
+      if (grouped.has(id)) continue;
+      empty.push({
+        name: mode.config.label,
+        shortcuts: [],
+        mode: {
+          id,
+          color: mode.config.color,
+          active: false,
+          activationBindings: getBindingsForAction(`${ACTION_MODE_PREFIX}${id}`)
+        }
+      });
+    }
+    return [...modeGroups, ...empty];
+  }, [modeGroups, modes, getBindingsForAction]);
+  const submitForm = react.useCallback(() => {
+    if (!form) return;
+    const label = form.label.trim();
+    if (!label) return;
+    if (form.modeId) {
+      updateUserMode(form.modeId, { label, color: form.color });
+    } else {
+      const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "mode";
+      let id = `user:${slug}`;
+      for (let n = 2; modes.has(id) || userModes[id]; n++) id = `user:${slug}-${n}`;
+      createUserMode(id, { label, color: form.color, actions: [] });
+    }
+    setForm(null);
+  }, [form, modes, userModes, createUserMode, updateUserMode]);
+  const renderForm = () => form && /* @__PURE__ */ jsxRuntime.jsxs(
+    "form",
+    {
+      className: "kbd-modes-form",
+      onSubmit: (e) => {
+        e.preventDefault();
+        submitForm();
+      },
+      children: [
+        /* @__PURE__ */ jsxRuntime.jsx(
+          "input",
+          {
+            type: "color",
+            className: "kbd-modes-form-color",
+            "aria-label": "Mode color",
+            value: form.color,
+            onChange: (e) => setForm({ ...form, color: e.target.value })
+          }
+        ),
+        /* @__PURE__ */ jsxRuntime.jsx(
+          "input",
+          {
+            type: "text",
+            className: "kbd-modes-form-label",
+            placeholder: "Mode name",
+            "aria-label": "Mode name",
+            autoFocus: true,
+            value: form.label,
+            onChange: (e) => setForm({ ...form, label: e.target.value }),
+            onKeyDown: (e) => {
+              if (e.key === "Escape") {
+                e.stopPropagation();
+                setForm(null);
+              }
+            }
+          }
+        ),
+        /* @__PURE__ */ jsxRuntime.jsx("button", { type: "submit", className: "kbd-modes-form-save", disabled: !form.label.trim(), children: form.modeId ? "Save" : "Create" }),
+        /* @__PURE__ */ jsxRuntime.jsx("button", { type: "button", className: "kbd-modes-form-cancel", onClick: () => setForm(null), children: "Cancel" })
+      ]
+    }
+  );
   react.useEffect(() => {
     if (addingToMode && searchInputRef.current) {
       searchInputRef.current.focus();
@@ -6520,22 +6632,62 @@ function ModesSection({ modeGroups, editable, registry, actionRegistry, renderSh
     setSelectedIndex(-1);
   }, [addActionToMode]);
   return /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "kbd-modes-section", children: [
-    /* @__PURE__ */ jsxRuntime.jsx("h3", { className: "kbd-modes-title", children: "Modes" }),
-    modeGroups.map((group) => {
+    /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "kbd-modes-title-row", children: [
+      /* @__PURE__ */ jsxRuntime.jsx("h3", { className: "kbd-modes-title", children: "Modes" }),
+      editable && allowNewModes && !form && /* @__PURE__ */ jsxRuntime.jsx(
+        "button",
+        {
+          className: "kbd-modes-new-btn",
+          onClick: () => setForm({
+            modeId: null,
+            label: "",
+            color: USER_MODE_COLORS[Object.keys(userModes).length % USER_MODE_COLORS.length]
+          }),
+          children: "+ New mode"
+        }
+      )
+    ] }),
+    form?.modeId === null && renderForm(),
+    modeEntries.map((group) => {
       const mode = group.mode;
+      const isUserMode = !!userModes[mode.id];
       return /* @__PURE__ */ jsxRuntime.jsxs(
         "div",
         {
           className: "kbd-modes-entry",
+          "data-mode-id": mode.id,
           style: mode.color ? { "--kbd-mode-color": mode.color } : void 0,
           children: [
-            /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "kbd-modes-header", children: [
+            form?.modeId === mode.id ? renderForm() : /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "kbd-modes-header", children: [
               /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-modes-label", style: mode.color ? { color: mode.color } : void 0, children: group.name }),
-              mode.activationBindings.map((binding) => /* @__PURE__ */ jsxRuntime.jsx("kbd", { className: "kbd-kbd kbd-modes-binding", children: parseKeySeq(binding).map((elem, i) => /* @__PURE__ */ jsxRuntime.jsxs(react.Fragment, { children: [
+              editable ? (
+                // Activation bindings, editable like any other binding
+                /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-modes-binding kbd-modes-activation", children: renderCell(`${ACTION_MODE_PREFIX}${mode.id}`, mode.activationBindings) })
+              ) : mode.activationBindings.map((binding) => /* @__PURE__ */ jsxRuntime.jsx("kbd", { className: "kbd-kbd kbd-modes-binding", children: parseKeySeq(binding).map((elem, i) => /* @__PURE__ */ jsxRuntime.jsxs(react.Fragment, { children: [
                 i > 0 && /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-sequence-sep", children: " " }),
                 /* @__PURE__ */ jsxRuntime.jsx(SeqElemDisplay2, { elem })
               ] }, i)) }, binding)),
-              mode.color && /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-modes-color", style: { backgroundColor: mode.color } })
+              mode.color && /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-modes-color", style: { backgroundColor: mode.color } }),
+              editable && isUserMode && /* @__PURE__ */ jsxRuntime.jsxs("span", { className: "kbd-modes-user-actions", children: [
+                /* @__PURE__ */ jsxRuntime.jsx(
+                  "button",
+                  {
+                    className: "kbd-modes-edit",
+                    onClick: () => setForm({ modeId: mode.id, label: group.name, color: mode.color ?? USER_MODE_COLORS[0] }),
+                    "aria-label": `Edit ${group.name} mode`,
+                    children: "Edit"
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntime.jsx(
+                  "button",
+                  {
+                    className: "kbd-modes-delete",
+                    onClick: () => deleteUserMode(mode.id),
+                    "aria-label": `Delete ${group.name} mode`,
+                    children: "Delete"
+                  }
+                )
+              ] })
             ] }),
             /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "kbd-modes-shortcuts", children: [
               group.shortcuts.map((entry) => {
@@ -6612,7 +6764,7 @@ function ModesSection({ modeGroups, editable, registry, actionRegistry, renderSh
             ))
           ]
         },
-        group.name
+        mode.id
       );
     })
   ] });
@@ -6629,6 +6781,7 @@ function ShortcutsModal({
   onClose: onCloseProp,
   defaultBinding = "?",
   editable: editableProp = false,
+  userModes: userModesProp,
   onBindingChange,
   onBindingAdd,
   onBindingRemove,
@@ -7406,17 +7559,20 @@ function ShortcutsModal({
       },
       group.name
     )),
-    ctx && ctx.modes.size > 0 && (() => {
-      const modeGroups = shortcutGroups.filter((g) => g.mode);
-      if (modeGroups.length === 0) return null;
+    ctx && (() => {
+      const allowNewModes = userModesProp ?? ctx.modes.size > 0;
+      if (ctx.modes.size === 0 && !(editable && allowNewModes)) return null;
       return /* @__PURE__ */ jsxRuntime.jsx(
         ModesSection,
         {
-          modeGroups,
+          modeGroups: shortcutGroups.filter((g) => g.mode),
+          modes: ctx.modes,
           editable,
+          allowNewModes,
           registry: ctx.registry,
           actionRegistry: ctx.registry.actionRegistry,
-          renderShortcutEntry
+          renderShortcutEntry,
+          renderCell
         }
       );
     })(),
