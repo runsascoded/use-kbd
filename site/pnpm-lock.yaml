@@ -69,8 +69,8 @@ importers:
         specifier: link:..
         version: link:..
       use-prms:
-        specifier: ^0.3.0
-        version: 0.3.0(react@19.2.3)
+        specifier: ^0.5.0
+        version: 0.5.0(react@19.2.3)
     devDependencies:
       '@eslint/js':
         specifier: ^9.39.1
@@ -2996,8 +2996,8 @@ packages:
       '@types/react':
         optional: true
 
-  use-prms@0.3.0:
-    resolution: {integrity: sha512-DtCS0AspqUSvHIHduNv/87cn7f6PYiLyInA+azEftwaFPd9g8Yoi4S2rdnxOcYxsJzwZD4Aie0LHVyRKBa+tXA==}
+  use-prms@0.5.0:
+    resolution: {integrity: sha512-oWgETG/6KxEzJToR0MltHgIkJBLVBcibjjvx7qdMg63SqUVgNAy6iYBjODjcXwC7OYtw9UyyrnFfqC6JumQdKQ==}
     peerDependencies:
       react: ^18.0.0 || ^19.0.0
     peerDependenciesMeta:
@@ -6459,7 +6459,7 @@ snapshots:
     optionalDependencies:
       '@types/react': 19.2.7
 
-  use-prms@0.3.0(react@19.2.3):
+  use-prms@0.5.0(react@19.2.3):
     optionalDependencies:
       react: 19.2.3
 

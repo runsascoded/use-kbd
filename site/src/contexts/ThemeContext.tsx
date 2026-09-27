@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
-import { useUrlParam } from 'use-prms'
+import { useUrlState } from 'use-prms'
 
 type Theme = 'light' | 'dark' | 'system'
 
@@ -30,7 +30,7 @@ const urlThemeParam = {
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   // URL param can force theme (for screenshots)
-  const [urlTheme] = useUrlParam('theme', urlThemeParam)
+  const [urlTheme] = useUrlState('theme', urlThemeParam)
 
   const [theme, setThemeState] = useState<Theme>(() => {
     if (typeof window === 'undefined') return 'system'
