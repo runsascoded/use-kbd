@@ -1189,7 +1189,7 @@ function getConflictsArray(keymap) {
     type: actions.some((a) => a.startsWith("prefix of:") || a.startsWith("has prefix:")) ? "prefix" : "duplicate"
   }));
 }
-function getSequenceCompletions(pendingKeys, keymap, actionRegistry) {
+function getSequenceCompletions(pendingKeys, keymap, actionRegistry, isEnabled) {
   if (pendingKeys.length === 0) return [];
   const completions = [];
   for (const [hotkeyStr, actionOrActions] of Object.entries(keymap)) {
@@ -1264,7 +1264,7 @@ function getSequenceCompletions(pendingKeys, keymap, actionRegistry) {
     }
     if (!isMatch) continue;
     const allActions = Array.isArray(actionOrActions) ? actionOrActions : [actionOrActions];
-    const actions = actionRegistry ? allActions.filter((id) => actionRegistry[id]?.enabled !== false) : allActions;
+    const actions = isEnabled ? allActions.filter((id) => isEnabled(id)) : actionRegistry ? allActions.filter((id) => actionRegistry[id]?.enabled !== false) : allActions;
     if (actions.length === 0) continue;
     if (keySeqIdx === keySeq.length) {
       completions.push({
@@ -1388,12 +1388,12 @@ function parseQueryNumbers(query) {
   }
   return { text: trimmed, numbers: [] };
 }
-function searchActions(query, actions, keymap) {
+function searchActions(query, actions, keymap, isEnabled) {
   const actionBindings = keymap ? getActionBindings(keymap) : /* @__PURE__ */ new Map();
   const results = [];
   const { text: queryText, numbers: queryNumbers } = parseQueryNumbers(query);
   for (const [id, action] of Object.entries(actions)) {
-    if (action.enabled === false) continue;
+    if (isEnabled ? !isEnabled(id) : action.enabled === false) continue;
     const bindings = actionBindings.get(id) ?? [];
     const hasPlaceholders = hasAnyPlaceholderBindings(bindings);
     const effectiveQuery = queryNumbers.length > 0 && hasPlaceholders ? queryText : query;
@@ -1404,8 +1404,10 @@ function searchActions(query, actions, keymap) {
     const groupMatch = action.group ? fuzzyMatch(effectiveQuery, action.group) : { matched: false, score: 0};
     const idMatch = fuzzyMatch(effectiveQuery, id);
     let keywordScore = 0;
-    if (action.keywords) {
-      for (const keyword of action.keywords) {
+    const groupLabel = action.actionPair?.label ?? action.actionTriplet?.label;
+    const keywords = groupLabel ? [...action.keywords ?? [], groupLabel] : action.keywords;
+    if (keywords) {
+      for (const keyword of keywords) {
         const kwMatch = fuzzyMatch(effectiveQuery, keyword);
         if (kwMatch.matched) {
           keywordScore = max(keywordScore, kwMatch.score);
@@ -2251,12 +2253,12 @@ function HotkeysProvider({
     }
   }, [isAwaitingSequence, isModalOpen, closeModal]);
   const searchActionsHelper = react.useCallback(
-    (query) => searchActions(query, registry.actionRegistry, keymap),
-    [registry.actionRegistry, keymap]
+    (query) => searchActions(query, registry.actionRegistry, keymap, registry.isActionEnabled),
+    [registry.actionRegistry, registry.isActionEnabled, keymap]
   );
   const getCompletions = react.useCallback(
-    (pending) => getSequenceCompletions(pending, keymap, registry.actionRegistry),
-    [keymap, registry.actionRegistry]
+    (pending) => getSequenceCompletions(pending, keymap, registry.actionRegistry, registry.isActionEnabled),
+    [keymap, registry.actionRegistry, registry.isActionEnabled]
   );
   const executeAction = react.useCallback((id, captures) => {
     const actionMode = registry.getEffectiveMode(id);
@@ -2523,7 +2525,7 @@ function useActionPair(id, config) {
   const actionConfigs = react.useMemo(() => {
     const result = {};
     const makeConfig = (entry, index) => ({
-      label: `${label} ${index === 0 ? "a" : "b"}`,
+      label: entry.label ?? `${label} ${index === 0 ? "a" : "b"}`,
       group,
       mode,
       description,
@@ -2534,7 +2536,7 @@ function useActionPair(id, config) {
       ],
       handler: entry.handler,
       enabled: entry.enabled ?? enabled,
-      actionPair: { pairId: id, index }
+      actionPair: { pairId: id, index, label }
     });
     result[`${id}-a`] = makeConfig(actionA, 0);
     result[`${id}-b`] = makeConfig(actionB, 1);
@@ -2546,6 +2548,8 @@ function useActionPair(id, config) {
     mode,
     description,
     JSON.stringify(keywords),
+    actionA.label,
+    actionB.label,
     JSON.stringify(actionA.defaultBindings),
     JSON.stringify(actionA.keywords),
     actionA.enabled,
@@ -2801,7 +2805,7 @@ function useActionTriplet(id, config) {
   const actionConfigs = react.useMemo(() => {
     const result = {};
     const makeConfig = (entry, index) => ({
-      label: `${label} ${SUFFIXES[index]}`,
+      label: entry.label ?? `${label} ${SUFFIXES[index]}`,
       group,
       mode,
       description,
@@ -2812,7 +2816,7 @@ function useActionTriplet(id, config) {
       ],
       handler: entry.handler,
       enabled: entry.enabled ?? enabled,
-      actionTriplet: { tripletId: id, index }
+      actionTriplet: { tripletId: id, index, label }
     });
     result[`${id}-a`] = makeConfig(actionA, 0);
     result[`${id}-b`] = makeConfig(actionB, 1);
@@ -2825,6 +2829,9 @@ function useActionTriplet(id, config) {
     mode,
     description,
     JSON.stringify(keywords),
+    actionA.label,
+    actionB.label,
+    actionC.label,
     JSON.stringify(actionA.defaultBindings),
     JSON.stringify(actionA.keywords),
     actionA.enabled,
@@ -3336,7 +3343,9 @@ function useOmnibar(options) {
     maxResults,
     endpointsRegistry,
     debounceMs = DEFAULT_DEBOUNCE_MS,
-    recentActionIds = []
+    recentActionIds = [],
+    isEnabled,
+    refreshKey
   } = options;
   const [isOpen, setIsOpen] = react.useState(false);
   const [query, setQuery] = react.useState("");
@@ -3375,14 +3384,15 @@ function useOmnibar(options) {
     { enabled }
   );
   const results = react.useMemo(() => {
-    const allResults = searchActions(query, actions, keymap);
+    const allResults = searchActions(query, actions, keymap, isEnabled);
     if (!query.trim() && recentActionIds.length > 0) {
       const actionBindings = getActionBindings(keymap);
       const recentResults = [];
       const recentIdSet = /* @__PURE__ */ new Set();
       for (const actionId of recentActionIds) {
         const action = actions[actionId];
-        if (action) {
+        const actionEnabled = isEnabled ? isEnabled(actionId) : action?.enabled !== false;
+        if (action && actionEnabled) {
           const bindings = actionBindings.get(actionId) ?? [];
           const hasPlaceholders = hasAnyPlaceholderBindings(bindings);
           recentResults.push({
@@ -3402,7 +3412,7 @@ function useOmnibar(options) {
       return maxResults != null ? merged.slice(0, maxResults) : merged;
     }
     return maxResults != null ? allResults.slice(0, maxResults) : allResults;
-  }, [query, actions, keymap, maxResults, recentActionIds]);
+  }, [query, actions, keymap, maxResults, recentActionIds, isEnabled, isOpen, refreshKey]);
   react.useEffect(() => {
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
@@ -3631,8 +3641,8 @@ function useOmnibar(options) {
   }, [endpointStates, endpointsRegistry]);
   const totalResults = results.length + remoteResults.length;
   const completions = react.useMemo(() => {
-    return getSequenceCompletions(pendingKeys, keymap, actions);
-  }, [pendingKeys, keymap, actions]);
+    return getSequenceCompletions(pendingKeys, keymap, actions, isEnabled);
+  }, [pendingKeys, keymap, actions, isEnabled]);
   react.useEffect(() => {
     setSelectedIndex(0);
   }, [results, remoteResults]);
@@ -5281,7 +5291,10 @@ function Omnibar({
     onExecuteRemote: handleExecuteRemote,
     maxResults,
     endpointsRegistry: ctx?.endpointsRegistry,
-    recentActionIds: ctx?.recentActionIds
+    recentActionIds: ctx?.recentActionIds,
+    isEnabled: ctx?.registry.isActionEnabled,
+    // Re-read live `enabled` state each time the (externally owned) omnibar opens
+    refreshKey: isOpenProp ?? ctx?.isOmnibarOpen
   });
   const isOpen = isOpenProp ?? ctx?.isOmnibarOpen ?? internalIsOpen;
   const resultsContainerRef = react.useRef(null);
@@ -5628,7 +5641,10 @@ function OmnibarCmdk({
     onExecute: (id, captures) => ctx?.executeAction(id, captures),
     onExecuteRemote: handleExecuteRemote,
     endpointsRegistry: ctx?.endpointsRegistry,
-    recentActionIds: ctx?.recentActionIds
+    recentActionIds: ctx?.recentActionIds,
+    isEnabled: ctx?.registry.isActionEnabled,
+    // Re-read live `enabled` state each time the modal opens
+    refreshKey: ctx?.isOmnibarOpen
   });
   const paramEntry = useParamEntry({
     onSubmit: (_actionId, captures) => submitParam(captures[0]),
@@ -6073,7 +6089,7 @@ function organizeShortcuts(keymap, labels, descriptions, groupNames, groupOrder,
           const bi = actionRegistry[b.actionId].actionPair.index;
           return ai - bi;
         });
-        const label = entries[0].label.replace(/\s+[ab]$/i, "");
+        const label = actionRegistry[entries[0].actionId].actionPair.label ?? entries[0].label.replace(/\s+[ab]$/i, "");
         toInsertPair.push({
           type: "actionPair",
           pairId,
@@ -6122,7 +6138,7 @@ function organizeShortcuts(keymap, labels, descriptions, groupNames, groupOrder,
           const bi = actionRegistry[b.actionId].actionTriplet.index;
           return ai - bi;
         });
-        const label = entries[0].label.replace(/\s+[abc]$/i, "");
+        const label = actionRegistry[entries[0].actionId].actionTriplet.label ?? entries[0].label.replace(/\s+[abc]$/i, "");
         toInsertTriplet.push({
           type: "actionTriplet",
           tripletId,

@@ -147,6 +147,25 @@ interface RecordHotkeyOptions {
     /** When true, pause the auto-submit timeout (useful for conflict warnings). Default: false */
     pauseTimeout?: boolean;
 }
+/** Membership of an action in a pair (two inverse actions, one ShortcutsModal row) */
+interface ActionPairMeta {
+    pairId: string;
+    index: 0 | 1;
+    /**
+     * The pair's collapsed-row label in ShortcutsModal (e.g. "Previous / Next
+     * year"); also searchable in the omnibar. The member's own `label` is what the
+     * omnibar shows. Absent → ShortcutsModal strips an " a" / " b" suffix from the
+     * first member's label.
+     */
+    label?: string;
+}
+/** Membership of an action in a triplet (three related actions, one ShortcutsModal row) */
+interface ActionTripletMeta {
+    tripletId: string;
+    index: 0 | 1 | 2;
+    /** The triplet's collapsed-row label; see `ActionPairMeta.label`. */
+    label?: string;
+}
 /**
  * Definition of an action that can be triggered by hotkeys or omnibar
  */
@@ -163,7 +182,12 @@ interface ActionDefinition {
     keywords?: string[];
     /** Icon identifier (user provides rendering) */
     icon?: string;
-    /** Whether the action is currently enabled (default: true) */
+    /**
+     * Whether the action is enabled (default: true). In a registry's
+     * `actionRegistry` snapshot this is only the *registration-time* value —
+     * later `enabled` changes are tracked out-of-band (no re-register), so read
+     * live state via the registry's `isActionEnabled`.
+     */
     enabled?: boolean;
     /** Hide from ShortcutsModal (still searchable in omnibar) */
     hideFromModal?: boolean;
@@ -175,15 +199,9 @@ interface ActionDefinition {
         direction: Direction;
     };
     /** Action pair metadata (set by useActionPair) */
-    actionPair?: {
-        pairId: string;
-        index: 0 | 1;
-    };
+    actionPair?: ActionPairMeta;
     /** Action triplet metadata (set by useActionTriplet) */
-    actionTriplet?: {
-        tripletId: string;
-        index: 0 | 1 | 2;
-    };
+    actionTriplet?: ActionTripletMeta;
     /** Sort order within group in ShortcutsModal (default: 0, lower = earlier; registration order breaks ties) */
     sortOrder?: number;
 }
@@ -640,6 +658,18 @@ interface UseOmnibarOptions {
     debounceMs?: number;
     /** Recently executed action IDs to show first when query is empty */
     recentActionIds?: string[];
+    /**
+     * Live enabled check (e.g. the registry's `isActionEnabled`). `enabled` is
+     * tracked out-of-band (toggling it doesn't bump the registry), so without this
+     * results use the registration-time `actions[id].enabled` snapshot.
+     */
+    isEnabled?: (id: string) => boolean;
+    /**
+     * Local results recompute when this changes. Pass the omnibar's (externally
+     * owned) open state, so a live `isEnabled` is re-read each time it opens —
+     * `isEnabled` is ref-backed, so its changes don't otherwise trigger a recompute.
+     */
+    refreshKey?: unknown;
 }
 interface UseOmnibarResult {
     /** Whether omnibar is open */
@@ -1343,7 +1373,12 @@ declare function getConflictsArray(keymap: Record<string, string | string[]>): K
  * // ]
  * ```
  */
-declare function getSequenceCompletions(pendingKeys: HotkeySequence, keymap: Record<string, string | string[]>, actionRegistry?: ActionRegistry): SequenceCompletion[];
+declare function getSequenceCompletions(pendingKeys: HotkeySequence, keymap: Record<string, string | string[]>, actionRegistry?: ActionRegistry, 
+/**
+ * Live enabled check (e.g. the registry's `isActionEnabled`). Preferred over
+ * `actionRegistry[id].enabled`, which is only the registration-time value.
+ */
+isEnabled?: (id: string) => boolean): SequenceCompletion[];
 /**
  * Build a map of action -> keys[] from a keymap
  */
@@ -1404,7 +1439,12 @@ declare function parseQueryNumbers(query: string): {
  * // Matches "Smooth: N hours" with captures: [3]
  * ```
  */
-declare function searchActions(query: string, actions: ActionRegistry, keymap?: Record<string, string | string[]>): ActionSearchResult[];
+declare function searchActions(query: string, actions: ActionRegistry, keymap?: Record<string, string | string[]>, 
+/**
+ * Live enabled check (e.g. the registry's `isActionEnabled`). Preferred over
+ * `action.enabled`, which is only the registration-time value.
+ */
+isEnabled?: (id: string) => boolean): ActionSearchResult[];
 
 /**
  * Handler function for actions.
@@ -1451,16 +1491,10 @@ interface ActionConfig {
         groupId: string;
         direction: Direction;
     };
-    /** Action pair metadata (set by useActionPair) */
-    actionPair?: {
-        pairId: string;
-        index: 0 | 1;
-    };
-    /** Action triplet metadata (set by useActionTriplet) */
-    actionTriplet?: {
-        tripletId: string;
-        index: 0 | 1 | 2;
-    };
+    /** Action pair metadata (set by useActionPair, or pass manually) */
+    actionPair?: ActionPairMeta;
+    /** Action triplet metadata (set by useActionTriplet, or pass manually) */
+    actionTriplet?: ActionTripletMeta;
     /** Sort order within group in ShortcutsModal (default: 0, lower = earlier; registration order breaks ties) */
     sortOrder?: number;
 }
@@ -1806,6 +1840,11 @@ interface ArrowGroupConfig {
 declare function useArrowGroup(id: string, config: ArrowGroupConfig): void;
 
 interface ActionPairEntry {
+    /**
+     * This member's own label, shown in the omnibar (e.g. "Next year"). Absent →
+     * `` `${pair.label} a|b` ``. The pair's `label` labels the ShortcutsModal row.
+     */
+    label?: string;
     defaultBindings?: string[];
     handler: ActionHandler;
     keywords?: string[];
@@ -1984,6 +2023,12 @@ interface UseRowSelectionKeysOptions {
 declare function useRowSelectionKeys<T>(sel: UseRowSelectionResult<T>, options?: UseRowSelectionKeysOptions): void;
 
 interface ActionTripletEntry {
+    /**
+     * This member's own label, shown in the omnibar (e.g. "Slice along X").
+     * Absent → `` `${triplet.label} a|b|c` ``. The triplet's `label` labels the
+     * ShortcutsModal row.
+     */
+    label?: string;
     defaultBindings?: string[];
     handler: ActionHandler;
     keywords?: string[];
@@ -2556,4 +2601,4 @@ declare const DEFAULT_BUILTIN_GROUP = "Meta";
  */
 declare const ACTION_MODE_PREFIX = "__mode:";
 
-export { ACTION_LOOKUP, ACTION_MODAL, ACTION_MODE_PREFIX, ACTION_OMNIBAR, type ActionConfig, type ActionDefinition, type ActionHandler, type ActionPairConfig, type ActionPairEntry, type ActionPairShortcut, type ActionRegistry, type ActionSearchResult, type ActionShortcut, type ActionTripletConfig, type ActionTripletEntry, type ActionTripletShortcut, ActionsRegistryContext, type ActionsRegistryValue, Alt, type ArrowGroupConfig, type ArrowGroupShortcut, ArrowsDouble, ArrowsDpad, ArrowsMove, Backspace, type BindingInfo, type BindingsExport, Command, Ctrl, DEFAULT_BUILTIN_GROUP, DEFAULT_SEQUENCE_TIMEOUT, DIGITS_PLACEHOLDER, DIGIT_PLACEHOLDER, type Direction, Down, type EndpointPagination, type EndpointPaginationInfo, type EndpointPaginationMode, type EndpointQueryResult, type EndpointResponse, Enter, FLOAT_PLACEHOLDER, type FuzzyMatchResult, type GroupRenderer, type GroupRendererProps, type HandlerMap, type HotkeyHandler, type HotkeyMap, type HotkeySequence, type HotkeysConfig, type HotkeysContextValue, HotkeysProvider, type HotkeysProviderProps, Kbd, KbdLookup, KbdModal, KbdOmnibar, type KbdProps, Kbds, Key, type KeyCombination, type KeyCombinationDisplay, type KeyConflict, type KeyIconProps, type KeyIconType, type KeySeq, KeybindingEditor, type KeybindingEditorProps, type KeybindingEditorRenderProps, Left, LookupModal, MobileFAB, type MobileFABProps, type ModeConfig, type ModeCustomizations, ModeIndicator, type ModeIndicatorPosition, type ModeIndicatorProps, type ModeState, ModesRegistryContext, type ModesRegistryValue, ModifierIcon, type ModifierIconProps, type ModifierName, type ModifierType, type Modifiers, type MoveTarget, Omnibar, type OmnibarActionEntry, OmnibarCmdk, type OmnibarEndpointAsyncConfig, type OmnibarEndpointConfig, type OmnibarEndpointConfigBase, type OmnibarEndpointSyncConfig, OmnibarEndpointsRegistryContext, type OmnibarEndpointsRegistryValue, type OmnibarEntry, type OmnibarEntryBase, type OmnibarLinkEntry, type OmnibarProps, type OmnibarRenderProps, Option, type PendingAction, type RecordHotkeyOptions, type RecordHotkeyResult, type RegisteredAction, type RegisteredEndpoint, type RegisteredMode, type RemoteOmnibarResult, Right, type RowSelectionKeyAction, type RowSelectionRowProps, type RowSelectionState, SearchIcon, SearchTrigger, type SearchTriggerProps, type SeqElem, type SeqElemState, type SeqMatchState, type SequenceCompletion, SequenceModal, type SequenceStateValue, Shift, type ShortcutEntry, type ShortcutGroup, ShortcutsModal, type ShortcutsModalProps, type ShortcutsModalRenderProps, SpeedDial, type SpeedDialAction, type SpeedDialProps, type SpeedDialTooltipProps, type TooltipComponent, type TooltipProps, type TwoColumnConfig, type TwoColumnRow, Up, type UseEditableHotkeysOptions, type UseEditableHotkeysResult, type UseHotkeysOptions, type UseHotkeysResult, type UseOmnibarOptions, type UseOmnibarResult, type UseParamEntryOptions, type UseParamEntryReturn, type UseRowSelectionKeysOptions, type UseRowSelectionOptions, type UseRowSelectionResult, type UserModeConfig, bindingHasPlaceholders, computeSelected, countPlaceholders, createTwoColumnRenderer, extractCaptures, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, formatKeySeq, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasAnyPlaceholderBindings, hasConflicts, hasDigitPlaceholders, hotkeySequenceToKeySeq, isDigitPlaceholder, isMac, isModifierKey, isPlaceholderSentinel, isSequence, isShiftedSymbol, keySeqToHotkeySequence, normalizeKey, parseHotkeyString, parseKeySeq, parseQueryNumbers, searchActions, useAction, useActionPair, useActionTriplet, useActions, useActionsRegistry, useArrowGroup, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useMaybeSequenceState, useMode, useModesRegistry, useOmnibar, useOmnibarEndpoint, useOmnibarEndpointsRegistry, useParamEntry, useRecordHotkey, useRowSelection, useRowSelectionKeys, useSequenceState };
+export { ACTION_LOOKUP, ACTION_MODAL, ACTION_MODE_PREFIX, ACTION_OMNIBAR, type ActionConfig, type ActionDefinition, type ActionHandler, type ActionPairConfig, type ActionPairEntry, type ActionPairMeta, type ActionPairShortcut, type ActionRegistry, type ActionSearchResult, type ActionShortcut, type ActionTripletConfig, type ActionTripletEntry, type ActionTripletMeta, type ActionTripletShortcut, ActionsRegistryContext, type ActionsRegistryValue, Alt, type ArrowGroupConfig, type ArrowGroupShortcut, ArrowsDouble, ArrowsDpad, ArrowsMove, Backspace, type BindingInfo, type BindingsExport, Command, Ctrl, DEFAULT_BUILTIN_GROUP, DEFAULT_SEQUENCE_TIMEOUT, DIGITS_PLACEHOLDER, DIGIT_PLACEHOLDER, type Direction, Down, type EndpointPagination, type EndpointPaginationInfo, type EndpointPaginationMode, type EndpointQueryResult, type EndpointResponse, Enter, FLOAT_PLACEHOLDER, type FuzzyMatchResult, type GroupRenderer, type GroupRendererProps, type HandlerMap, type HotkeyHandler, type HotkeyMap, type HotkeySequence, type HotkeysConfig, type HotkeysContextValue, HotkeysProvider, type HotkeysProviderProps, Kbd, KbdLookup, KbdModal, KbdOmnibar, type KbdProps, Kbds, Key, type KeyCombination, type KeyCombinationDisplay, type KeyConflict, type KeyIconProps, type KeyIconType, type KeySeq, KeybindingEditor, type KeybindingEditorProps, type KeybindingEditorRenderProps, Left, LookupModal, MobileFAB, type MobileFABProps, type ModeConfig, type ModeCustomizations, ModeIndicator, type ModeIndicatorPosition, type ModeIndicatorProps, type ModeState, ModesRegistryContext, type ModesRegistryValue, ModifierIcon, type ModifierIconProps, type ModifierName, type ModifierType, type Modifiers, type MoveTarget, Omnibar, type OmnibarActionEntry, OmnibarCmdk, type OmnibarEndpointAsyncConfig, type OmnibarEndpointConfig, type OmnibarEndpointConfigBase, type OmnibarEndpointSyncConfig, OmnibarEndpointsRegistryContext, type OmnibarEndpointsRegistryValue, type OmnibarEntry, type OmnibarEntryBase, type OmnibarLinkEntry, type OmnibarProps, type OmnibarRenderProps, Option, type PendingAction, type RecordHotkeyOptions, type RecordHotkeyResult, type RegisteredAction, type RegisteredEndpoint, type RegisteredMode, type RemoteOmnibarResult, Right, type RowSelectionKeyAction, type RowSelectionRowProps, type RowSelectionState, SearchIcon, SearchTrigger, type SearchTriggerProps, type SeqElem, type SeqElemState, type SeqMatchState, type SequenceCompletion, SequenceModal, type SequenceStateValue, Shift, type ShortcutEntry, type ShortcutGroup, ShortcutsModal, type ShortcutsModalProps, type ShortcutsModalRenderProps, SpeedDial, type SpeedDialAction, type SpeedDialProps, type SpeedDialTooltipProps, type TooltipComponent, type TooltipProps, type TwoColumnConfig, type TwoColumnRow, Up, type UseEditableHotkeysOptions, type UseEditableHotkeysResult, type UseHotkeysOptions, type UseHotkeysResult, type UseOmnibarOptions, type UseOmnibarResult, type UseParamEntryOptions, type UseParamEntryReturn, type UseRowSelectionKeysOptions, type UseRowSelectionOptions, type UseRowSelectionResult, type UserModeConfig, bindingHasPlaceholders, computeSelected, countPlaceholders, createTwoColumnRenderer, extractCaptures, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, formatKeySeq, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasAnyPlaceholderBindings, hasConflicts, hasDigitPlaceholders, hotkeySequenceToKeySeq, isDigitPlaceholder, isMac, isModifierKey, isPlaceholderSentinel, isSequence, isShiftedSymbol, keySeqToHotkeySequence, normalizeKey, parseHotkeyString, parseKeySeq, parseQueryNumbers, searchActions, useAction, useActionPair, useActionTriplet, useActions, useActionsRegistry, useArrowGroup, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useMaybeSequenceState, useMode, useModesRegistry, useOmnibar, useOmnibarEndpoint, useOmnibarEndpointsRegistry, useParamEntry, useRecordHotkey, useRowSelection, useRowSelectionKeys, useSequenceState };
