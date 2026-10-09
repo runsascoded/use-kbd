@@ -2761,6 +2761,16 @@ function useRowSelection(rows, key, options = {}) {
       pinned: computeSelected(prev, rowsRef.current, keyRef.current)
     }));
   }, []);
+  const setKeys = useCallback((keys, on) => {
+    setState((prev) => {
+      const pinned = computeSelected(prev, rowsRef.current, keyRef.current);
+      for (const k of keys) {
+        if (on) pinned.add(k);
+        else pinned.delete(k);
+      }
+      return { cursor: -1, anchor: -1, pinned };
+    });
+  }, []);
   const setCursor = useCallback((index) => {
     setState((prev) => ({ cursor: index, anchor: index, pinned: prev.pinned }));
   }, []);
@@ -2817,6 +2827,7 @@ function useRowSelection(rows, key, options = {}) {
     moveCursor,
     selectPage,
     commit,
+    setKeys,
     setCursor,
     clear
   };

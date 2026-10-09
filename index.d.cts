@@ -1960,7 +1960,10 @@ interface UseRowSelectionResult<T> {
     count: number;
     /** Whether a given row is currently selected. */
     isSelected: (row: T) => boolean;
-    /** Rows (in order) that are currently selected. */
+    /**
+     * Rows (in order) that are currently selected — only those present in `rows`.
+     * Selected keys for rows not passed in (see `setKeys`) are in `selected`.
+     */
     selectedRows: () => T[];
     /** Moving end of the active range (index), or -1. */
     cursor: number;
@@ -1980,6 +1983,13 @@ interface UseRowSelectionResult<T> {
     selectPage: () => void;
     /** Freeze the resolved selection into `pinned` and drop the active range. */
     commit: () => void;
+    /**
+     * Select (`on = true`) or deselect (`on = false`) rows by key, whether or not
+     * they're in `rows` (e.g. every row of a collapsed or paginated group). Freezes
+     * the active range into `pinned` first (as `commit` does), then adds / removes
+     * `keys`; the cursor and anchor drop (call `setCursor` after to restore one).
+     */
+    setKeys: (keys: Iterable<string>, on: boolean) => void;
     /** Place the cursor and anchor at `index`, keeping `pinned` (e.g. restore a cursor after paging). */
     setCursor: (index: number) => void;
     /** Clear the entire selection. */
