@@ -8,7 +8,7 @@
  * registrant (a registry version bump). Existing registrants must not re-render.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { KbdOmnibar, ShortcutsModal, useAction, useActionPair, useActionTriplet, useArrowGroup, useHotkeysContext, useOmnibarEndpoint } from 'use-kbd'
+import { KbdOmnibar, ShortcutsModal, useAction, useActionPair, useActionTriplet, useArrowGroup, useHotkeysContext, useOmnibarEndpoint, useRowSelection } from 'use-kbd'
 
 declare global {
   interface Window {
@@ -199,6 +199,38 @@ function EndpointSortProbe() {
   return <p>Picked: <span data-testid="picked">{picked ?? '—'}</span></p>
 }
 
+/**
+ * `useRowSelection.setKeys`: select / deselect keys whether or not they're in
+ * `rows`. Buttons drive each scenario; the resolved selection is shown sorted.
+ * Gated behind `?selProbe`.
+ */
+const SEL_ROWS = ['a', 'b', 'c', 'd']
+function RowSelectionSetKeysProbe() {
+  const [withX, setWithX] = useState(false)
+  const rows = useMemo(() => (withX ? ['x', ...SEL_ROWS] : SEL_ROWS), [withX])
+  const sel = useRowSelection(rows, r => r)
+  const btn = (testid: string, label: string, onClick: () => void) =>
+    <button data-testid={testid} onClick={onClick}>{label}</button>
+  return (
+    <div data-testid="sel-probe">
+      {btn('sel-range-ac', 'Range a..c', () => { sel.select(rows.indexOf('a')); sel.extendTo(rows.indexOf('c')) })}
+      {btn('sel-add-xy', 'setKeys([x, y], true)', () => sel.setKeys(['x', 'y'], true))}
+      {btn('sel-add-z', 'setKeys([z], true)', () => sel.setKeys(['z'], true))}
+      {btn('sel-del-bz', 'setKeys([b, z], false)', () => sel.setKeys(['b', 'z'], false))}
+      {btn('sel-add-none', 'setKeys([], true)', () => sel.setKeys([], true))}
+      {btn('sel-show-x', 'Include x in rows', () => setWithX(true))}
+      <p>
+        Selected: <span data-testid="sel">{[...sel.selected].sort().join(',')}</span>
+        {' · '}count <span data-testid="sel-count">{sel.count}</span>
+        {' · '}cursor <span data-testid="sel-cursor">{sel.cursor}</span>
+      </p>
+      <ul>
+        {rows.map((r, i) => <li key={r} data-testid={`sel-row-${r}`} {...sel.rowProps(i)}>{r}</li>)}
+      </ul>
+    </div>
+  )
+}
+
 const GROUPS = ['Navigation', 'Editing', 'View', 'Tools']
 
 export function ManyActionsDemo() {
@@ -209,6 +241,7 @@ export function ManyActionsDemo() {
   const showEnabledProbe = params.has('enabledProbe')
   const showPairProbe = params.has('pairProbe')
   const showSortProbe = params.has('sortProbe')
+  const showSelProbe = params.has('selProbe')
   const actions = Array.from({ length: count }, (_, i) => ({
     id: `test-action-${i}`,
     label: `Action ${i + 1}`,
@@ -226,6 +259,7 @@ export function ManyActionsDemo() {
       {showEnabledProbe && <EnabledFlipProbe />}
       {showPairProbe && <PairLabelsProbe />}
       {showSortProbe && <EndpointSortProbe />}
+      {showSelProbe && <RowSelectionSetKeysProbe />}
       {actions.map(a => <DummyAction key={a.id} {...a} />)}
       <ShortcutsModal />
       <KbdOmnibar />

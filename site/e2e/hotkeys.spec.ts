@@ -3269,6 +3269,49 @@ test.describe('User-created modes', () => {
   })
 })
 
+test.describe('useRowSelection setKeys', () => {
+  // Select / deselect by key, whether or not the keys are in `rows` (here
+  // [a, b, c, d], optionally with x prepended).
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/many-actions?selProbe&n=5')
+    await page.waitForSelector('[data-testid="sel-probe"]', { timeout: 5000 })
+  })
+  const sel = (page: import('@playwright/test').Page) => page.getByTestId('sel')
+  const cursor = (page: import('@playwright/test').Page) => page.getByTestId('sel-cursor')
+
+  test('keys not in `rows` are selected, counted, and styled once present', async ({ page }) => {
+    await page.getByTestId('sel-add-xy').click()
+    await expect(sel(page)).toHaveText('x,y')
+    await expect(page.getByTestId('sel-count')).toHaveText('2')
+    await page.getByTestId('sel-show-x').click()
+    await expect(page.getByTestId('sel-row-x')).toHaveClass('selected')
+    await expect(page.getByTestId('sel-row-a')).toHaveClass('')
+  })
+
+  test('adding freezes the active range into the selection and drops the cursor', async ({ page }) => {
+    await page.getByTestId('sel-range-ac').click()
+    await expect(sel(page)).toHaveText('a,b,c')
+    await expect(cursor(page)).toHaveText('2')
+    await page.getByTestId('sel-add-z').click()
+    await expect(sel(page)).toHaveText('a,b,c,z')
+    await expect(cursor(page)).toHaveText('-1')
+  })
+
+  test('removing deselects keys, in or out of `rows`', async ({ page }) => {
+    await page.getByTestId('sel-range-ac').click()
+    await page.getByTestId('sel-add-z').click()
+    await page.getByTestId('sel-del-bz').click()
+    await expect(sel(page)).toHaveText('a,c')
+  })
+
+  test('no keys: selection unchanged, but the range is committed', async ({ page }) => {
+    await page.getByTestId('sel-range-ac').click()
+    await page.getByTestId('sel-add-none').click()
+    await expect(sel(page)).toHaveText('a,b,c')
+    await expect(cursor(page)).toHaveText('-1')
+  })
+})
+
 test.describe('Registration render isolation', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {

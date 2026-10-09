@@ -51,3 +51,9 @@ In the existing `useRowSelection` tests:
 ## Delivery
 
 Land on `main`, let npm-dist build the `dist` branch, and report the dist SHA; disky's gcs `site/package.json` pins use-kbd by GitHub SHA.
+
+## Implementation (done)
+
+- `setKeys(keys, on)` on `UseRowSelectionResult`, as sketched: stable callback; computes the resolved selection (freezing the active range like `commit`), adds / removes `keys`, drops cursor + anchor. `selectedRows()` is now documented as `rows`-scoped (off-`rows` keys are in `selected`).
+- Tests: this repo has no unit-test runner (Playwright e2e only), so the four cases run against a gated probe, `/many-actions?selProbe` (rows `[a, b, c, d]`, optionally with `x` prepended; buttons per scenario). e2e "useRowSelection setKeys": (1) `setKeys([x, y], true)` → `x,y`, count 2, and `x`'s row gets the `selected` class once it's in `rows`; (2) range a..c + `setKeys([z], true)` → `a,b,c,z`, cursor -1; (3) + `setKeys([b, z], false)` → `a,c`; (4) range a..c + `setKeys([], true)` → `a,b,c`, cursor -1. TFFP: all 4 failed before the method existed.
+- Also: `src/useRowSelection.ts` contained a literal NUL byte (`join('<NUL>')` in the row fingerprint, from the paging change), which made `grep` / `file` / `git diff` treat it as binary. Replaced with the `'\0'` escape (same string at runtime).
