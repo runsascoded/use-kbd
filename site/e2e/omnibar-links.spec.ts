@@ -1,5 +1,41 @@
 import { test, expect } from '@playwright/test'
 
+for (const path of ['/table', '/omnibar-links?renderer=cmdk']) {
+  test.describe(`Demo navigation links (${path})`, () => {
+    test.beforeEach(async ({ page }) => {
+      await page.addInitScript(() => {
+        Object.defineProperty(navigator, 'userAgentData', { value: { platform: 'macOS' }, configurable: true })
+        localStorage.clear()
+      })
+      await page.goto(path)
+      await page.locator('.kbd-speed-dial-primary').click()
+      await page.locator('.kbd-omnibar-input').fill('Canvas')
+    })
+
+    test('Command+Enter opens the navigation URL in an actual new tab', async ({ page }) => {
+      await expect(page.locator('.kbd-omnibar-result')).toHaveAttribute('href', '/canvas')
+      await expect(page.locator('.kbd-omnibar-new-tab-hint')).toHaveAttribute('aria-label', 'Command+Enter: open in a new tab')
+      const [popup] = await Promise.all([
+        page.waitForEvent('popup', { timeout: 5000 }),
+        page.keyboard.press('Meta+Enter'),
+      ])
+      await expect(popup).toHaveURL('/canvas')
+      expect(await popup.evaluate(() => window.opener)).toBeNull()
+      await expect(page).toHaveURL(path)
+      await expect(page.locator('.kbd-omnibar')).toHaveCount(0)
+      await popup.close()
+    })
+
+    test('plain Enter keeps client-side navigation in the current tab', async ({ page }) => {
+      await page.evaluate(() => Object.assign(window, { __navigationProbe: 'same document' }))
+      await page.keyboard.press('Enter')
+      await expect(page).toHaveURL('/canvas')
+      expect(await page.evaluate(() => Reflect.get(window, '__navigationProbe'))).toBe('same document')
+      expect(page.context().pages()).toEqual([page])
+    })
+  })
+}
+
 for (const renderer of ['default', 'cmdk']) {
   test.describe(`Omnibar links (${renderer})`, () => {
     test.beforeEach(async ({ page }) => {

@@ -83,6 +83,7 @@ export function ActionLink({
 
     registry.register(effectiveActionId, {
       label: effectiveLabel,
+      href: to,
       group,
       keywords,
       defaultBindings: defaultBinding ? [defaultBinding] : [],
@@ -95,7 +96,7 @@ export function ActionLink({
     }
     // Re-register when enabled changes (navigation to/from this page)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [effectiveActionId, effectiveLabel, group, keywordsKey, defaultBinding, enabled])
+  }, [effectiveActionId, effectiveLabel, to, group, keywordsKey, defaultBinding, enabled])
 
   return (
     <Link to={to} {...linkProps}>
