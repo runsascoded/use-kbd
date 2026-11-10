@@ -17,6 +17,7 @@ import { CanvasDemo } from './routes/CanvasDemo'
 import { CalendarDemo } from './routes/CalendarDemo'
 import { ThreeDDemo } from './routes/ThreeDDemo'
 import { CmdkDemo } from './routes/CmdkDemo'
+import { OmnibarLinksDemo } from './routes/OmnibarLinksDemo'
 
 function AppNav() {
   const location = useLocation()
@@ -116,9 +117,10 @@ function AppContent() {
           <Route path="/calendar" element={<CalendarDemo />} />
           <Route path="/many-actions" element={<ManyActionsDemo />} />
           <Route path="/cmdk" element={<CmdkDemo />} />
+          <Route path="/omnibar-links" element={<OmnibarLinksDemo />} />
         </Routes>
       </main>
-      <Omnibar />
+      {location.pathname !== '/omnibar-links' && <Omnibar />}
       <SequenceModal />
       <LookupModal />
       <FloatingControls />

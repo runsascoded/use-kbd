@@ -1,6 +1,7 @@
 // Types
 export type {
   ActionDefinition,
+  ActionHref,
   ActionPairMeta,
   ActionRegistry,
   ActionSearchResult,
@@ -95,6 +96,7 @@ export { useHotkeys } from './useHotkeys'
 export { useRecordHotkey } from './useRecordHotkey'
 export { useEditableHotkeys } from './useEditableHotkeys'
 export { useOmnibar } from './useOmnibar'
+export type { OmnibarExecutionEvent } from './omnibarNavigation'
 export { useParamEntry } from './useParamEntry'
 export type { PendingAction, UseParamEntryOptions, UseParamEntryReturn } from './useParamEntry'
 

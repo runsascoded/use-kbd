@@ -1,6 +1,6 @@
 # Delegate omnibar internals to `cmdk` (speculative)
 
-**Status**: exploratory / not committed. Worth trying on a branch before deciding.
+**Status**: shipped side-by-side on `main` as the opt-in `<OmnibarCmdk />`, including the inline form factor. Full delegation (replacing the original `<Omnibar />` renderer) remains gated on consumer dogfooding; see the decision and packaging sections below.
 
 ## Motivation
 

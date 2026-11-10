@@ -679,6 +679,8 @@
 }
 
 .kbd-omnibar-result {
+  color: inherit;
+  text-decoration: none;
   display: flex;
   align-items: center;
   padding: 10px var(--kbd-padding);
@@ -687,6 +689,17 @@
   transition: background-color var(--kbd-transition);
   min-width: 0;
   overflow: hidden;
+}
+
+.kbd-omnibar-new-tab-hint {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 8px var(--kbd-padding);
+  border-top: 1px solid var(--kbd-border);
+  color: var(--kbd-text-secondary);
+  font-size: 0.75rem;
 }
 
 .kbd-omnibar-result:hover,

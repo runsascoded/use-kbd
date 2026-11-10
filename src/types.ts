@@ -167,12 +167,15 @@ export interface ActionTripletMeta {
   label?: string
 }
 
-/**
- * Definition of an action that can be triggered by hotkeys or omnibar
- */
+/** A fixed or lazily computed navigation target. */
+export type ActionHref = string | (() => string)
+
+/** Definition of an action that can be triggered by hotkeys or omnibar. */
 export interface ActionDefinition {
   /** Display label for the action */
   label: string
+  /** Navigation target, optionally resolved lazily at execution time. */
+  href?: ActionHref
   /** Longer description (shown in omnibar, tooltips) */
   description?: string
   /** Group for organizing in shortcuts modal (e.g., "Metrics", "Time Range") */

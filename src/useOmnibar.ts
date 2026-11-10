@@ -6,6 +6,7 @@ import { searchActions, getSequenceCompletions, fuzzyMatch, getActionBindings, h
 import type { ActionRegistry, ActionSearchResult, EndpointPaginationMode, HotkeySequence, OmnibarEntry } from './types'
 import type { SequenceCompletion } from './types'
 import type { EndpointQueryResult, OmnibarEndpointsRegistryValue } from './OmnibarEndpointsRegistry'
+import { executionKeyEvent, opensNewTab, resolveHref, type OmnibarExecutionEvent } from './omnibarNavigation'
 
 /** Default debounce time for remote queries */
 const DEFAULT_DEBOUNCE_MS = 150
@@ -63,9 +64,9 @@ export interface UseOmnibarOptions {
   /** Whether omnibar hotkey is enabled (default: true) */
   enabled?: boolean
   /** Called when an action is executed (if handlers not provided, or in addition to) */
-  onExecute?: (actionId: string, captures?: number[]) => void
+  onExecute?: (actionId: string, captures?: number[], event?: KeyboardEvent) => void
   /** Called when a remote entry is executed */
-  onExecuteRemote?: (entry: OmnibarEntry) => void
+  onExecuteRemote?: (entry: OmnibarEntry, event?: OmnibarExecutionEvent) => void
   /** Called when omnibar opens */
   onOpen?: () => void
   /** Called when omnibar closes */
@@ -124,7 +125,7 @@ export interface UseOmnibarResult {
   /** Select the previous result */
   selectPrev: () => void
   /** Execute the selected action (or a specific action by ID, with optional captures) */
-  execute: (actionId?: string, captures?: number[]) => void
+  execute: (actionId?: string, captures?: number[], event?: OmnibarExecutionEvent) => void
   /** Reset selection to first result */
   resetSelection: () => void
   /** Sequence completions based on pending keys */
@@ -650,87 +651,68 @@ export function useOmnibar(options: UseOmnibarOptions): UseOmnibarResult {
     setSelectedIndex(0)
   }, [])
 
-  const executeWithCaptures = useCallback((actionId: string, captures?: number[]) => {
+  const pendingExecutionEvent = useRef<OmnibarExecutionEvent | undefined>(undefined)
+
+  const executeWithCaptures = useCallback((actionId: string, captures?: number[], event?: OmnibarExecutionEvent) => {
+    const href = resolveHref(actions[actionId]?.href)
     close()
-    if (handlersRef.current?.[actionId]) {
-      const event = new KeyboardEvent('keydown', { key: 'Enter' })
-      handlersRef.current[actionId](event, captures)
+    if (href && opensNewTab(event)) {
+      window.open(href, '_blank', 'noopener')
+      return
     }
-    onExecuteRef.current?.(actionId, captures)
-  }, [close])
+    const keyEvent = executionKeyEvent(event)
+    if (handlersRef.current?.[actionId]) {
+      handlersRef.current[actionId](keyEvent, captures)
+    }
+    onExecuteRef.current?.(actionId, captures, keyEvent)
+    if (href && !handlersRef.current?.[actionId] && !onExecuteRef.current) {
+      window.location.assign(href)
+    }
+  }, [actions, close])
 
-  const execute = useCallback((actionId?: string, captures?: number[]) => {
-    // Determine if executing a local action or remote entry
-    const localCount = results.length
-
-    // If actionId provided, try to find it in local or remote
-    if (actionId) {
-      // Check if it's a remote result ID (contains endpoint prefix)
-      const remoteResult = remoteResults.find(r => r.id === actionId)
-      if (remoteResult) {
-        close()
-        const entry = remoteResult.entry
-        if ('handler' in entry && entry.handler) {
-          entry.handler()
-        }
-        onExecuteRemoteRef.current?.(entry)
-        return
+  const execute = useCallback((actionId?: string, captures?: number[], event?: OmnibarExecutionEvent) => {
+    const remoteResult = actionId
+      ? remoteResults.find(r => r.id === actionId)
+      : remoteResults[selectedIndex - results.length]
+    if (remoteResult) {
+      const entry = remoteResult.entry
+      const href = entry.href
+      close()
+      if (href && opensNewTab(event)) {
+        window.open(href, '_blank', 'noopener')
+      } else {
+        entry.handler?.()
+        if (onExecuteRemoteRef.current) onExecuteRemoteRef.current(entry, event)
+        else if (href) window.location.assign(href)
       }
-
-      // Find the result to check for placeholders
-      const result = results.find(r => r.id === actionId)
-      const effectiveCaptures = captures ?? result?.captures
-
-      // If action has placeholders but no captures, prompt for parameter
-      if (result?.hasPlaceholders && !effectiveCaptures?.length) {
-        setPendingParamAction(actionId)
-        return
-      }
-
-      // Execute with captures
-      executeWithCaptures(actionId, effectiveCaptures)
       return
     }
 
-    // No actionId - use selectedIndex
-    if (selectedIndex < localCount) {
-      // Local action
-      const result = results[selectedIndex]
-      if (!result) return
+    const result = actionId ? results.find(r => r.id === actionId) : results[selectedIndex]
+    const id = actionId ?? result?.id
+    if (!id) return
+    const effectiveCaptures = captures ?? result?.captures
 
-      const effectiveCaptures = captures ?? result.captures
-
-      // If action has placeholders but no captures, prompt for parameter
-      if (result.hasPlaceholders && !effectiveCaptures?.length) {
-        setPendingParamAction(result.id)
-        return
-      }
-
-      executeWithCaptures(result.id, effectiveCaptures)
-    } else {
-      // Remote entry
-      const remoteIndex = selectedIndex - localCount
-      const remoteResult = remoteResults[remoteIndex]
-      if (!remoteResult) return
-
-      close()
-      const entry = remoteResult.entry
-      if ('handler' in entry && entry.handler) {
-        entry.handler()
-      }
-      onExecuteRemoteRef.current?.(entry)
+    // A new-tab gesture only needs the URL, not the handler's captured args.
+    if (result?.hasPlaceholders && !effectiveCaptures?.length && !(actions[id]?.href && opensNewTab(event))) {
+      pendingExecutionEvent.current = event
+      setPendingParamAction(id)
+      return
     }
-  }, [results, remoteResults, selectedIndex, close, executeWithCaptures])
+    executeWithCaptures(id, effectiveCaptures, event)
+  }, [actions, results, remoteResults, selectedIndex, close, executeWithCaptures])
 
   const submitParam = useCallback((value: number) => {
     if (pendingParamAction) {
-      executeWithCaptures(pendingParamAction, [value])
+      executeWithCaptures(pendingParamAction, [value], pendingExecutionEvent.current)
+      pendingExecutionEvent.current = undefined
       setPendingParamAction(null)
     }
   }, [pendingParamAction, executeWithCaptures])
 
   const cancelParam = useCallback(() => {
     setPendingParamAction(null)
+    pendingExecutionEvent.current = undefined
   }, [])
 
   // Handle keyboard navigation when open
@@ -764,7 +746,7 @@ export function useOmnibar(options: UseOmnibarOptions): UseOmnibarResult {
           break
         case 'Enter':
           e.preventDefault()
-          execute()
+          execute(undefined, undefined, e)
           break
       }
     }

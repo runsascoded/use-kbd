@@ -80,7 +80,7 @@ export interface HotkeysContextValue {
   /** Toggle the lookup modal */
   toggleLookup: () => void
   /** Execute an action by ID */
-  executeAction: (id: string, captures?: number[]) => void
+  executeAction: (id: string, captures?: number[], event?: KeyboardEvent) => void
   /** Recently executed action IDs (most recent first) */
   recentActionIds: string[]
   /** Map of key -> actions[] for keys with multiple actions bound */
@@ -419,7 +419,7 @@ export function HotkeysProvider({
     const map: Record<string, (e: KeyboardEvent, captures?: number[]) => void> = {}
 
     for (const [id, action] of registry.actions) {
-      map[id] = action.config.handler
+      map[id] = action.config.handler ?? ((e, captures) => registry.execute(id, captures, e))
     }
 
     // Add mode exit handler
@@ -468,12 +468,12 @@ export function HotkeysProvider({
   )
 
   // Wrap execute to track recents + auto-activate mode for mode-scoped actions
-  const executeAction = useCallback((id: string, captures?: number[]) => {
+  const executeAction = useCallback((id: string, captures?: number[], event?: KeyboardEvent) => {
     const actionMode = registry.getEffectiveMode(id)
     if (actionMode && modesRegistry.activeMode !== actionMode) {
       modesRegistry.activateMode(actionMode)
     }
-    registry.execute(id, captures)
+    registry.execute(id, captures, event)
     trackRecentAction(id)
   }, [registry, trackRecentAction, modesRegistry])
 

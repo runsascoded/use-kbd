@@ -5,6 +5,7 @@ import type { ActionRegistry, BindingsExport, ModeCustomizations, UserModeConfig
 import { EMPTY_MODE_CUSTOMIZATIONS } from './types'
 import type { ActionConfig } from './useAction'
 import type { HotkeyMap } from './useHotkeys'
+import { resolveHref } from './omnibarNavigation'
 
 /** Current version for export format */
 const EXPORT_VERSION = '0.8.0'
@@ -20,7 +21,7 @@ export interface ActionsRegistryValue {
   /** Unregister an action. Called by useAction on unmount. */
   unregister: (id: string) => void
   /** Execute an action by ID, optionally with captured digit values */
-  execute: (id: string, captures?: number[]) => void
+  execute: (id: string, captures?: number[], event?: KeyboardEvent) => void
   /** Check if an action is enabled (defaults to true if not set or not found) */
   isActionEnabled: (id: string) => boolean
   /**
@@ -414,11 +415,15 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
     enabledRef.current.set(id, enabled)
   }, [])
 
-  const execute = useCallback((id: string, captures?: number[]) => {
+  const execute = useCallback((id: string, captures?: number[], event?: KeyboardEvent) => {
     const action = actionsRef.current.get(id)
     if (action && isActionEnabled(id)) {
       dbg.registry('execute: %s (captures: %o)', id, captures)
-      action.config.handler(undefined, captures)
+      if (action.config.handler) action.config.handler(event, captures)
+      else {
+        const href = resolveHref(action.config.href)
+        if (href) window.location.assign(href)
+      }
     }
   }, [isActionEnabled])
 
@@ -476,6 +481,7 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
     for (const [id, { config }] of actionsRef.current) {
       registry[id] = {
         label: config.label,
+        get href() { return config.href },
         description: config.description,
         group: config.group,
         mode: config.mode,

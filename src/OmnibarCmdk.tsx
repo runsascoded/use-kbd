@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Command } from 'cmdk'
 import { useMaybeHotkeysContext } from './HotkeysProvider'
 import { useAction } from './useAction'
@@ -6,6 +6,7 @@ import { useOmnibar, type RemoteOmnibarResult } from './useOmnibar'
 import { useParamEntry } from './useParamEntry'
 import { ACTION_OMNIBAR, DEFAULT_BUILTIN_GROUP } from './constants'
 import type { OmnibarEntry } from './types'
+import { OmnibarNewTabHint, OmnibarResultRow } from './OmnibarResultRow'
 
 /**
  * Registers the "Command palette" toggle action (⌘K). Split into its own
@@ -55,6 +56,7 @@ export function OmnibarCmdk({
   const ctx = useMaybeHotkeysContext()
   const actions = ctx?.registry.actionRegistry ?? {}
   const keymap = ctx?.registry.keymap ?? {}
+  const [selectedId, setSelectedId] = useState('')
 
   const handleExecuteRemote = useCallback((entry: OmnibarEntry) => {
     if ('href' in entry && entry.href) window.location.href = entry.href
@@ -78,7 +80,7 @@ export function OmnibarCmdk({
     openKey: '', // trigger handled via useAction above
     enabled: false,
     onClose: () => ctx?.closeOmnibar(),
-    onExecute: (id, captures) => ctx?.executeAction(id, captures),
+    onExecute: (id, captures, event) => ctx?.executeAction(id, captures, event),
     onExecuteRemote: handleExecuteRemote,
     endpointsRegistry: ctx?.endpointsRegistry,
     recentActionIds: ctx?.recentActionIds,
@@ -137,12 +139,27 @@ export function OmnibarCmdk({
   }, [endpointPagination, loadMore])
 
   const inParamEntry = pendingParamAction != null
+  const selectedResult = results.find(r => r.id === selectedId)
+  const selectedRemoteResult = remoteResults.find(r => r.id === selectedId)
+  const selectedHref = selectedResult?.action.href ?? selectedRemoteResult?.entry.href
 
   const body = (
     <Command
       shouldFilter={false}
       loop
-      onKeyDown={e => { if (e.key === 'Escape' && !inParamEntry && !inline) { e.preventDefault(); ctx?.closeOmnibar() } }}
+      value={selectedId}
+      onValueChange={setSelectedId}
+      onKeyDown={e => {
+        if (inParamEntry) return
+        if (e.key === 'Escape' && !inline) {
+          e.preventDefault()
+          ctx?.closeOmnibar()
+        } else if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+          // cmdk's onSelect only carries the value; retain the native event.
+          e.preventDefault()
+          if (selectedResult || selectedRemoteResult) execute(selectedId, undefined, e.nativeEvent)
+        }
+      }}
     >
       <div className="kbd-omnibar-header">
         {inParamEntry ? (
@@ -190,9 +207,11 @@ export function OmnibarCmdk({
         {recentResults.length > 0 && (
           <Command.Group heading="Recent" className="kbd-omnibar-group">
             {recentResults.map(r => (
-              <Command.Item key={r.id} value={r.id} className="kbd-omnibar-result" onSelect={() => execute(r.id, r.captures)}>
-                <span className="kbd-omnibar-result-label">{r.action.label}</span>
-                {r.bindings[0] && <kbd className="kbd-omnibar-binding">{r.bindings[0]}</kbd>}
+              <Command.Item key={r.id} value={r.id} asChild>
+                <OmnibarResultRow href={r.action.href} className="kbd-omnibar-result" onExecute={event => execute(r.id, r.captures, event)}>
+                  <span className="kbd-omnibar-result-label">{r.action.label}</span>
+                  {r.bindings[0] && <kbd className="kbd-omnibar-binding">{r.bindings[0]}</kbd>}
+                </OmnibarResultRow>
               </Command.Item>
             ))}
           </Command.Group>
@@ -201,9 +220,11 @@ export function OmnibarCmdk({
         {actionResults.length > 0 && (
           <Command.Group heading="Actions" className="kbd-omnibar-group">
             {actionResults.map(r => (
-              <Command.Item key={r.id} value={r.id} className="kbd-omnibar-result" onSelect={() => execute(r.id, r.captures)}>
-                <span className="kbd-omnibar-result-label">{r.action.label}</span>
-                {r.bindings[0] && <kbd className="kbd-omnibar-binding">{r.bindings[0]}</kbd>}
+              <Command.Item key={r.id} value={r.id} asChild>
+                <OmnibarResultRow href={r.action.href} className="kbd-omnibar-result" onExecute={event => execute(r.id, r.captures, event)}>
+                  <span className="kbd-omnibar-result-label">{r.action.label}</span>
+                  {r.bindings[0] && <kbd className="kbd-omnibar-binding">{r.bindings[0]}</kbd>}
+                </OmnibarResultRow>
               </Command.Item>
             ))}
           </Command.Group>
@@ -212,17 +233,20 @@ export function OmnibarCmdk({
         {Array.from(remoteGroups.entries()).map(([group, { items }]) => (
           <Command.Group key={group} heading={group} className="kbd-omnibar-group">
             {items.map(r => (
-              <Command.Item key={r.id} value={r.id} className="kbd-omnibar-result" onSelect={() => execute(r.id)}>
-                <span className="kbd-omnibar-result-label">{r.entry.label}</span>
-                {r.entry.description && (
-                  <span className="kbd-omnibar-result-description">{r.entry.description}</span>
-                )}
+              <Command.Item key={r.id} value={r.id} asChild>
+                <OmnibarResultRow href={r.entry.href} className="kbd-omnibar-result" onExecute={event => execute(r.id, undefined, event)}>
+                  <span className="kbd-omnibar-result-label">{r.entry.label}</span>
+                  {r.entry.description && (
+                    <span className="kbd-omnibar-result-description">{r.entry.description}</span>
+                  )}
+                </OmnibarResultRow>
               </Command.Item>
             ))}
           </Command.Group>
         ))}
         {isLoadingRemote && <div className="kbd-omnibar-loading" aria-hidden>Loading…</div>}
       </Command.List>
+      {!inParamEntry && selectedHref && <OmnibarNewTabHint />}
     </Command>
   )
 

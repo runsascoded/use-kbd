@@ -500,6 +500,18 @@ Command palette for searching and executing actions:
 />
 ```
 
+Give an action an `href` to enable ⌘Enter on macOS, Ctrl+Enter elsewhere, ⌘/Ctrl-click, and middle-click to open it in a new tab. Plain Enter or click runs its `handler`, or navigates to `href` when no handler is supplied. The selected link shows a new-tab hint. Both `<Omnibar>` and `<OmnibarCmdk>` support this, including remote endpoint links.
+
+```tsx
+useAction('page:peer', {
+  label: 'This page on the other site',
+  href: () => peerHref(location.href), // resolved again at execution time
+  handler: () => navigate(peerHref(location.href)), // optional, e.g. client-side routing
+})
+```
+
+Direct hotkeys keep running the handler; modifier-based new-tab navigation applies to palette execution. Without an `href`, modified Enter still runs the handler and preserves its native `KeyboardEvent`. Clicks are converted to a keyboard event carrying the click's modifiers. Custom palettes can pass native events to the headless `useOmnibar` API with `execute(actionId?, captures?, event?)`; omit the first two arguments to execute the selected row.
+
 ### `<LookupModal>`
 
 Browse and filter shortcuts by typing key sequences. Press `⌘⇧K` (default) to open. Supports parameter entry for actions with [digit placeholders](#digit-placeholders)—type digits before selecting an action to use them as the value.

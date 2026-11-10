@@ -9,6 +9,8 @@ import { parseKeySeq, formatKeyForDisplay } from './utils'
 import type { SeqElem, OmnibarEntry } from './types'
 import type { ActionRegistry, ActionSearchResult, HotkeySequence, SequenceCompletion } from './types'
 import type { HandlerMap, HotkeyMap } from './useHotkeys'
+import { resolveHref, type OmnibarExecutionEvent } from './omnibarNavigation'
+import { OmnibarNewTabHint, OmnibarResultRow } from './OmnibarResultRow'
 
 export interface OmnibarProps {
   /**
@@ -48,12 +50,12 @@ export interface OmnibarProps {
    * Called when a local action is executed.
    * If not provided, uses executeAction from HotkeysContext.
    */
-  onExecute?: (actionId: string) => void
+  onExecute?: (actionId: string, captures?: number[], event?: globalThis.KeyboardEvent) => void
   /**
    * Called when a remote omnibar entry is executed.
    * Use this to handle navigation for entries with `href`.
    */
-  onExecuteRemote?: (entry: OmnibarEntry) => void
+  onExecuteRemote?: (entry: OmnibarEntry, event?: OmnibarExecutionEvent) => void
   /** Hard cap on results. Omit for infinite scroll (default, renders 25 at a time). */
   maxResults?: number
   /** Placeholder text for input (default: 'Type a command...') */
@@ -85,7 +87,7 @@ export interface OmnibarRenderProps {
   totalResults: number
   selectNext: () => void
   selectPrev: () => void
-  execute: (actionId?: string, captures?: number[]) => void
+  execute: (actionId?: string, captures?: number[], event?: OmnibarExecutionEvent) => void
   close: () => void
   completions: SequenceCompletion[]
   pendingKeys: HotkeySequence
@@ -211,13 +213,16 @@ export function Omnibar({
   })
 
   // Create execute handler that falls back to context
-  const handleExecute = useCallback((actionId: string, captures?: number[]) => {
+  const handleExecute = useCallback((actionId: string, captures?: number[], event?: globalThis.KeyboardEvent) => {
     if (onExecuteProp) {
-      onExecuteProp(actionId)
+      onExecuteProp(actionId, captures, event)
     } else if (ctx?.executeAction) {
-      ctx.executeAction(actionId, captures)
+      ctx.executeAction(actionId, captures, event)
+    } else {
+      const href = resolveHref(actions[actionId]?.href)
+      if (href && !handlersProp?.[actionId]) window.location.assign(href)
     }
-  }, [onExecuteProp, ctx])
+  }, [onExecuteProp, ctx, actions, handlersProp])
 
   // Create close handler that falls back to context
   const handleClose = useCallback(() => {
@@ -238,9 +243,9 @@ export function Omnibar({
   }, [onOpenProp, ctx])
 
   // Create remote execute handler
-  const handleExecuteRemote = useCallback((entry: OmnibarEntry) => {
+  const handleExecuteRemote = useCallback((entry: OmnibarEntry, event?: OmnibarExecutionEvent) => {
     if (onExecuteRemoteProp) {
-      onExecuteRemoteProp(entry)
+      onExecuteRemoteProp(entry, event)
     } else if ('href' in entry && entry.href) {
       // Default behavior: navigate to href using window.location
       window.location.href = entry.href
@@ -460,7 +465,7 @@ export function Omnibar({
           break
         case 'Enter':
           e.preventDefault()
-          execute()
+          execute(undefined, undefined, e.nativeEvent)
           break
       }
     },
@@ -578,10 +583,11 @@ export function Omnibar({
                 if (result.id.startsWith(ACTION_MODE_PREFIX)) return null
 
                 return (
-                  <div
+                  <OmnibarResultRow
                     key={result.id}
+                    href={result.action.href}
                     className={`kbd-omnibar-result ${i === selectedIndex ? 'selected' : ''}${isModeInactive ? ' kbd-mode-inactive' : ''}`}
-                    onClick={() => execute(result.id)}
+                    onExecute={event => execute(result.id, undefined, event)}
                   >
                     <span className="kbd-omnibar-result-label">
                       {result.action.label}
@@ -606,7 +612,7 @@ export function Omnibar({
                         ))}
                       </div>
                     )}
-                  </div>
+                  </OmnibarResultRow>
                 )
               })}
 
@@ -635,10 +641,11 @@ export function Omnibar({
                         const absoluteIndex = results.length + remoteIndex
                         remoteIndex++
                         return (
-                          <div
+                          <OmnibarResultRow
                             key={result.id}
+                            href={result.entry.href}
                             className={`kbd-omnibar-result ${absoluteIndex === selectedIndex ? 'selected' : ''}`}
-                            onClick={() => execute(result.id)}
+                            onExecute={event => execute(result.id, undefined, event)}
                           >
                             <span className="kbd-omnibar-result-label">
                               {result.entry.label}
@@ -653,7 +660,7 @@ export function Omnibar({
                                 {result.entry.description}
                               </span>
                             )}
-                          </div>
+                          </OmnibarResultRow>
                         )
                       })}
 
@@ -689,6 +696,9 @@ export function Omnibar({
             </>
           )}
         </div>
+        {!pendingParamAction && (selectedIndex < results.length
+          ? results[selectedIndex]?.action.href
+          : remoteResults[selectedIndex - results.length]?.entry.href) && <OmnibarNewTabHint />}
       </div>
     </div>
   )

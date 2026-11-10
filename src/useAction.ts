@@ -1,6 +1,7 @@
 import { useContext, useEffect, useRef } from 'react'
 import { ActionsRegistryApiContext } from './ActionsRegistry'
-import type { ActionPairMeta, ActionTripletMeta, Direction } from './types'
+import type { ActionHref, ActionPairMeta, ActionTripletMeta, Direction } from './types'
+import { resolveHref } from './omnibarNavigation'
 
 /**
  * Handler function for actions.
@@ -21,6 +22,10 @@ import type { ActionPairMeta, ActionTripletMeta, Direction } from './types'
 export type ActionHandler = (e?: KeyboardEvent, captures?: number[]) => void
 
 export interface ActionConfig {
+  /** Handler, optional when `href` is supplied. Provide at least one of the two. */
+  handler?: ActionHandler
+  /** Navigation target, resolved again when the action executes. */
+  href?: ActionHref
   /** Human-readable label for omnibar/modal */
   label: string
   /** Longer description (shown in tooltips, omnibar) */
@@ -33,8 +38,6 @@ export interface ActionConfig {
   defaultBindings?: string[]
   /** Search keywords for omnibar */
   keywords?: string[]
-  /** The action handler (optionally receives KeyboardEvent and captured values) */
-  handler: ActionHandler
   /** Whether action is currently enabled (default: true) */
   enabled?: boolean
   /** Priority for conflict resolution (higher wins, default: 0) */
@@ -80,6 +83,10 @@ export interface ActionConfig {
  * }
  * ```
  */
+// The required-handler overload preserves contextual typing for generic calls
+// such as `handler: useCallback((event, captures) => ..., [])`.
+export function useAction(id: string, config: ActionConfig & { handler: ActionHandler }): void
+export function useAction(id: string, config: ActionConfig): void
 export function useAction(id: string, config: ActionConfig): void {
   // Consume the stable API context (not the full registry): registering an
   // action must not re-render every other useAction/useActions caller.
@@ -92,9 +99,9 @@ export function useAction(id: string, config: ActionConfig): void {
   const registryRef = useRef(registry)
   registryRef.current = registry
 
-  // Keep handler in a ref so we don't re-register on every render
-  const handlerRef = useRef(config.handler)
-  handlerRef.current = config.handler
+  // Read current handlers and URL closures without re-registering on renders.
+  const configRef = useRef(config)
+  configRef.current = config
 
   // Keep enabled state in ref too
   const enabledRef = useRef(config.enabled ?? true)
@@ -103,9 +110,15 @@ export function useAction(id: string, config: ActionConfig): void {
   useEffect(() => {
     registryRef.current.register(id, {
       ...config,
+      get href() { return configRef.current.href },
       handler: (e, captures) => {
         if (enabledRef.current) {
-          handlerRef.current(e, captures)
+          const current = configRef.current
+          if (current.handler) current.handler(e, captures)
+          else {
+            const href = resolveHref(current.href)
+            if (href) window.location.assign(href)
+          }
         }
       },
     })
@@ -151,6 +164,8 @@ export function useAction(id: string, config: ActionConfig): void {
  * })
  * ```
  */
+export function useActions(actions: Record<string, ActionConfig & { handler: ActionHandler }>): void
+export function useActions(actions: Record<string, ActionConfig>): void
 export function useActions(actions: Record<string, ActionConfig>): void {
   // Consume the stable API context (see useAction): registering must not
   // re-render every other useAction/useActions caller on the registry version.
@@ -163,12 +178,12 @@ export function useActions(actions: Record<string, ActionConfig>): void {
   const registryRef = useRef(registry)
   registryRef.current = registry
 
-  // Keep handlers in refs
-  const handlersRef = useRef<Record<string, ActionHandler>>({})
+  // Read current handlers and URL closures without re-registering on renders.
+  const configsRef = useRef(actions)
+  configsRef.current = actions
   const enabledRef = useRef<Record<string, boolean>>({})
 
   for (const [id, config] of Object.entries(actions)) {
-    handlersRef.current[id] = config.handler
     enabledRef.current[id] = config.enabled ?? true
   }
 
@@ -176,9 +191,15 @@ export function useActions(actions: Record<string, ActionConfig>): void {
     for (const [id, config] of Object.entries(actions)) {
       registryRef.current.register(id, {
         ...config,
+        get href() { return configsRef.current[id]?.href },
         handler: (e, captures) => {
           if (enabledRef.current[id]) {
-            handlersRef.current[id]?.(e, captures)
+            const current = configsRef.current[id]
+            if (current?.handler) current.handler(e, captures)
+            else {
+              const href = resolveHref(current?.href)
+              if (href) window.location.assign(href)
+            }
           }
         },
       })
