@@ -84,7 +84,7 @@
 /* === Links within kbd components === */
 .kbd-modal a,
 .kbd-lookup a,
-.kbd-omnibar a,
+.kbd-omnibar a:not(.kbd-omnibar-result),
 .kbd-sequence a,
 .kbd-kbd a {
   color: var(--kbd-link);
@@ -94,7 +94,7 @@
 
 .kbd-modal a:hover,
 .kbd-lookup a:hover,
-.kbd-omnibar a:hover,
+.kbd-omnibar a:not(.kbd-omnibar-result):hover,
 .kbd-sequence a:hover,
 .kbd-kbd a:hover {
   color: var(--kbd-link-hover);
@@ -689,6 +689,19 @@
   transition: background-color var(--kbd-transition);
   min-width: 0;
   overflow: hidden;
+}
+
+.kbd-omnibar a.kbd-omnibar-result {
+  color: var(--kbd-omnibar-link-color, inherit);
+  text-decoration: none;
+}
+
+.kbd-omnibar-link-indicator {
+  display: block;
+  width: 0.85rem;
+  height: 0.85rem;
+  flex-shrink: 0;
+  color: var(--kbd-omnibar-link-indicator-color, var(--kbd-text-secondary));
 }
 
 .kbd-omnibar-new-tab-hint {

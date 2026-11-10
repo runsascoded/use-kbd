@@ -51,6 +51,35 @@ for (const renderer of ['default', 'cmdk']) {
       await expect(page.locator('.kbd-omnibar-input')).toBeVisible()
     })
 
+    test('link rows use neutral text and a configurable subtle indicator', async ({ page }) => {
+      const row = (label: string) => page.locator('.kbd-omnibar-result').filter({
+        has: page.locator('.kbd-omnibar-result-label', { hasText: new RegExp(`^${label}$`) }),
+      })
+      const link = row('Link with handler')
+      const command = row('Event without URL')
+      const textColor = await command.evaluate(el => getComputedStyle(el).color)
+      const indicator = link.locator('.kbd-omnibar-link-indicator')
+
+      await expect(link).toHaveCSS('color', textColor)
+      await expect(link).toHaveCSS('text-decoration-line', 'none')
+      await expect(indicator).toBeVisible()
+      await expect(indicator).toHaveAttribute('aria-hidden', 'true')
+      await expect(command.locator('.kbd-omnibar-link-indicator')).toHaveCount(0)
+      await link.hover()
+      await expect(link).toHaveCSS('color', textColor)
+      await expect(link).toHaveCSS('text-decoration-line', 'none')
+      const secondaryColor = await page.locator('.kbd-omnibar-new-tab-hint').evaluate(el => getComputedStyle(el).color)
+      await expect(indicator).toHaveCSS('color', secondaryColor)
+
+      await page.addStyleTag({ content: '.kbd-omnibar { --kbd-omnibar-link-color: rgb(123, 45, 67); --kbd-omnibar-link-indicator-color: rgb(76, 54, 32); }' })
+      await expect(link).toHaveCSS('color', 'rgb(123, 45, 67)')
+      await expect(indicator).toHaveCSS('color', 'rgb(76, 54, 32)')
+      await expect(command).toHaveCSS('color', textColor)
+      await page.addStyleTag({ content: '.kbd-omnibar-link-indicator { display: none; }' })
+      await expect(indicator).not.toBeVisible()
+      await expect(link).toHaveAttribute('href', '/omnibar-links?destination=initial')
+    })
+
     test('Enter runs the handler and forwards the actual keyboard event', async ({ page }) => {
       await page.locator('.kbd-omnibar-input').fill('Link with handler')
       await page.keyboard.press('Enter')

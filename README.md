@@ -512,6 +512,20 @@ useAction('page:peer', {
 
 Direct hotkeys keep running the handler; modifier-based new-tab navigation applies to palette execution. Without an `href`, modified Enter still runs the handler and preserves its native `KeyboardEvent`. Clicks are converted to a keyboard event carrying the click's modifiers. Custom palettes can pass native events to the headless `useOmnibar` API with `execute(actionId?, captures?, event?)`; omit the first two arguments to execute the selected row.
 
+Link results use the same text color as commands, with a muted ↗ icon at the right edge. They stay neutral on hover, without an underline. Customize both renderers with CSS:
+
+```css
+.kbd-omnibar {
+  --kbd-omnibar-link-color: inherit; /* set to var(--kbd-link) for colored rows */
+  --kbd-omnibar-link-indicator-color: var(--kbd-text-secondary);
+}
+
+/* Optional: hide the arrow while keeping link behavior and the footer hint. */
+.kbd-omnibar-link-indicator { display: none; }
+```
+
+The general `--kbd-link` / `--kbd-link-hover` variables style prose links inside keyboard components; action rows use the separate controls above. Browser coverage in `site/e2e/omnibar-links.spec.ts` includes modifier and middle-click execution, actual new tabs, plain Enter navigation, event forwarding, and default/customized row styling for both renderers.
+
 ### `<LookupModal>`
 
 Browse and filter shortcuts by typing key sequences. Press `⌘⇧K` (default) to open. Supports parameter entry for actions with [digit placeholders](#digit-placeholders)—type digits before selecting an action to use them as the value.

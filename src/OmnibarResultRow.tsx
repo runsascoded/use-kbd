@@ -12,7 +12,7 @@ interface OmnibarResultRowProps extends HTMLAttributes<HTMLElement> {
 }
 
 export const OmnibarResultRow = forwardRef<HTMLElement, OmnibarResultRowProps>(
-  function OmnibarResultRow({ href, onExecute, onClick, onAuxClick, ...props }, ref) {
+  function OmnibarResultRow({ href, onExecute, onClick, onAuxClick, children, ...props }, ref) {
     const handleClick = (event: MouseEvent<HTMLElement>) => {
       // auxclick also fires for the context-menu button; leave that native.
       if (event.button !== 0 && event.button !== 1) return
@@ -25,8 +25,15 @@ export const OmnibarResultRow = forwardRef<HTMLElement, OmnibarResultRowProps>(
       onAuxClick: (event: MouseEvent<HTMLElement>) => { handleClick(event); onAuxClick?.(event) },
     }
     return url
-      ? <a {...props} {...handlers} ref={ref as Ref<HTMLAnchorElement>} href={url} />
-      : <div {...props} {...handlers} ref={ref as Ref<HTMLDivElement>} />
+      ? (
+        <a {...props} {...handlers} ref={ref as Ref<HTMLAnchorElement>} href={url}>
+          {children}
+          <svg className="kbd-omnibar-link-indicator" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+            <path d="M4 12 12 4M4 4h8v8" />
+          </svg>
+        </a>
+      )
+      : <div {...props} {...handlers} ref={ref as Ref<HTMLDivElement>}>{children}</div>
   },
 )
 
