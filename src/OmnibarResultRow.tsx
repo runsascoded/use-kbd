@@ -1,7 +1,7 @@
 import { forwardRef } from 'react'
 import type { HTMLAttributes, MouseEvent, Ref } from 'react'
 import type { ActionHref } from './types'
-import { resolveHref, type OmnibarExecutionEvent } from './omnibarNavigation'
+import { isModifiedLinkClick, resolveHref, type OmnibarExecutionEvent } from './omnibarNavigation'
 import { ModifierIcon } from './ModifierIcons'
 import { isMac } from './utils'
 
@@ -9,13 +9,22 @@ import { isMac } from './utils'
 interface OmnibarResultRowProps extends HTMLAttributes<HTMLElement> {
   href?: ActionHref
   onExecute: (event: OmnibarExecutionEvent) => void
+  onNavigate: () => void
 }
 
 export const OmnibarResultRow = forwardRef<HTMLElement, OmnibarResultRowProps>(
-  function OmnibarResultRow({ href, onExecute, onClick, onAuxClick, children, ...props }, ref) {
+  function OmnibarResultRow({ href, onExecute, onNavigate, onClick, onAuxClick, children, ...props }, ref) {
     const handleClick = (event: MouseEvent<HTMLElement>) => {
       // auxclick also fires for the context-menu button; leave that native.
       if (event.button !== 0 && event.button !== 1) return
+      if (url && isModifiedLinkClick(event.nativeEvent)) {
+        // Refresh lazy URLs, then leave the browser's default activation intact.
+        const link = event.currentTarget as HTMLAnchorElement
+        link.href = resolveHref(href) ?? url
+        // Keep the anchor mounted until its native activation has completed.
+        window.setTimeout(onNavigate, 0)
+        return
+      }
       event.preventDefault()
       onExecute(event.nativeEvent)
     }
@@ -26,7 +35,7 @@ export const OmnibarResultRow = forwardRef<HTMLElement, OmnibarResultRowProps>(
     }
     return url
       ? (
-        <a {...props} {...handlers} ref={ref as Ref<HTMLAnchorElement>} href={url}>
+        <a {...props} {...handlers} ref={ref as Ref<HTMLAnchorElement>} href={url} rel="noopener">
           {children}
           <svg className="kbd-omnibar-link-indicator" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
             <path d="M4 12 12 4M4 4h8v8" />
@@ -40,8 +49,10 @@ export const OmnibarResultRow = forwardRef<HTMLElement, OmnibarResultRowProps>(
 export function OmnibarNewTabHint() {
   const mac = isMac()
   return (
-    <div className="kbd-omnibar-new-tab-hint" aria-label={`${mac ? 'Command' : 'Ctrl'}+Enter: open in a new tab`}>
-      <kbd className="kbd-kbd">{mac ? <ModifierIcon modifier="meta" aria-hidden="true" /> : 'Ctrl'}↵</kbd> new tab
+    <div className="kbd-omnibar-new-tab-hint" aria-label={`${mac ? 'Command' : 'Ctrl'}+Enter: open in a new tab; ${mac ? 'Command' : 'Ctrl'}+Shift+Enter: open and switch to a new tab; Shift+Enter: open in a new window`}>
+      <span className="kbd-omnibar-navigation-hint"><kbd className="kbd-kbd">{mac ? <ModifierIcon modifier="meta" aria-hidden="true" /> : 'Ctrl'}↵</kbd> new tab</span>
+      <span className="kbd-omnibar-navigation-hint"><kbd className="kbd-kbd">{mac ? <ModifierIcon modifier="meta" aria-hidden="true" /> : 'Ctrl'}<ModifierIcon modifier="shift" aria-hidden="true" />↵</kbd> switch</span>
+      <span className="kbd-omnibar-navigation-hint"><kbd className="kbd-kbd"><ModifierIcon modifier="shift" aria-hidden="true" />↵</kbd> new window</span>
     </div>
   )
 }

@@ -502,6 +502,15 @@ Command palette for searching and executing actions:
 
 Give an action an `href` to enable ⌘Enter on macOS, Ctrl+Enter elsewhere, ⌘/Ctrl-click, and middle-click to open it in a new tab. Plain Enter or click runs its `handler`, or navigates to `href` when no handler is supplied. The selected link shows a new-tab hint. Both `<Omnibar>` and `<OmnibarCmdk>` support this, including remote endpoint links.
 
+| Gesture (macOS) | Link action |
+| --- | --- |
+| Enter / click | Run the handler, or navigate in the current tab |
+| ⌘Enter / ⌘click / middle-click | Open a background tab |
+| ⌘⇧Enter / ⌘⇧click / ⇧middle-click | Open a tab and switch to it |
+| ⇧Enter / ⇧click | Open a new browser window |
+
+Use Ctrl instead of ⌘ on Windows/Linux. Modified clicks retain native browser behavior; keyboard execution requests the corresponding link gesture using an anchor with `rel="noopener"`. Browser preferences can override tab focus or window placement. These gestures don't invoke the action handler. The selected-link footer shows the keyboard variants; without an `href`, modified Enter still invokes the handler with its modifiers.
+
 ```tsx
 useAction('page:peer', {
   label: 'This page on the other site',
@@ -524,7 +533,7 @@ Link results use the same text color as commands, with a muted ↗ icon at the r
 .kbd-omnibar-link-indicator { display: none; }
 ```
 
-The general `--kbd-link` / `--kbd-link-hover` variables style prose links inside keyboard components; action rows use the separate controls above. Browser coverage in `site/e2e/omnibar-links.spec.ts` includes modifier and middle-click execution, actual new tabs, plain Enter navigation, event forwarding, and default/customized row styling for both renderers.
+The general `--kbd-link` / `--kbd-link-hover` variables style prose links inside keyboard components; action rows use the separate controls above. Browser coverage in `site/e2e/omnibar-links.spec.ts` includes modifier and middle-click execution, actual new tabs, plain Enter navigation, event forwarding, and default/customized row styling for both renderers. `site/e2e/omnibar-dispositions.spec.ts` covers the full gesture table, remote links, and URL-free actions. Run it with `pnpm -C site exec playwright test e2e/omnibar-dispositions.spec.ts --headed --workers 1` to additionally verify actual tab focus and distinct browser windows; headless runs check navigation and opener isolation.
 
 ### `<LookupModal>`
 

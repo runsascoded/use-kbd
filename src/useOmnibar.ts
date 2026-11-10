@@ -6,7 +6,7 @@ import { searchActions, getSequenceCompletions, fuzzyMatch, getActionBindings, h
 import type { ActionRegistry, ActionSearchResult, EndpointPaginationMode, HotkeySequence, OmnibarEntry } from './types'
 import type { SequenceCompletion } from './types'
 import type { EndpointQueryResult, OmnibarEndpointsRegistryValue } from './OmnibarEndpointsRegistry'
-import { executionKeyEvent, opensNewTab, resolveHref, type OmnibarExecutionEvent } from './omnibarNavigation'
+import { executionKeyEvent, openHref, opensNewContext, resolveHref, type OmnibarExecutionEvent } from './omnibarNavigation'
 
 /** Default debounce time for remote queries */
 const DEFAULT_DEBOUNCE_MS = 150
@@ -656,8 +656,8 @@ export function useOmnibar(options: UseOmnibarOptions): UseOmnibarResult {
   const executeWithCaptures = useCallback((actionId: string, captures?: number[], event?: OmnibarExecutionEvent) => {
     const href = resolveHref(actions[actionId]?.href)
     close()
-    if (href && opensNewTab(event)) {
-      window.open(href, '_blank', 'noopener')
+    if (href && opensNewContext(event)) {
+      openHref(href, event)
       return
     }
     const keyEvent = executionKeyEvent(event)
@@ -678,8 +678,8 @@ export function useOmnibar(options: UseOmnibarOptions): UseOmnibarResult {
       const entry = remoteResult.entry
       const href = entry.href
       close()
-      if (href && opensNewTab(event)) {
-        window.open(href, '_blank', 'noopener')
+      if (href && opensNewContext(event)) {
+        openHref(href, event)
       } else {
         entry.handler?.()
         if (onExecuteRemoteRef.current) onExecuteRemoteRef.current(entry, event)
@@ -693,8 +693,8 @@ export function useOmnibar(options: UseOmnibarOptions): UseOmnibarResult {
     if (!id) return
     const effectiveCaptures = captures ?? result?.captures
 
-    // A new-tab gesture only needs the URL, not the handler's captured args.
-    if (result?.hasPlaceholders && !effectiveCaptures?.length && !(actions[id]?.href && opensNewTab(event))) {
+    // Opening a new context only needs the URL, not the handler's captured args.
+    if (result?.hasPlaceholders && !effectiveCaptures?.length && !(actions[id]?.href && opensNewContext(event))) {
       pendingExecutionEvent.current = event
       setPendingParamAction(id)
       return

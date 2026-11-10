@@ -68,6 +68,7 @@ export function OmnibarCmdk({
     results,
     remoteResults,
     execute,
+    close,
     isLoadingRemote,
     endpointPagination,
     loadMore,
@@ -208,7 +209,7 @@ export function OmnibarCmdk({
           <Command.Group heading="Recent" className="kbd-omnibar-group">
             {recentResults.map(r => (
               <Command.Item key={r.id} value={r.id} asChild>
-                <OmnibarResultRow href={r.action.href} className="kbd-omnibar-result" onExecute={event => execute(r.id, r.captures, event)}>
+                <OmnibarResultRow href={r.action.href} className="kbd-omnibar-result" onNavigate={close} onExecute={event => execute(r.id, r.captures, event)}>
                   <span className="kbd-omnibar-result-label">{r.action.label}</span>
                   {r.bindings[0] && <kbd className="kbd-omnibar-binding">{r.bindings[0]}</kbd>}
                 </OmnibarResultRow>
@@ -221,7 +222,7 @@ export function OmnibarCmdk({
           <Command.Group heading="Actions" className="kbd-omnibar-group">
             {actionResults.map(r => (
               <Command.Item key={r.id} value={r.id} asChild>
-                <OmnibarResultRow href={r.action.href} className="kbd-omnibar-result" onExecute={event => execute(r.id, r.captures, event)}>
+                <OmnibarResultRow href={r.action.href} className="kbd-omnibar-result" onNavigate={close} onExecute={event => execute(r.id, r.captures, event)}>
                   <span className="kbd-omnibar-result-label">{r.action.label}</span>
                   {r.bindings[0] && <kbd className="kbd-omnibar-binding">{r.bindings[0]}</kbd>}
                 </OmnibarResultRow>
@@ -234,7 +235,7 @@ export function OmnibarCmdk({
           <Command.Group key={group} heading={group} className="kbd-omnibar-group">
             {items.map(r => (
               <Command.Item key={r.id} value={r.id} asChild>
-                <OmnibarResultRow href={r.entry.href} className="kbd-omnibar-result" onExecute={event => execute(r.id, undefined, event)}>
+                <OmnibarResultRow href={r.entry.href} className="kbd-omnibar-result" onNavigate={close} onExecute={event => execute(r.id, undefined, event)}>
                   <span className="kbd-omnibar-result-label">{r.entry.label}</span>
                   {r.entry.description && (
                     <span className="kbd-omnibar-result-description">{r.entry.description}</span>

@@ -586,6 +586,7 @@ export function Omnibar({
                   <OmnibarResultRow
                     key={result.id}
                     href={result.action.href}
+                    onNavigate={close}
                     className={`kbd-omnibar-result ${i === selectedIndex ? 'selected' : ''}${isModeInactive ? ' kbd-mode-inactive' : ''}`}
                     onExecute={event => execute(result.id, undefined, event)}
                   >
@@ -644,6 +645,7 @@ export function Omnibar({
                           <OmnibarResultRow
                             key={result.id}
                             href={result.entry.href}
+                            onNavigate={close}
                             className={`kbd-omnibar-result ${absoluteIndex === selectedIndex ? 'selected' : ''}`}
                             onExecute={event => execute(result.id, undefined, event)}
                           >

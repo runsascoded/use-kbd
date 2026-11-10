@@ -80,7 +80,7 @@ export function OmnibarLinksDemo() {
   return (
     <div style={{ padding: 24, maxWidth: 760 }}>
       <h1>Omnibar links</h1>
-      <p>Enter runs a command or follows its link. ⌘Enter on macOS, Ctrl+Enter elsewhere, or a modified click opens the link in a new tab.</p>
+      <p>Enter runs a command or follows its link. ⌘Enter opens a background tab; ⌘⇧Enter opens a tab and switches to it; ⇧Enter opens a new window. Use Ctrl instead of ⌘ off macOS. Link clicks support the same modifiers, and middle-click opens a tab.</p>
       <p>
         <a href="/omnibar-links">Default palette</a>{' · '}
         <a href="/omnibar-links?renderer=cmdk">cmdk palette</a>

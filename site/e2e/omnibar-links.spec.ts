@@ -1,5 +1,21 @@
 import { test, expect } from '@playwright/test'
 
+const nativeModifier = process.platform === 'darwin' ? 'Meta' : 'Control'
+const macHint = 'Command+Enter: open in a new tab; Command+Shift+Enter: open and switch to a new tab; Shift+Enter: open in a new window'
+
+/** Inspect synthetic navigation requests; separate integration cases open real tabs/windows. */
+function trackNavigationRequests() {
+  const opened: string[][] = []
+  Object.assign(window, { __opened: opened })
+  document.addEventListener('click', event => {
+    const link = event.target
+    if (link instanceof HTMLAnchorElement && link.target === '_blank') {
+      opened.push([link.getAttribute('href') ?? '', link.target, link.rel])
+      event.preventDefault()
+    }
+  }, true)
+}
+
 for (const path of ['/table', '/omnibar-links?renderer=cmdk']) {
   test.describe(`Demo navigation links (${path})`, () => {
     test.beforeEach(async ({ page }) => {
@@ -14,9 +30,9 @@ for (const path of ['/table', '/omnibar-links?renderer=cmdk']) {
 
     test('Command+Enter opens the navigation URL in an actual new tab', async ({ page }) => {
       await expect(page.locator('.kbd-omnibar-result')).toHaveAttribute('href', '/canvas')
-      await expect(page.locator('.kbd-omnibar-new-tab-hint')).toHaveAttribute('aria-label', 'Command+Enter: open in a new tab')
+      await expect(page.locator('.kbd-omnibar-new-tab-hint')).toHaveAttribute('aria-label', macHint)
       const [popup] = await Promise.all([
-        page.waitForEvent('popup', { timeout: 5000 }),
+        page.context().waitForEvent('page', { timeout: 5000 }),
         page.keyboard.press('Meta+Enter'),
       ])
       await expect(popup).toHaveURL('/canvas')
@@ -39,12 +55,10 @@ for (const path of ['/table', '/omnibar-links?renderer=cmdk']) {
 for (const renderer of ['default', 'cmdk']) {
   test.describe(`Omnibar links (${renderer})`, () => {
     test.beforeEach(async ({ page }) => {
+      await page.addInitScript(trackNavigationRequests)
       await page.addInitScript(() => {
         Object.defineProperty(navigator, 'userAgentData', { value: { platform: 'macOS' }, configurable: true })
         localStorage.clear()
-        const opened: unknown[][] = []
-        Object.assign(window, { __opened: opened })
-        window.open = (...args) => { opened.push(args); return null }
       })
       await page.goto(`/omnibar-links?renderer=${renderer}`)
       await page.getByRole('button', { name: 'Open palette' }).click()
@@ -182,45 +196,52 @@ for (const renderer of ['default', 'cmdk']) {
 
     test('a modified remote click opens exactly one tab', async ({ page }) => {
       await page.locator('.kbd-omnibar-input').fill('Remote link')
-      await page.locator('a.kbd-omnibar-result').click({ modifiers: ['Meta'] })
-      expect(await page.evaluate(() => Reflect.get(window, '__opened'))).toEqual([
-        ['/omnibar-links?remote=1', '_blank', 'noopener'],
+      const [destination] = await Promise.all([
+        page.context().waitForEvent('page'),
+        page.locator('a.kbd-omnibar-result').click({ modifiers: [nativeModifier] }),
       ])
+      await expect(destination).toHaveURL('/omnibar-links?remote=1')
+      expect(page.context().pages()).toEqual([page, destination])
+      expect(await destination.evaluate(() => window.opener)).toBeNull()
+      expect(await page.evaluate(() => Reflect.get(window, '__opened'))).toEqual([])
       await expect(page.locator('.kbd-omnibar')).toHaveCount(0)
+      await destination.close()
     })
 
     test('the new-tab hint follows the selected row and platform', async ({ page }) => {
       await page.locator('.kbd-omnibar-input').fill('Link with handler')
-      await expect(page.locator('.kbd-omnibar-new-tab-hint')).toHaveText('↵ new tab')
-      await expect(page.locator('.kbd-omnibar-new-tab-hint')).toHaveAttribute('aria-label', 'Command+Enter: open in a new tab')
+      await expect(page.locator('.kbd-omnibar-navigation-hint')).toHaveText(['↵ new tab', '↵ switch', '↵ new window'])
+      await expect(page.locator('.kbd-omnibar-new-tab-hint')).toHaveAttribute('aria-label', macHint)
       await page.locator('.kbd-omnibar-input').fill('Event without URL')
       await expect(page.locator('.kbd-omnibar-new-tab-hint')).toHaveCount(0)
       await page.evaluate(() => Object.defineProperty(navigator, 'userAgentData', { value: { platform: 'Linux' }, configurable: true }))
       await page.locator('.kbd-omnibar-input').fill('Remote link')
-      await expect(page.locator('.kbd-omnibar-new-tab-hint')).toHaveText('Ctrl↵ new tab')
+      await expect(page.locator('.kbd-omnibar-navigation-hint')).toHaveText(['Ctrl↵ new tab', 'Ctrl↵ switch', '↵ new window'])
+      await expect(page.locator('.kbd-omnibar-new-tab-hint')).toHaveAttribute('aria-label', 'Ctrl+Enter: open in a new tab; Ctrl+Shift+Enter: open and switch to a new tab; Shift+Enter: open in a new window')
     })
 
-    for (const gesture of ['click', 'meta-click', 'middle-click', 'ctrl-click']) {
+    for (const gesture of ['click', 'modifier-click', 'middle-click']) {
       test(`${gesture} on a link has the expected execution semantics`, async ({ page }) => {
-        if (gesture === 'ctrl-click') {
-          await page.evaluate(() => Object.defineProperty(navigator, 'userAgentData', { value: { platform: 'Linux' }, configurable: true }))
-        }
         await page.locator('.kbd-omnibar-input').fill('Link with handler')
         const row = page.locator('a.kbd-omnibar-result').filter({ has: page.locator('.kbd-omnibar-result-label', { hasText: /^Link with handler$/ }) })
         await expect(row).toHaveAttribute('href', '/omnibar-links?destination=initial')
-        if (gesture === 'ctrl-click') {
-          // macOS turns a physical Ctrl-click into a context-menu gesture even
-          // with a mocked Linux navigator, so dispatch the Linux click directly.
-          await row.dispatchEvent('click', { button: 0, ctrlKey: true })
+        if (gesture === 'click') {
+          await row.click()
         } else {
-          await row.click({
-            button: gesture === 'middle-click' ? 'middle' : 'left',
-            modifiers: gesture === 'meta-click' ? ['Meta'] : [],
-          })
+          await page.evaluate(() => { location.hash = 'updated' })
+          const [destination] = await Promise.all([
+            page.context().waitForEvent('page'),
+            row.click({
+              button: gesture === 'middle-click' ? 'middle' : 'left',
+              modifiers: gesture === 'modifier-click' ? [nativeModifier] : [],
+            }),
+          ])
+          await expect(destination).toHaveURL('/omnibar-links?destination=updated')
+          expect(page.context().pages()).toEqual([page, destination])
+          expect(await destination.evaluate(() => window.opener)).toBeNull()
+          await destination.close()
         }
-        expect(await page.evaluate(() => Reflect.get(window, '__opened'))).toEqual(gesture === 'click' ? [] : [
-          ['/omnibar-links?destination=initial', '_blank', 'noopener'],
-        ])
+        expect(await page.evaluate(() => Reflect.get(window, '__opened'))).toEqual([])
         await expect(page.getByTestId('link-events')).toHaveText(gesture === 'click'
           ? '[{"key":"Enter","metaKey":false,"ctrlKey":false,"shiftKey":false}]'
           : '[]')
@@ -246,11 +267,9 @@ for (const renderer of ['default', 'cmdk']) {
 
 test.describe('Headless omnibar execution events', () => {
   test.beforeEach(async ({ page }) => {
+    await page.addInitScript(trackNavigationRequests)
     await page.addInitScript(() => {
       Object.defineProperty(navigator, 'userAgentData', { value: { platform: 'macOS' }, configurable: true })
-      const opened: unknown[][] = []
-      Object.assign(window, { __opened: opened })
-      window.open = (...args) => { opened.push(args); return null }
     })
     await page.goto('/omnibar-links?renderer=headless')
   })
