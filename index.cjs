@@ -78,626 +78,6 @@ var ACTION_LOOKUP = "__hotkeys:lookup";
 var DEFAULT_BUILTIN_GROUP = "Meta";
 var ACTION_MODE_PREFIX = "__mode:";
 
-// src/ActionsRegistry.ts
-var EXPORT_VERSION = "0.8.0";
-var ActionsRegistryContext = react.createContext(null);
-var ActionsRegistryApiContext = react.createContext(null);
-function useActionsRegistry(options = {}) {
-  const { storageKey } = options;
-  const actionsRef = react.useRef(/* @__PURE__ */ new Map());
-  const [actionsVersion, setActionsVersion] = react.useState(0);
-  const enabledRef = react.useRef(/* @__PURE__ */ new Map());
-  const [overrides, setOverrides] = react.useState(() => {
-    if (!storageKey || typeof window === "undefined") return {};
-    try {
-      const stored = localStorage.getItem(storageKey);
-      return stored ? JSON.parse(stored) : {};
-    } catch {
-      return {};
-    }
-  });
-  const [removedDefaults, setRemovedDefaults] = react.useState(() => {
-    if (!storageKey || typeof window === "undefined") return {};
-    try {
-      const stored = localStorage.getItem(`${storageKey}-removed`);
-      return stored ? JSON.parse(stored) : {};
-    } catch {
-      return {};
-    }
-  });
-  const [modeCustomizations, setModeCustomizationsRaw] = react.useState(() => {
-    if (!storageKey || typeof window === "undefined") return EMPTY_MODE_CUSTOMIZATIONS;
-    try {
-      const stored = localStorage.getItem(`${storageKey}-modes`);
-      return stored ? JSON.parse(stored) : EMPTY_MODE_CUSTOMIZATIONS;
-    } catch {
-      return EMPTY_MODE_CUSTOMIZATIONS;
-    }
-  });
-  const setModeCustomizations = react.useCallback((update) => {
-    setModeCustomizationsRaw((prev) => {
-      const next = typeof update === "function" ? update(prev) : update;
-      if (storageKey && typeof window !== "undefined") {
-        try {
-          const key = `${storageKey}-modes`;
-          const isEmpty = Object.keys(next.additions).length === 0 && Object.keys(next.removals).length === 0 && Object.keys(next.userModes).length === 0;
-          if (isEmpty) {
-            localStorage.removeItem(key);
-          } else {
-            localStorage.setItem(key, JSON.stringify(next));
-          }
-        } catch {
-        }
-      }
-      return next;
-    });
-  }, [storageKey]);
-  const getEffectiveMode = react.useCallback((actionId) => {
-    for (const [modeId, actionIds] of Object.entries(modeCustomizations.removals)) {
-      if (actionIds.includes(actionId)) return void 0;
-    }
-    for (const [modeId, actionIds] of Object.entries(modeCustomizations.additions)) {
-      if (actionIds.includes(actionId)) return modeId;
-    }
-    for (const [modeId, config] of Object.entries(modeCustomizations.userModes)) {
-      if (config.actions.includes(actionId)) return modeId;
-    }
-    const action = actionsRef.current.get(actionId);
-    return action?.config.mode;
-  }, [modeCustomizations]);
-  const addActionToMode = react.useCallback((actionId, modeId) => {
-    const action = actionsRef.current.get(actionId);
-    const groupId = action?.config.arrowGroup?.groupId;
-    const pairId = action?.config.actionPair?.pairId;
-    const tripletId = action?.config.actionTriplet?.tripletId;
-    const actionIds = groupId ? Array.from(actionsRef.current.entries()).filter(([, a]) => a.config.arrowGroup?.groupId === groupId).map(([id]) => id) : pairId ? Array.from(actionsRef.current.entries()).filter(([, a]) => a.config.actionPair?.pairId === pairId).map(([id]) => id) : tripletId ? Array.from(actionsRef.current.entries()).filter(([, a]) => a.config.actionTriplet?.tripletId === tripletId).map(([id]) => id) : [actionId];
-    setModeCustomizations((prev) => {
-      const next = { ...prev, additions: { ...prev.additions }, removals: { ...prev.removals }, userModes: { ...prev.userModes } };
-      for (const id of actionIds) {
-        const defaultMode = actionsRef.current.get(id)?.config.mode;
-        for (const [mid, ids] of Object.entries(next.additions)) {
-          if (mid !== modeId && ids.includes(id)) {
-            next.additions[mid] = ids.filter((a) => a !== id);
-            if (next.additions[mid].length === 0) delete next.additions[mid];
-          }
-        }
-        for (const [mid, config] of Object.entries(next.userModes)) {
-          if (mid !== modeId && config.actions.includes(id)) {
-            next.userModes[mid] = { ...config, actions: config.actions.filter((a) => a !== id) };
-          }
-        }
-        if (modeId === defaultMode) {
-          const removals = next.removals[modeId];
-          if (removals?.includes(id)) {
-            next.removals[modeId] = removals.filter((a) => a !== id);
-            if (next.removals[modeId].length === 0) delete next.removals[modeId];
-          }
-        } else if (next.userModes[modeId]) {
-          if (!next.userModes[modeId].actions.includes(id)) {
-            next.userModes[modeId] = { ...next.userModes[modeId], actions: [...next.userModes[modeId].actions, id] };
-          }
-          if (defaultMode) {
-            next.removals[defaultMode] = [...next.removals[defaultMode] ?? [], id];
-          }
-        } else {
-          if (!next.additions[modeId]?.includes(id)) {
-            next.additions[modeId] = [...next.additions[modeId] ?? [], id];
-          }
-          if (defaultMode && defaultMode !== modeId) {
-            next.removals[defaultMode] = [...next.removals[defaultMode] ?? [], id];
-          }
-        }
-      }
-      return next;
-    });
-  }, [setModeCustomizations]);
-  const removeActionFromMode = react.useCallback((actionId, modeId) => {
-    const action = actionsRef.current.get(actionId);
-    const groupId = action?.config.arrowGroup?.groupId;
-    const pairId = action?.config.actionPair?.pairId;
-    const tripletId = action?.config.actionTriplet?.tripletId;
-    const actionIds = groupId ? Array.from(actionsRef.current.entries()).filter(([, a]) => a.config.arrowGroup?.groupId === groupId).map(([id]) => id) : pairId ? Array.from(actionsRef.current.entries()).filter(([, a]) => a.config.actionPair?.pairId === pairId).map(([id]) => id) : tripletId ? Array.from(actionsRef.current.entries()).filter(([, a]) => a.config.actionTriplet?.tripletId === tripletId).map(([id]) => id) : [actionId];
-    setModeCustomizations((prev) => {
-      const next = { ...prev, additions: { ...prev.additions }, removals: { ...prev.removals }, userModes: { ...prev.userModes } };
-      for (const id of actionIds) {
-        const defaultMode = actionsRef.current.get(id)?.config.mode;
-        if (defaultMode === modeId) {
-          if (!next.removals[modeId]?.includes(id)) {
-            next.removals[modeId] = [...next.removals[modeId] ?? [], id];
-          }
-        } else if (next.additions[modeId]?.includes(id)) {
-          next.additions[modeId] = next.additions[modeId].filter((a) => a !== id);
-          if (next.additions[modeId].length === 0) delete next.additions[modeId];
-        } else if (next.userModes[modeId]?.actions.includes(id)) {
-          next.userModes[modeId] = { ...next.userModes[modeId], actions: next.userModes[modeId].actions.filter((a) => a !== id) };
-        }
-      }
-      return next;
-    });
-  }, [setModeCustomizations]);
-  const isDefaultBinding = react.useCallback((key, actionId) => {
-    const action = actionsRef.current.get(actionId);
-    return action?.config.defaultBindings?.includes(key) ?? false;
-  }, []);
-  const filterRedundantOverrides = react.useCallback((overrides2) => {
-    const filtered = {};
-    for (const [key, actionOrActions] of Object.entries(overrides2)) {
-      if (actionOrActions === "") ; else if (Array.isArray(actionOrActions)) {
-        const nonDefaultActions = actionOrActions.filter((a) => !isDefaultBinding(key, a));
-        if (nonDefaultActions.length > 0) {
-          filtered[key] = nonDefaultActions.length === 1 ? nonDefaultActions[0] : nonDefaultActions;
-        }
-      } else {
-        if (!isDefaultBinding(key, actionOrActions)) {
-          filtered[key] = actionOrActions;
-        }
-      }
-    }
-    return filtered;
-  }, [isDefaultBinding]);
-  const updateOverrides = react.useCallback((update) => {
-    setOverrides((prev) => {
-      const newOverrides = typeof update === "function" ? update(prev) : update;
-      const filteredOverrides = filterRedundantOverrides(newOverrides);
-      if (storageKey && typeof window !== "undefined") {
-        try {
-          if (Object.keys(filteredOverrides).length === 0) {
-            localStorage.removeItem(storageKey);
-          } else {
-            localStorage.setItem(storageKey, JSON.stringify(filteredOverrides));
-          }
-        } catch {
-        }
-      }
-      return filteredOverrides;
-    });
-  }, [storageKey, filterRedundantOverrides]);
-  const updateRemovedDefaults = react.useCallback((update) => {
-    setRemovedDefaults((prev) => {
-      const newRemoved = typeof update === "function" ? update(prev) : update;
-      const filtered = {};
-      for (const [action, keys] of Object.entries(newRemoved)) {
-        if (keys.length > 0) {
-          filtered[action] = keys;
-        }
-      }
-      if (storageKey && typeof window !== "undefined") {
-        try {
-          const key = `${storageKey}-removed`;
-          if (Object.keys(filtered).length === 0) {
-            localStorage.removeItem(key);
-          } else {
-            localStorage.setItem(key, JSON.stringify(filtered));
-          }
-        } catch {
-        }
-      }
-      return filtered;
-    });
-  }, [storageKey]);
-  const register = react.useCallback((id, config) => {
-    dbg.registry("register: %s (bindings: %o, group: %s)", id, config.defaultBindings, config.group);
-    actionsRef.current.set(id, {
-      config,
-      registeredAt: Date.now()
-    });
-    setActionsVersion((v) => v + 1);
-  }, []);
-  const unregister = react.useCallback((id) => {
-    dbg.registry("unregister: %s", id);
-    actionsRef.current.delete(id);
-    enabledRef.current.delete(id);
-    setActionsVersion((v) => v + 1);
-  }, []);
-  const isActionEnabled = react.useCallback((id) => {
-    const live = enabledRef.current.get(id);
-    if (live !== void 0) return live;
-    const action = actionsRef.current.get(id);
-    return action?.config.enabled !== false;
-  }, []);
-  const setActionEnabled = react.useCallback((id, enabled) => {
-    enabledRef.current.set(id, enabled);
-  }, []);
-  const execute = react.useCallback((id, captures) => {
-    const action = actionsRef.current.get(id);
-    if (action && isActionEnabled(id)) {
-      dbg.registry("execute: %s (captures: %o)", id, captures);
-      action.config.handler(void 0, captures);
-    }
-  }, [isActionEnabled]);
-  const keymap = react.useMemo(() => {
-    const map = {};
-    const addToKey = (key, actionId) => {
-      const existing = map[key];
-      if (existing) {
-        const existingArray = Array.isArray(existing) ? existing : [existing];
-        if (!existingArray.includes(actionId)) {
-          map[key] = [...existingArray, actionId];
-        }
-      } else {
-        map[key] = actionId;
-      }
-    };
-    for (const [id, { config }] of actionsRef.current) {
-      for (const binding of config.defaultBindings ?? []) {
-        const removedForAction = removedDefaults[id] ?? [];
-        if (removedForAction.includes(binding)) continue;
-        addToKey(binding, id);
-      }
-    }
-    for (const [key, actionOrActions] of Object.entries(overrides)) {
-      if (actionOrActions === "") ; else {
-        const actions2 = Array.isArray(actionOrActions) ? actionOrActions : [actionOrActions];
-        for (const actionId of actions2) {
-          addToKey(key, actionId);
-        }
-      }
-    }
-    dbg.registry("keymap recomputed: %d bindings, %d actions", Object.keys(map).length, actionsRef.current.size);
-    return map;
-  }, [actionsVersion, overrides, removedDefaults]);
-  const actionRegistry = react.useMemo(() => {
-    const registry = {};
-    for (const [id, { config }] of actionsRef.current) {
-      registry[id] = {
-        label: config.label,
-        description: config.description,
-        group: config.group,
-        mode: config.mode,
-        keywords: config.keywords,
-        hideFromModal: config.hideFromModal,
-        enabled: config.enabled,
-        protected: config.protected,
-        arrowGroup: config.arrowGroup,
-        actionPair: config.actionPair,
-        actionTriplet: config.actionTriplet,
-        sortOrder: config.sortOrder
-      };
-    }
-    return registry;
-  }, [actionsVersion]);
-  const getBindingsForAction = react.useCallback((actionId) => {
-    const bindings = [];
-    for (const [key, action] of Object.entries(keymap)) {
-      const actions2 = Array.isArray(action) ? action : [action];
-      if (actions2.includes(actionId)) {
-        bindings.push(key);
-      }
-    }
-    return bindings;
-  }, [keymap]);
-  const getFirstBindingForAction = react.useCallback((actionId) => {
-    return getBindingsForAction(actionId)[0];
-  }, [getBindingsForAction]);
-  const setBinding = react.useCallback((actionId, key) => {
-    dbg.registry("setBinding: %s \u2192 %s", key, actionId);
-    if (isDefaultBinding(key, actionId)) {
-      updateRemovedDefaults((prev) => {
-        const existing = prev[actionId] ?? [];
-        if (existing.includes(key)) {
-          const filtered = existing.filter((k) => k !== key);
-          if (filtered.length === 0) {
-            const { [actionId]: _, ...rest } = prev;
-            return rest;
-          }
-          return { ...prev, [actionId]: filtered };
-        }
-        return prev;
-      });
-    } else {
-      updateOverrides((prev) => ({
-        ...prev,
-        [key]: actionId
-      }));
-    }
-  }, [updateOverrides, updateRemovedDefaults, isDefaultBinding]);
-  const removeBinding = react.useCallback((actionId, key) => {
-    dbg.registry("removeBinding: %s from %s", key, actionId);
-    const action = actionsRef.current.get(actionId);
-    const isDefault = action?.config.defaultBindings?.includes(key);
-    if (isDefault) {
-      updateRemovedDefaults((prev) => {
-        const existing = prev[actionId] ?? [];
-        if (existing.includes(key)) return prev;
-        return { ...prev, [actionId]: [...existing, key] };
-      });
-    }
-    updateOverrides((prev) => {
-      const boundAction = prev[key];
-      if (boundAction === actionId) {
-        const { [key]: _, ...rest } = prev;
-        return rest;
-      }
-      if (Array.isArray(boundAction) && boundAction.includes(actionId)) {
-        const newActions = boundAction.filter((a) => a !== actionId);
-        if (newActions.length === 0) {
-          const { [key]: _, ...rest } = prev;
-          return rest;
-        }
-        return { ...prev, [key]: newActions.length === 1 ? newActions[0] : newActions };
-      }
-      return prev;
-    });
-  }, [updateOverrides, updateRemovedDefaults]);
-  const createUserMode = react.useCallback((id, config) => {
-    setModeCustomizations((prev) => ({ ...prev, userModes: { ...prev.userModes, [id]: config } }));
-  }, [setModeCustomizations]);
-  const updateUserMode = react.useCallback((id, config) => {
-    setModeCustomizations((prev) => {
-      const existing = prev.userModes[id];
-      if (!existing) return prev;
-      return { ...prev, userModes: { ...prev.userModes, [id]: { ...existing, ...config } } };
-    });
-  }, [setModeCustomizations]);
-  const deleteUserMode = react.useCallback((id) => {
-    setModeCustomizations((prev) => {
-      if (!prev.userModes[id]) return prev;
-      const { [id]: _deleted, ...userModes } = prev.userModes;
-      return { ...prev, userModes };
-    });
-    const activationId = `${ACTION_MODE_PREFIX}${id}`;
-    updateOverrides((prev) => {
-      const next = {};
-      for (const [key, target] of Object.entries(prev)) {
-        const kept = (Array.isArray(target) ? target : [target]).filter((a) => a !== activationId);
-        if (kept.length === 1) next[key] = kept[0];
-        else if (kept.length > 1) next[key] = kept;
-      }
-      return next;
-    });
-  }, [setModeCustomizations, updateOverrides]);
-  const resetOverrides = react.useCallback(() => {
-    updateOverrides({});
-    updateRemovedDefaults({});
-    setModeCustomizations(EMPTY_MODE_CUSTOMIZATIONS);
-  }, [updateOverrides, updateRemovedDefaults, setModeCustomizations]);
-  const exportBindings = react.useCallback(() => {
-    const hasModeCusts = Object.keys(modeCustomizations.additions).length > 0 || Object.keys(modeCustomizations.removals).length > 0 || Object.keys(modeCustomizations.userModes).length > 0;
-    return {
-      version: EXPORT_VERSION,
-      exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
-      origin: typeof window !== "undefined" ? window.location.origin : void 0,
-      overrides,
-      removedDefaults,
-      ...hasModeCusts ? { modeCustomizations } : {}
-    };
-  }, [overrides, removedDefaults, modeCustomizations]);
-  const importBindings = react.useCallback((data) => {
-    if (!data || typeof data !== "object") {
-      throw new Error("Invalid import data: expected an object");
-    }
-    if (typeof data.overrides !== "object" || data.overrides === null) {
-      throw new Error("Invalid import data: missing or invalid overrides");
-    }
-    if (typeof data.removedDefaults !== "object" || data.removedDefaults === null) {
-      throw new Error("Invalid import data: missing or invalid removedDefaults");
-    }
-    for (const [key, value] of Object.entries(data.overrides)) {
-      if (typeof value !== "string" && !Array.isArray(value)) {
-        throw new Error(`Invalid override for key "${key}": expected string or array`);
-      }
-      if (Array.isArray(value) && !value.every((v) => typeof v === "string")) {
-        throw new Error(`Invalid override for key "${key}": array must contain only strings`);
-      }
-    }
-    for (const [action, keys] of Object.entries(data.removedDefaults)) {
-      if (!Array.isArray(keys) || !keys.every((k) => typeof k === "string")) {
-        throw new Error(`Invalid removedDefaults for action "${action}": expected array of strings`);
-      }
-    }
-    updateOverrides(data.overrides);
-    updateRemovedDefaults(data.removedDefaults);
-    if (data.modeCustomizations) {
-      setModeCustomizations(data.modeCustomizations);
-    } else {
-      setModeCustomizations(EMPTY_MODE_CUSTOMIZATIONS);
-    }
-  }, [updateOverrides, updateRemovedDefaults, setModeCustomizations]);
-  const actions = react.useMemo(() => {
-    return new Map(actionsRef.current);
-  }, [actionsVersion]);
-  const api = react.useMemo(() => ({
-    register,
-    unregister,
-    setActionEnabled
-  }), [register, unregister, setActionEnabled]);
-  return react.useMemo(() => ({
-    register,
-    unregister,
-    execute,
-    isActionEnabled,
-    setActionEnabled,
-    api,
-    actions,
-    keymap,
-    actionRegistry,
-    getBindingsForAction,
-    getFirstBindingForAction,
-    overrides,
-    removedDefaults,
-    setBinding,
-    removeBinding,
-    resetOverrides,
-    exportBindings,
-    importBindings,
-    modeCustomizations,
-    setModeCustomizations,
-    getEffectiveMode,
-    addActionToMode,
-    removeActionFromMode,
-    createUserMode,
-    deleteUserMode,
-    updateUserMode
-  }), [
-    register,
-    unregister,
-    execute,
-    isActionEnabled,
-    setActionEnabled,
-    api,
-    actions,
-    keymap,
-    actionRegistry,
-    getBindingsForAction,
-    getFirstBindingForAction,
-    overrides,
-    removedDefaults,
-    setBinding,
-    removeBinding,
-    resetOverrides,
-    exportBindings,
-    importBindings,
-    modeCustomizations,
-    setModeCustomizations,
-    getEffectiveMode,
-    addActionToMode,
-    removeActionFromMode,
-    createUserMode,
-    deleteUserMode,
-    updateUserMode
-  ]);
-}
-var ModesRegistryContext = react.createContext(null);
-function useModesRegistry() {
-  const modesRef = react.useRef(/* @__PURE__ */ new Map());
-  const [modesVersion, setModesVersion] = react.useState(0);
-  const [activeMode, setActiveMode] = react.useState(null);
-  const activeModeRef = react.useRef(null);
-  activeModeRef.current = activeMode;
-  const register = react.useCallback((id, config) => {
-    dbg.modes("register mode: %s (%s)", id, config.label);
-    modesRef.current.set(id, {
-      config,
-      registeredAt: Date.now()
-    });
-    setModesVersion((v) => v + 1);
-  }, []);
-  const unregister = react.useCallback((id) => {
-    dbg.modes("unregister mode: %s", id);
-    modesRef.current.delete(id);
-    if (activeModeRef.current === id) {
-      setActiveMode(null);
-    }
-    setModesVersion((v) => v + 1);
-  }, []);
-  const activateMode = react.useCallback((id) => {
-    const mode = modesRef.current.get(id);
-    if (!mode) return;
-    dbg.modes("activate mode: %s", id);
-    const prev = activeModeRef.current;
-    if (prev && prev !== id) {
-      const prevMode = modesRef.current.get(prev);
-      prevMode?.config.onDeactivate?.();
-    }
-    activeModeRef.current = id;
-    setActiveMode(id);
-    mode.config.onActivate?.();
-  }, []);
-  const deactivateMode = react.useCallback(() => {
-    const current = activeModeRef.current;
-    if (!current) return;
-    dbg.modes("deactivate mode: %s", current);
-    const mode = modesRef.current.get(current);
-    activeModeRef.current = null;
-    setActiveMode(null);
-    mode?.config.onDeactivate?.();
-  }, []);
-  const toggleMode = react.useCallback((id) => {
-    if (activeModeRef.current === id) {
-      deactivateMode();
-    } else {
-      activateMode(id);
-    }
-  }, [activateMode, deactivateMode]);
-  const modes = react.useMemo(() => {
-    return new Map(modesRef.current);
-  }, [modesVersion]);
-  return react.useMemo(() => ({
-    register,
-    unregister,
-    modes,
-    activeMode,
-    activateMode,
-    deactivateMode,
-    toggleMode
-  }), [
-    register,
-    unregister,
-    modes,
-    activeMode,
-    activateMode,
-    deactivateMode,
-    toggleMode
-  ]);
-}
-var OmnibarEndpointsRegistryContext = react.createContext(null);
-function useOmnibarEndpointsRegistry() {
-  const endpointsRef = react.useRef(/* @__PURE__ */ new Map());
-  const [endpointsVersion, setEndpointsVersion] = react.useState(0);
-  const register = react.useCallback((id, config) => {
-    endpointsRef.current.set(id, {
-      id,
-      config,
-      registeredAt: Date.now()
-    });
-    setEndpointsVersion((v) => v + 1);
-  }, []);
-  const unregister = react.useCallback((id) => {
-    endpointsRef.current.delete(id);
-    setEndpointsVersion((v) => v + 1);
-  }, []);
-  const queryEndpoint = react.useCallback(async (endpointId, query, pagination, signal) => {
-    const ep = endpointsRef.current.get(endpointId);
-    if (!ep) return null;
-    if (query.length < (ep.config.minQueryLength ?? 2)) return null;
-    try {
-      const response = await ep.config.fetch(query, signal, pagination);
-      const entriesWithGroup = response.entries.map((entry) => ({
-        ...entry,
-        group: entry.group ?? ep.config.group
-      }));
-      return {
-        endpointId: ep.id,
-        entries: entriesWithGroup,
-        total: response.total,
-        hasMore: response.hasMore
-      };
-    } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") {
-        return { endpointId: ep.id, entries: [] };
-      }
-      return {
-        endpointId: ep.id,
-        entries: [],
-        error: error instanceof Error ? error : new Error(String(error))
-      };
-    }
-  }, []);
-  const queryAll = react.useCallback(async (query, signal) => {
-    const endpoints2 = Array.from(endpointsRef.current.values());
-    const filteredByMinQuery = endpoints2.filter((ep) => {
-      const minLen = ep.config.minQueryLength ?? 2;
-      return query.length >= minLen;
-    });
-    const promises = filteredByMinQuery.map(async (ep) => {
-      const pageSize = ep.config.pageSize ?? 10;
-      const result = await queryEndpoint(ep.id, query, { offset: 0, limit: pageSize }, signal);
-      return result ?? { endpointId: ep.id, entries: [] };
-    });
-    return Promise.all(promises);
-  }, [queryEndpoint]);
-  const endpoints = react.useMemo(() => {
-    return new Map(endpointsRef.current);
-  }, [endpointsVersion]);
-  return react.useMemo(() => ({
-    register,
-    unregister,
-    endpoints,
-    queryAll,
-    queryEndpoint
-  }), [register, unregister, endpoints, queryAll, queryEndpoint]);
-}
-
 // src/utils.ts
 var { max } = Math;
 var SHIFTED_SYMBOLS = /* @__PURE__ */ new Set([
@@ -1473,7 +853,670 @@ function searchActions(query, actions, keymap, isEnabled) {
   return results;
 }
 
-// src/useHotkeys.ts
+// src/omnibarNavigation.ts
+function resolveHref(href) {
+  return typeof href === "function" ? href() : href;
+}
+function opensNewContext(event) {
+  return !!event && (event.shiftKey || "button" in event && event.button === 1 || (isMac() ? event.metaKey : event.ctrlKey));
+}
+function isModifiedLinkClick(event) {
+  return event.button === 1 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
+}
+function openHref(href, event) {
+  const link = document.createElement("a");
+  link.href = href;
+  link.target = "_blank";
+  link.rel = "noopener";
+  document.body.append(link);
+  const middle = !!event && "button" in event && event.button === 1;
+  link.dispatchEvent(new MouseEvent("click", {
+    bubbles: true,
+    cancelable: true,
+    view: window,
+    metaKey: event?.metaKey || middle && isMac(),
+    ctrlKey: event?.ctrlKey || middle && !isMac(),
+    shiftKey: event?.shiftKey,
+    altKey: event?.altKey
+  }));
+  link.remove();
+}
+function executionKeyEvent(event) {
+  return event instanceof KeyboardEvent ? event : new KeyboardEvent("keydown", {
+    key: "Enter",
+    metaKey: event?.metaKey,
+    ctrlKey: event?.ctrlKey,
+    shiftKey: event?.shiftKey,
+    altKey: event?.altKey
+  });
+}
+
+// src/ActionsRegistry.ts
+var EXPORT_VERSION = "0.8.0";
+var ActionsRegistryContext = react.createContext(null);
+var ActionsRegistryApiContext = react.createContext(null);
+function useActionsRegistry(options = {}) {
+  const { storageKey } = options;
+  const actionsRef = react.useRef(/* @__PURE__ */ new Map());
+  const [actionsVersion, setActionsVersion] = react.useState(0);
+  const enabledRef = react.useRef(/* @__PURE__ */ new Map());
+  const [overrides, setOverrides] = react.useState(() => {
+    if (!storageKey || typeof window === "undefined") return {};
+    try {
+      const stored = localStorage.getItem(storageKey);
+      return stored ? JSON.parse(stored) : {};
+    } catch {
+      return {};
+    }
+  });
+  const [removedDefaults, setRemovedDefaults] = react.useState(() => {
+    if (!storageKey || typeof window === "undefined") return {};
+    try {
+      const stored = localStorage.getItem(`${storageKey}-removed`);
+      return stored ? JSON.parse(stored) : {};
+    } catch {
+      return {};
+    }
+  });
+  const [modeCustomizations, setModeCustomizationsRaw] = react.useState(() => {
+    if (!storageKey || typeof window === "undefined") return EMPTY_MODE_CUSTOMIZATIONS;
+    try {
+      const stored = localStorage.getItem(`${storageKey}-modes`);
+      return stored ? JSON.parse(stored) : EMPTY_MODE_CUSTOMIZATIONS;
+    } catch {
+      return EMPTY_MODE_CUSTOMIZATIONS;
+    }
+  });
+  const setModeCustomizations = react.useCallback((update) => {
+    setModeCustomizationsRaw((prev) => {
+      const next = typeof update === "function" ? update(prev) : update;
+      if (storageKey && typeof window !== "undefined") {
+        try {
+          const key = `${storageKey}-modes`;
+          const isEmpty = Object.keys(next.additions).length === 0 && Object.keys(next.removals).length === 0 && Object.keys(next.userModes).length === 0;
+          if (isEmpty) {
+            localStorage.removeItem(key);
+          } else {
+            localStorage.setItem(key, JSON.stringify(next));
+          }
+        } catch {
+        }
+      }
+      return next;
+    });
+  }, [storageKey]);
+  const getEffectiveMode = react.useCallback((actionId) => {
+    for (const [modeId, actionIds] of Object.entries(modeCustomizations.removals)) {
+      if (actionIds.includes(actionId)) return void 0;
+    }
+    for (const [modeId, actionIds] of Object.entries(modeCustomizations.additions)) {
+      if (actionIds.includes(actionId)) return modeId;
+    }
+    for (const [modeId, config] of Object.entries(modeCustomizations.userModes)) {
+      if (config.actions.includes(actionId)) return modeId;
+    }
+    const action = actionsRef.current.get(actionId);
+    return action?.config.mode;
+  }, [modeCustomizations]);
+  const addActionToMode = react.useCallback((actionId, modeId) => {
+    const action = actionsRef.current.get(actionId);
+    const groupId = action?.config.arrowGroup?.groupId;
+    const pairId = action?.config.actionPair?.pairId;
+    const tripletId = action?.config.actionTriplet?.tripletId;
+    const actionIds = groupId ? Array.from(actionsRef.current.entries()).filter(([, a]) => a.config.arrowGroup?.groupId === groupId).map(([id]) => id) : pairId ? Array.from(actionsRef.current.entries()).filter(([, a]) => a.config.actionPair?.pairId === pairId).map(([id]) => id) : tripletId ? Array.from(actionsRef.current.entries()).filter(([, a]) => a.config.actionTriplet?.tripletId === tripletId).map(([id]) => id) : [actionId];
+    setModeCustomizations((prev) => {
+      const next = { ...prev, additions: { ...prev.additions }, removals: { ...prev.removals }, userModes: { ...prev.userModes } };
+      for (const id of actionIds) {
+        const defaultMode = actionsRef.current.get(id)?.config.mode;
+        for (const [mid, ids] of Object.entries(next.additions)) {
+          if (mid !== modeId && ids.includes(id)) {
+            next.additions[mid] = ids.filter((a) => a !== id);
+            if (next.additions[mid].length === 0) delete next.additions[mid];
+          }
+        }
+        for (const [mid, config] of Object.entries(next.userModes)) {
+          if (mid !== modeId && config.actions.includes(id)) {
+            next.userModes[mid] = { ...config, actions: config.actions.filter((a) => a !== id) };
+          }
+        }
+        if (modeId === defaultMode) {
+          const removals = next.removals[modeId];
+          if (removals?.includes(id)) {
+            next.removals[modeId] = removals.filter((a) => a !== id);
+            if (next.removals[modeId].length === 0) delete next.removals[modeId];
+          }
+        } else if (next.userModes[modeId]) {
+          if (!next.userModes[modeId].actions.includes(id)) {
+            next.userModes[modeId] = { ...next.userModes[modeId], actions: [...next.userModes[modeId].actions, id] };
+          }
+          if (defaultMode) {
+            next.removals[defaultMode] = [...next.removals[defaultMode] ?? [], id];
+          }
+        } else {
+          if (!next.additions[modeId]?.includes(id)) {
+            next.additions[modeId] = [...next.additions[modeId] ?? [], id];
+          }
+          if (defaultMode && defaultMode !== modeId) {
+            next.removals[defaultMode] = [...next.removals[defaultMode] ?? [], id];
+          }
+        }
+      }
+      return next;
+    });
+  }, [setModeCustomizations]);
+  const removeActionFromMode = react.useCallback((actionId, modeId) => {
+    const action = actionsRef.current.get(actionId);
+    const groupId = action?.config.arrowGroup?.groupId;
+    const pairId = action?.config.actionPair?.pairId;
+    const tripletId = action?.config.actionTriplet?.tripletId;
+    const actionIds = groupId ? Array.from(actionsRef.current.entries()).filter(([, a]) => a.config.arrowGroup?.groupId === groupId).map(([id]) => id) : pairId ? Array.from(actionsRef.current.entries()).filter(([, a]) => a.config.actionPair?.pairId === pairId).map(([id]) => id) : tripletId ? Array.from(actionsRef.current.entries()).filter(([, a]) => a.config.actionTriplet?.tripletId === tripletId).map(([id]) => id) : [actionId];
+    setModeCustomizations((prev) => {
+      const next = { ...prev, additions: { ...prev.additions }, removals: { ...prev.removals }, userModes: { ...prev.userModes } };
+      for (const id of actionIds) {
+        const defaultMode = actionsRef.current.get(id)?.config.mode;
+        if (defaultMode === modeId) {
+          if (!next.removals[modeId]?.includes(id)) {
+            next.removals[modeId] = [...next.removals[modeId] ?? [], id];
+          }
+        } else if (next.additions[modeId]?.includes(id)) {
+          next.additions[modeId] = next.additions[modeId].filter((a) => a !== id);
+          if (next.additions[modeId].length === 0) delete next.additions[modeId];
+        } else if (next.userModes[modeId]?.actions.includes(id)) {
+          next.userModes[modeId] = { ...next.userModes[modeId], actions: next.userModes[modeId].actions.filter((a) => a !== id) };
+        }
+      }
+      return next;
+    });
+  }, [setModeCustomizations]);
+  const isDefaultBinding = react.useCallback((key, actionId) => {
+    const action = actionsRef.current.get(actionId);
+    return action?.config.defaultBindings?.includes(key) ?? false;
+  }, []);
+  const filterRedundantOverrides = react.useCallback((overrides2) => {
+    const filtered = {};
+    for (const [key, actionOrActions] of Object.entries(overrides2)) {
+      if (actionOrActions === "") ; else if (Array.isArray(actionOrActions)) {
+        const nonDefaultActions = actionOrActions.filter((a) => !isDefaultBinding(key, a));
+        if (nonDefaultActions.length > 0) {
+          filtered[key] = nonDefaultActions.length === 1 ? nonDefaultActions[0] : nonDefaultActions;
+        }
+      } else {
+        if (!isDefaultBinding(key, actionOrActions)) {
+          filtered[key] = actionOrActions;
+        }
+      }
+    }
+    return filtered;
+  }, [isDefaultBinding]);
+  const updateOverrides = react.useCallback((update) => {
+    setOverrides((prev) => {
+      const newOverrides = typeof update === "function" ? update(prev) : update;
+      const filteredOverrides = filterRedundantOverrides(newOverrides);
+      if (storageKey && typeof window !== "undefined") {
+        try {
+          if (Object.keys(filteredOverrides).length === 0) {
+            localStorage.removeItem(storageKey);
+          } else {
+            localStorage.setItem(storageKey, JSON.stringify(filteredOverrides));
+          }
+        } catch {
+        }
+      }
+      return filteredOverrides;
+    });
+  }, [storageKey, filterRedundantOverrides]);
+  const updateRemovedDefaults = react.useCallback((update) => {
+    setRemovedDefaults((prev) => {
+      const newRemoved = typeof update === "function" ? update(prev) : update;
+      const filtered = {};
+      for (const [action, keys] of Object.entries(newRemoved)) {
+        if (keys.length > 0) {
+          filtered[action] = keys;
+        }
+      }
+      if (storageKey && typeof window !== "undefined") {
+        try {
+          const key = `${storageKey}-removed`;
+          if (Object.keys(filtered).length === 0) {
+            localStorage.removeItem(key);
+          } else {
+            localStorage.setItem(key, JSON.stringify(filtered));
+          }
+        } catch {
+        }
+      }
+      return filtered;
+    });
+  }, [storageKey]);
+  const register = react.useCallback((id, config) => {
+    dbg.registry("register: %s (bindings: %o, group: %s)", id, config.defaultBindings, config.group);
+    actionsRef.current.set(id, {
+      config,
+      registeredAt: Date.now()
+    });
+    setActionsVersion((v) => v + 1);
+  }, []);
+  const unregister = react.useCallback((id) => {
+    dbg.registry("unregister: %s", id);
+    actionsRef.current.delete(id);
+    enabledRef.current.delete(id);
+    setActionsVersion((v) => v + 1);
+  }, []);
+  const isActionEnabled = react.useCallback((id) => {
+    const live = enabledRef.current.get(id);
+    if (live !== void 0) return live;
+    const action = actionsRef.current.get(id);
+    return action?.config.enabled !== false;
+  }, []);
+  const setActionEnabled = react.useCallback((id, enabled) => {
+    enabledRef.current.set(id, enabled);
+  }, []);
+  const execute = react.useCallback((id, captures, event) => {
+    const action = actionsRef.current.get(id);
+    if (action && isActionEnabled(id)) {
+      dbg.registry("execute: %s (captures: %o)", id, captures);
+      if (action.config.handler) action.config.handler(event, captures);
+      else {
+        const href = resolveHref(action.config.href);
+        if (href) window.location.assign(href);
+      }
+    }
+  }, [isActionEnabled]);
+  const keymap = react.useMemo(() => {
+    const map = {};
+    const addToKey = (key, actionId) => {
+      const existing = map[key];
+      if (existing) {
+        const existingArray = Array.isArray(existing) ? existing : [existing];
+        if (!existingArray.includes(actionId)) {
+          map[key] = [...existingArray, actionId];
+        }
+      } else {
+        map[key] = actionId;
+      }
+    };
+    for (const [id, { config }] of actionsRef.current) {
+      for (const binding of config.defaultBindings ?? []) {
+        const removedForAction = removedDefaults[id] ?? [];
+        if (removedForAction.includes(binding)) continue;
+        addToKey(binding, id);
+      }
+    }
+    for (const [key, actionOrActions] of Object.entries(overrides)) {
+      if (actionOrActions === "") ; else {
+        const actions2 = Array.isArray(actionOrActions) ? actionOrActions : [actionOrActions];
+        for (const actionId of actions2) {
+          addToKey(key, actionId);
+        }
+      }
+    }
+    dbg.registry("keymap recomputed: %d bindings, %d actions", Object.keys(map).length, actionsRef.current.size);
+    return map;
+  }, [actionsVersion, overrides, removedDefaults]);
+  const actionRegistry = react.useMemo(() => {
+    const registry = {};
+    for (const [id, { config }] of actionsRef.current) {
+      registry[id] = {
+        label: config.label,
+        get href() {
+          return config.href;
+        },
+        description: config.description,
+        group: config.group,
+        mode: config.mode,
+        keywords: config.keywords,
+        hideFromModal: config.hideFromModal,
+        enabled: config.enabled,
+        protected: config.protected,
+        arrowGroup: config.arrowGroup,
+        actionPair: config.actionPair,
+        actionTriplet: config.actionTriplet,
+        sortOrder: config.sortOrder
+      };
+    }
+    return registry;
+  }, [actionsVersion]);
+  const getBindingsForAction = react.useCallback((actionId) => {
+    const bindings = [];
+    for (const [key, action] of Object.entries(keymap)) {
+      const actions2 = Array.isArray(action) ? action : [action];
+      if (actions2.includes(actionId)) {
+        bindings.push(key);
+      }
+    }
+    return bindings;
+  }, [keymap]);
+  const getFirstBindingForAction = react.useCallback((actionId) => {
+    return getBindingsForAction(actionId)[0];
+  }, [getBindingsForAction]);
+  const setBinding = react.useCallback((actionId, key) => {
+    dbg.registry("setBinding: %s \u2192 %s", key, actionId);
+    if (isDefaultBinding(key, actionId)) {
+      updateRemovedDefaults((prev) => {
+        const existing = prev[actionId] ?? [];
+        if (existing.includes(key)) {
+          const filtered = existing.filter((k) => k !== key);
+          if (filtered.length === 0) {
+            const { [actionId]: _, ...rest } = prev;
+            return rest;
+          }
+          return { ...prev, [actionId]: filtered };
+        }
+        return prev;
+      });
+    } else {
+      updateOverrides((prev) => ({
+        ...prev,
+        [key]: actionId
+      }));
+    }
+  }, [updateOverrides, updateRemovedDefaults, isDefaultBinding]);
+  const removeBinding = react.useCallback((actionId, key) => {
+    dbg.registry("removeBinding: %s from %s", key, actionId);
+    const action = actionsRef.current.get(actionId);
+    const isDefault = action?.config.defaultBindings?.includes(key);
+    if (isDefault) {
+      updateRemovedDefaults((prev) => {
+        const existing = prev[actionId] ?? [];
+        if (existing.includes(key)) return prev;
+        return { ...prev, [actionId]: [...existing, key] };
+      });
+    }
+    updateOverrides((prev) => {
+      const boundAction = prev[key];
+      if (boundAction === actionId) {
+        const { [key]: _, ...rest } = prev;
+        return rest;
+      }
+      if (Array.isArray(boundAction) && boundAction.includes(actionId)) {
+        const newActions = boundAction.filter((a) => a !== actionId);
+        if (newActions.length === 0) {
+          const { [key]: _, ...rest } = prev;
+          return rest;
+        }
+        return { ...prev, [key]: newActions.length === 1 ? newActions[0] : newActions };
+      }
+      return prev;
+    });
+  }, [updateOverrides, updateRemovedDefaults]);
+  const createUserMode = react.useCallback((id, config) => {
+    setModeCustomizations((prev) => ({ ...prev, userModes: { ...prev.userModes, [id]: config } }));
+  }, [setModeCustomizations]);
+  const updateUserMode = react.useCallback((id, config) => {
+    setModeCustomizations((prev) => {
+      const existing = prev.userModes[id];
+      if (!existing) return prev;
+      return { ...prev, userModes: { ...prev.userModes, [id]: { ...existing, ...config } } };
+    });
+  }, [setModeCustomizations]);
+  const deleteUserMode = react.useCallback((id) => {
+    setModeCustomizations((prev) => {
+      if (!prev.userModes[id]) return prev;
+      const { [id]: _deleted, ...userModes } = prev.userModes;
+      return { ...prev, userModes };
+    });
+    const activationId = `${ACTION_MODE_PREFIX}${id}`;
+    updateOverrides((prev) => {
+      const next = {};
+      for (const [key, target] of Object.entries(prev)) {
+        const kept = (Array.isArray(target) ? target : [target]).filter((a) => a !== activationId);
+        if (kept.length === 1) next[key] = kept[0];
+        else if (kept.length > 1) next[key] = kept;
+      }
+      return next;
+    });
+  }, [setModeCustomizations, updateOverrides]);
+  const resetOverrides = react.useCallback(() => {
+    updateOverrides({});
+    updateRemovedDefaults({});
+    setModeCustomizations(EMPTY_MODE_CUSTOMIZATIONS);
+  }, [updateOverrides, updateRemovedDefaults, setModeCustomizations]);
+  const exportBindings = react.useCallback(() => {
+    const hasModeCusts = Object.keys(modeCustomizations.additions).length > 0 || Object.keys(modeCustomizations.removals).length > 0 || Object.keys(modeCustomizations.userModes).length > 0;
+    return {
+      version: EXPORT_VERSION,
+      exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      origin: typeof window !== "undefined" ? window.location.origin : void 0,
+      overrides,
+      removedDefaults,
+      ...hasModeCusts ? { modeCustomizations } : {}
+    };
+  }, [overrides, removedDefaults, modeCustomizations]);
+  const importBindings = react.useCallback((data) => {
+    if (!data || typeof data !== "object") {
+      throw new Error("Invalid import data: expected an object");
+    }
+    if (typeof data.overrides !== "object" || data.overrides === null) {
+      throw new Error("Invalid import data: missing or invalid overrides");
+    }
+    if (typeof data.removedDefaults !== "object" || data.removedDefaults === null) {
+      throw new Error("Invalid import data: missing or invalid removedDefaults");
+    }
+    for (const [key, value] of Object.entries(data.overrides)) {
+      if (typeof value !== "string" && !Array.isArray(value)) {
+        throw new Error(`Invalid override for key "${key}": expected string or array`);
+      }
+      if (Array.isArray(value) && !value.every((v) => typeof v === "string")) {
+        throw new Error(`Invalid override for key "${key}": array must contain only strings`);
+      }
+    }
+    for (const [action, keys] of Object.entries(data.removedDefaults)) {
+      if (!Array.isArray(keys) || !keys.every((k) => typeof k === "string")) {
+        throw new Error(`Invalid removedDefaults for action "${action}": expected array of strings`);
+      }
+    }
+    updateOverrides(data.overrides);
+    updateRemovedDefaults(data.removedDefaults);
+    if (data.modeCustomizations) {
+      setModeCustomizations(data.modeCustomizations);
+    } else {
+      setModeCustomizations(EMPTY_MODE_CUSTOMIZATIONS);
+    }
+  }, [updateOverrides, updateRemovedDefaults, setModeCustomizations]);
+  const actions = react.useMemo(() => {
+    return new Map(actionsRef.current);
+  }, [actionsVersion]);
+  const api = react.useMemo(() => ({
+    register,
+    unregister,
+    setActionEnabled
+  }), [register, unregister, setActionEnabled]);
+  return react.useMemo(() => ({
+    register,
+    unregister,
+    execute,
+    isActionEnabled,
+    setActionEnabled,
+    api,
+    actions,
+    keymap,
+    actionRegistry,
+    getBindingsForAction,
+    getFirstBindingForAction,
+    overrides,
+    removedDefaults,
+    setBinding,
+    removeBinding,
+    resetOverrides,
+    exportBindings,
+    importBindings,
+    modeCustomizations,
+    setModeCustomizations,
+    getEffectiveMode,
+    addActionToMode,
+    removeActionFromMode,
+    createUserMode,
+    deleteUserMode,
+    updateUserMode
+  }), [
+    register,
+    unregister,
+    execute,
+    isActionEnabled,
+    setActionEnabled,
+    api,
+    actions,
+    keymap,
+    actionRegistry,
+    getBindingsForAction,
+    getFirstBindingForAction,
+    overrides,
+    removedDefaults,
+    setBinding,
+    removeBinding,
+    resetOverrides,
+    exportBindings,
+    importBindings,
+    modeCustomizations,
+    setModeCustomizations,
+    getEffectiveMode,
+    addActionToMode,
+    removeActionFromMode,
+    createUserMode,
+    deleteUserMode,
+    updateUserMode
+  ]);
+}
+var ModesRegistryContext = react.createContext(null);
+function useModesRegistry() {
+  const modesRef = react.useRef(/* @__PURE__ */ new Map());
+  const [modesVersion, setModesVersion] = react.useState(0);
+  const [activeMode, setActiveMode] = react.useState(null);
+  const activeModeRef = react.useRef(null);
+  activeModeRef.current = activeMode;
+  const register = react.useCallback((id, config) => {
+    dbg.modes("register mode: %s (%s)", id, config.label);
+    modesRef.current.set(id, {
+      config,
+      registeredAt: Date.now()
+    });
+    setModesVersion((v) => v + 1);
+  }, []);
+  const unregister = react.useCallback((id) => {
+    dbg.modes("unregister mode: %s", id);
+    modesRef.current.delete(id);
+    if (activeModeRef.current === id) {
+      setActiveMode(null);
+    }
+    setModesVersion((v) => v + 1);
+  }, []);
+  const activateMode = react.useCallback((id) => {
+    const mode = modesRef.current.get(id);
+    if (!mode) return;
+    dbg.modes("activate mode: %s", id);
+    const prev = activeModeRef.current;
+    if (prev && prev !== id) {
+      const prevMode = modesRef.current.get(prev);
+      prevMode?.config.onDeactivate?.();
+    }
+    activeModeRef.current = id;
+    setActiveMode(id);
+    mode.config.onActivate?.();
+  }, []);
+  const deactivateMode = react.useCallback(() => {
+    const current = activeModeRef.current;
+    if (!current) return;
+    dbg.modes("deactivate mode: %s", current);
+    const mode = modesRef.current.get(current);
+    activeModeRef.current = null;
+    setActiveMode(null);
+    mode?.config.onDeactivate?.();
+  }, []);
+  const toggleMode = react.useCallback((id) => {
+    if (activeModeRef.current === id) {
+      deactivateMode();
+    } else {
+      activateMode(id);
+    }
+  }, [activateMode, deactivateMode]);
+  const modes = react.useMemo(() => {
+    return new Map(modesRef.current);
+  }, [modesVersion]);
+  return react.useMemo(() => ({
+    register,
+    unregister,
+    modes,
+    activeMode,
+    activateMode,
+    deactivateMode,
+    toggleMode
+  }), [
+    register,
+    unregister,
+    modes,
+    activeMode,
+    activateMode,
+    deactivateMode,
+    toggleMode
+  ]);
+}
+var OmnibarEndpointsRegistryContext = react.createContext(null);
+function useOmnibarEndpointsRegistry() {
+  const endpointsRef = react.useRef(/* @__PURE__ */ new Map());
+  const [endpointsVersion, setEndpointsVersion] = react.useState(0);
+  const register = react.useCallback((id, config) => {
+    endpointsRef.current.set(id, {
+      id,
+      config,
+      registeredAt: Date.now()
+    });
+    setEndpointsVersion((v) => v + 1);
+  }, []);
+  const unregister = react.useCallback((id) => {
+    endpointsRef.current.delete(id);
+    setEndpointsVersion((v) => v + 1);
+  }, []);
+  const queryEndpoint = react.useCallback(async (endpointId, query, pagination, signal) => {
+    const ep = endpointsRef.current.get(endpointId);
+    if (!ep) return null;
+    if (query.length < (ep.config.minQueryLength ?? 2)) return null;
+    try {
+      const response = await ep.config.fetch(query, signal, pagination);
+      const entriesWithGroup = response.entries.map((entry) => ({
+        ...entry,
+        group: entry.group ?? ep.config.group
+      }));
+      return {
+        endpointId: ep.id,
+        entries: entriesWithGroup,
+        total: response.total,
+        hasMore: response.hasMore
+      };
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        return { endpointId: ep.id, entries: [] };
+      }
+      return {
+        endpointId: ep.id,
+        entries: [],
+        error: error instanceof Error ? error : new Error(String(error))
+      };
+    }
+  }, []);
+  const queryAll = react.useCallback(async (query, signal) => {
+    const endpoints2 = Array.from(endpointsRef.current.values());
+    const filteredByMinQuery = endpoints2.filter((ep) => {
+      const minLen = ep.config.minQueryLength ?? 2;
+      return query.length >= minLen;
+    });
+    const promises = filteredByMinQuery.map(async (ep) => {
+      const pageSize = ep.config.pageSize ?? 10;
+      const result = await queryEndpoint(ep.id, query, { offset: 0, limit: pageSize }, signal);
+      return result ?? { endpointId: ep.id, entries: [] };
+    });
+    return Promise.all(promises);
+  }, [queryEndpoint]);
+  const endpoints = react.useMemo(() => {
+    return new Map(endpointsRef.current);
+  }, [endpointsVersion]);
+  return react.useMemo(() => ({
+    register,
+    unregister,
+    endpoints,
+    queryAll,
+    queryEndpoint
+  }), [register, unregister, endpoints, queryAll, queryEndpoint]);
+}
 function eventToCombination(e) {
   return {
     key: normalizeKey(e.key),
@@ -2068,16 +2111,24 @@ function useAction(id, config) {
   }
   const registryRef = react.useRef(registry);
   registryRef.current = registry;
-  const handlerRef = react.useRef(config.handler);
-  handlerRef.current = config.handler;
+  const configRef = react.useRef(config);
+  configRef.current = config;
   const enabledRef = react.useRef(config.enabled ?? true);
   enabledRef.current = config.enabled ?? true;
   react.useEffect(() => {
     registryRef.current.register(id, {
       ...config,
+      get href() {
+        return configRef.current.href;
+      },
       handler: (e, captures) => {
         if (enabledRef.current) {
-          handlerRef.current(e, captures);
+          const current = configRef.current;
+          if (current.handler) current.handler(e, captures);
+          else {
+            const href = resolveHref(current.href);
+            if (href) window.location.assign(href);
+          }
         }
       }
     });
@@ -2112,19 +2163,27 @@ function useActions(actions) {
   }
   const registryRef = react.useRef(registry);
   registryRef.current = registry;
-  const handlersRef = react.useRef({});
+  const configsRef = react.useRef(actions);
+  configsRef.current = actions;
   const enabledRef = react.useRef({});
   for (const [id, config] of Object.entries(actions)) {
-    handlersRef.current[id] = config.handler;
     enabledRef.current[id] = config.enabled ?? true;
   }
   react.useEffect(() => {
     for (const [id, config] of Object.entries(actions)) {
       registryRef.current.register(id, {
         ...config,
+        get href() {
+          return configsRef.current[id]?.href;
+        },
         handler: (e, captures) => {
           if (enabledRef.current[id]) {
-            handlersRef.current[id]?.(e, captures);
+            const current = configsRef.current[id];
+            if (current?.handler) current.handler(e, captures);
+            else {
+              const href = resolveHref(current?.href);
+              if (href) window.location.assign(href);
+            }
           }
         }
       });
@@ -2400,7 +2459,7 @@ function HotkeysProvider({
   const handlers = react.useMemo(() => {
     const map = {};
     for (const [id, action] of registry.actions) {
-      map[id] = action.config.handler;
+      map[id] = action.config.handler ?? ((e, captures) => registry.execute(id, captures, e));
     }
     if (activeMode) {
       map["__mode:exit"] = () => {
@@ -2435,12 +2494,12 @@ function HotkeysProvider({
     (pending) => getSequenceCompletions(pending, keymap, registry.actionRegistry, registry.isActionEnabled),
     [keymap, registry.actionRegistry, registry.isActionEnabled]
   );
-  const executeAction = react.useCallback((id, captures) => {
+  const executeAction = react.useCallback((id, captures, event) => {
     const actionMode = registry.getEffectiveMode(id);
     if (actionMode && modesRegistry.activeMode !== actionMode) {
       modesRegistry.activateMode(actionMode);
     }
-    registry.execute(id, captures);
+    registry.execute(id, captures, event);
     trackRecentAction(id);
   }, [registry, trackRecentAction, modesRegistry]);
   const value = react.useMemo(() => ({
@@ -3723,65 +3782,59 @@ function useOmnibar(options) {
   const resetSelection = react.useCallback(() => {
     setSelectedIndex(0);
   }, []);
-  const executeWithCaptures = react.useCallback((actionId, captures) => {
+  const pendingExecutionEvent = react.useRef(void 0);
+  const executeWithCaptures = react.useCallback((actionId, captures, event) => {
+    const href = resolveHref(actions[actionId]?.href);
     close();
-    if (handlersRef.current?.[actionId]) {
-      const event = new KeyboardEvent("keydown", { key: "Enter" });
-      handlersRef.current[actionId](event, captures);
-    }
-    onExecuteRef.current?.(actionId, captures);
-  }, [close]);
-  const execute = react.useCallback((actionId, captures) => {
-    const localCount = results.length;
-    if (actionId) {
-      const remoteResult = remoteResults.find((r) => r.id === actionId);
-      if (remoteResult) {
-        close();
-        const entry = remoteResult.entry;
-        if ("handler" in entry && entry.handler) {
-          entry.handler();
-        }
-        onExecuteRemoteRef.current?.(entry);
-        return;
-      }
-      const result = results.find((r) => r.id === actionId);
-      const effectiveCaptures = captures ?? result?.captures;
-      if (result?.hasPlaceholders && !effectiveCaptures?.length) {
-        setPendingParamAction(actionId);
-        return;
-      }
-      executeWithCaptures(actionId, effectiveCaptures);
+    if (href && opensNewContext(event)) {
+      openHref(href, event);
       return;
     }
-    if (selectedIndex < localCount) {
-      const result = results[selectedIndex];
-      if (!result) return;
-      const effectiveCaptures = captures ?? result.captures;
-      if (result.hasPlaceholders && !effectiveCaptures?.length) {
-        setPendingParamAction(result.id);
-        return;
-      }
-      executeWithCaptures(result.id, effectiveCaptures);
-    } else {
-      const remoteIndex = selectedIndex - localCount;
-      const remoteResult = remoteResults[remoteIndex];
-      if (!remoteResult) return;
-      close();
-      const entry = remoteResult.entry;
-      if ("handler" in entry && entry.handler) {
-        entry.handler();
-      }
-      onExecuteRemoteRef.current?.(entry);
+    const keyEvent = executionKeyEvent(event);
+    if (handlersRef.current?.[actionId]) {
+      handlersRef.current[actionId](keyEvent, captures);
     }
-  }, [results, remoteResults, selectedIndex, close, executeWithCaptures]);
+    onExecuteRef.current?.(actionId, captures, keyEvent);
+    if (href && !handlersRef.current?.[actionId] && !onExecuteRef.current) {
+      window.location.assign(href);
+    }
+  }, [actions, close]);
+  const execute = react.useCallback((actionId, captures, event) => {
+    const remoteResult = actionId ? remoteResults.find((r) => r.id === actionId) : remoteResults[selectedIndex - results.length];
+    if (remoteResult) {
+      const entry = remoteResult.entry;
+      const href = entry.href;
+      close();
+      if (href && opensNewContext(event)) {
+        openHref(href, event);
+      } else {
+        entry.handler?.();
+        if (onExecuteRemoteRef.current) onExecuteRemoteRef.current(entry, event);
+        else if (href) window.location.assign(href);
+      }
+      return;
+    }
+    const result = actionId ? results.find((r) => r.id === actionId) : results[selectedIndex];
+    const id = actionId ?? result?.id;
+    if (!id) return;
+    const effectiveCaptures = captures ?? result?.captures;
+    if (result?.hasPlaceholders && !effectiveCaptures?.length && !(actions[id]?.href && opensNewContext(event))) {
+      pendingExecutionEvent.current = event;
+      setPendingParamAction(id);
+      return;
+    }
+    executeWithCaptures(id, effectiveCaptures, event);
+  }, [actions, results, remoteResults, selectedIndex, close, executeWithCaptures]);
   const submitParam = react.useCallback((value) => {
     if (pendingParamAction) {
-      executeWithCaptures(pendingParamAction, [value]);
+      executeWithCaptures(pendingParamAction, [value], pendingExecutionEvent.current);
+      pendingExecutionEvent.current = void 0;
       setPendingParamAction(null);
     }
   }, [pendingParamAction, executeWithCaptures]);
   const cancelParam = react.useCallback(() => {
     setPendingParamAction(null);
+    pendingExecutionEvent.current = void 0;
   }, []);
   react.useEffect(() => {
     if (!isOpen) return;
@@ -3809,7 +3862,7 @@ function useOmnibar(options) {
           break;
         case "Enter":
           e.preventDefault();
-          execute();
+          execute(void 0, void 0, e);
           break;
       }
     };
@@ -5220,6 +5273,63 @@ function SpeedDial({
     }
   );
 }
+var OmnibarResultRow = react.forwardRef(
+  function OmnibarResultRow2({ href, onExecute, onNavigate, onClick, onAuxClick, children, ...props }, ref) {
+    const handleClick = (event) => {
+      if (event.button !== 0 && event.button !== 1) return;
+      if (url && isModifiedLinkClick(event.nativeEvent)) {
+        const link = event.currentTarget;
+        link.href = resolveHref(href) ?? url;
+        window.setTimeout(onNavigate, 0);
+        return;
+      }
+      event.preventDefault();
+      onExecute(event.nativeEvent);
+    };
+    const url = resolveHref(href);
+    const handlers = {
+      onClick: (event) => {
+        handleClick(event);
+        onClick?.(event);
+      },
+      onAuxClick: (event) => {
+        handleClick(event);
+        onAuxClick?.(event);
+      }
+    };
+    return url ? /* @__PURE__ */ jsxRuntime.jsxs("a", { ...props, ...handlers, ref, href: url, rel: "noopener", children: [
+      children,
+      /* @__PURE__ */ jsxRuntime.jsx("svg", { className: "kbd-omnibar-link-indicator", viewBox: "0 0 16 16", fill: "none", stroke: "currentColor", strokeWidth: "1.5", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true", focusable: "false", children: /* @__PURE__ */ jsxRuntime.jsx("path", { d: "M4 12 12 4M4 4h8v8" }) })
+    ] }) : /* @__PURE__ */ jsxRuntime.jsx("div", { ...props, ...handlers, ref, children });
+  }
+);
+function OmnibarNewTabHint() {
+  const mac = isMac();
+  return /* @__PURE__ */ jsxRuntime.jsxs("div", { className: "kbd-omnibar-new-tab-hint", "aria-label": `${mac ? "Command" : "Ctrl"}+Enter: open in a new tab; ${mac ? "Command" : "Ctrl"}+Shift+Enter: open and switch to a new tab; Shift+Enter: open in a new window`, children: [
+    /* @__PURE__ */ jsxRuntime.jsxs("span", { className: "kbd-omnibar-navigation-hint", children: [
+      /* @__PURE__ */ jsxRuntime.jsxs("kbd", { className: "kbd-kbd", children: [
+        mac ? /* @__PURE__ */ jsxRuntime.jsx(ModifierIcon, { modifier: "meta", "aria-hidden": "true" }) : "Ctrl",
+        "\u21B5"
+      ] }),
+      " new tab"
+    ] }),
+    /* @__PURE__ */ jsxRuntime.jsxs("span", { className: "kbd-omnibar-navigation-hint", children: [
+      /* @__PURE__ */ jsxRuntime.jsxs("kbd", { className: "kbd-kbd", children: [
+        mac ? /* @__PURE__ */ jsxRuntime.jsx(ModifierIcon, { modifier: "meta", "aria-hidden": "true" }) : "Ctrl",
+        /* @__PURE__ */ jsxRuntime.jsx(ModifierIcon, { modifier: "shift", "aria-hidden": "true" }),
+        "\u21B5"
+      ] }),
+      " switch"
+    ] }),
+    /* @__PURE__ */ jsxRuntime.jsxs("span", { className: "kbd-omnibar-navigation-hint", children: [
+      /* @__PURE__ */ jsxRuntime.jsxs("kbd", { className: "kbd-kbd", children: [
+        /* @__PURE__ */ jsxRuntime.jsx(ModifierIcon, { modifier: "shift", "aria-hidden": "true" }),
+        "\u21B5"
+      ] }),
+      " new window"
+    ] })
+  ] });
+}
 function SeqElemBadge({ elem }) {
   if (elem.type === "digit") {
     return /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-placeholder", title: "Any single digit (0-9)", children: "#" });
@@ -5272,13 +5382,16 @@ function Omnibar({
     defaultBindings: defaultBinding ? [defaultBinding] : [],
     handler: react.useCallback(() => ctx?.toggleOmnibar(), [ctx?.toggleOmnibar])
   });
-  const handleExecute = react.useCallback((actionId, captures) => {
+  const handleExecute = react.useCallback((actionId, captures, event) => {
     if (onExecuteProp) {
-      onExecuteProp(actionId);
+      onExecuteProp(actionId, captures, event);
     } else if (ctx?.executeAction) {
-      ctx.executeAction(actionId, captures);
+      ctx.executeAction(actionId, captures, event);
+    } else {
+      const href = resolveHref(actions[actionId]?.href);
+      if (href && !handlersProp?.[actionId]) window.location.assign(href);
     }
-  }, [onExecuteProp, ctx]);
+  }, [onExecuteProp, ctx, actions, handlersProp]);
   const handleClose = react.useCallback(() => {
     if (onCloseProp) {
       onCloseProp();
@@ -5293,9 +5406,9 @@ function Omnibar({
       ctx.openOmnibar();
     }
   }, [onOpenProp, ctx]);
-  const handleExecuteRemote = react.useCallback((entry) => {
+  const handleExecuteRemote = react.useCallback((entry, event) => {
     if (onExecuteRemoteProp) {
-      onExecuteRemoteProp(entry);
+      onExecuteRemoteProp(entry, event);
     } else if ("href" in entry && entry.href) {
       window.location.href = entry.href;
     }
@@ -5465,7 +5578,7 @@ function Omnibar({
           break;
         case "Enter":
           e.preventDefault();
-          execute();
+          execute(void 0, void 0, e.nativeEvent);
           break;
       }
     },
@@ -5564,10 +5677,12 @@ function Omnibar({
         const isModeInactive = modeId && ctx?.activeMode !== modeId;
         if (result.id.startsWith(ACTION_MODE_PREFIX)) return null;
         return /* @__PURE__ */ jsxRuntime.jsxs(
-          "div",
+          OmnibarResultRow,
           {
+            href: result.action.href,
+            onNavigate: close,
             className: `kbd-omnibar-result ${i === selectedIndex ? "selected" : ""}${isModeInactive ? " kbd-mode-inactive" : ""}`,
-            onClick: () => execute(result.id),
+            onExecute: (event) => execute(result.id, void 0, event),
             children: [
               /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-omnibar-result-label", children: result.action.label }),
               modeInfo && /* @__PURE__ */ jsxRuntime.jsx(
@@ -5607,10 +5722,12 @@ function Omnibar({
               const absoluteIndex = results.length + remoteIndex;
               remoteIndex++;
               return /* @__PURE__ */ jsxRuntime.jsxs(
-                "div",
+                OmnibarResultRow,
                 {
+                  href: result.entry.href,
+                  onNavigate: close,
                   className: `kbd-omnibar-result ${absoluteIndex === selectedIndex ? "selected" : ""}`,
-                  onClick: () => execute(result.id),
+                  onExecute: (event) => execute(result.id, void 0, event),
                   children: [
                     /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-omnibar-result-label", children: result.entry.label }),
                     result.entry.group && /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-omnibar-result-category", children: result.entry.group }),
@@ -5637,7 +5754,8 @@ function Omnibar({
         });
       })(),
       isLoadingRemote && remoteResults.length === 0 && /* @__PURE__ */ jsxRuntime.jsx("div", { className: "kbd-omnibar-loading", children: "Searching..." })
-    ] }) })
+    ] }) }),
+    !pendingParamAction && (selectedIndex < results.length ? results[selectedIndex]?.action.href : remoteResults[selectedIndex - results.length]?.entry.href) && /* @__PURE__ */ jsxRuntime.jsx(OmnibarNewTabHint, {})
   ] }) });
 }
 function OmnibarToggleAction({ defaultBinding }) {
@@ -5659,6 +5777,7 @@ function OmnibarCmdk({
   const ctx = useMaybeHotkeysContext();
   const actions = ctx?.registry.actionRegistry ?? {};
   const keymap = ctx?.registry.keymap ?? {};
+  const [selectedId, setSelectedId] = react.useState("");
   const handleExecuteRemote = react.useCallback((entry) => {
     if ("href" in entry && entry.href) window.location.href = entry.href;
   }, []);
@@ -5668,6 +5787,7 @@ function OmnibarCmdk({
     results,
     remoteResults,
     execute,
+    close,
     isLoadingRemote,
     endpointPagination,
     loadMore,
@@ -5681,7 +5801,7 @@ function OmnibarCmdk({
     // trigger handled via useAction above
     enabled: false,
     onClose: () => ctx?.closeOmnibar(),
-    onExecute: (id, captures) => ctx?.executeAction(id, captures),
+    onExecute: (id, captures, event) => ctx?.executeAction(id, captures, event),
     onExecuteRemote: handleExecuteRemote,
     endpointsRegistry: ctx?.endpointsRegistry,
     recentActionIds: ctx?.recentActionIds,
@@ -5727,15 +5847,24 @@ function OmnibarCmdk({
     }
   }, [endpointPagination, loadMore]);
   const inParamEntry = pendingParamAction != null;
+  const selectedResult = results.find((r) => r.id === selectedId);
+  const selectedRemoteResult = remoteResults.find((r) => r.id === selectedId);
+  const selectedHref = selectedResult?.action.href ?? selectedRemoteResult?.entry.href;
   const body = /* @__PURE__ */ jsxRuntime.jsxs(
     cmdk.Command,
     {
       shouldFilter: false,
       loop: true,
+      value: selectedId,
+      onValueChange: setSelectedId,
       onKeyDown: (e) => {
-        if (e.key === "Escape" && !inParamEntry && !inline) {
+        if (inParamEntry) return;
+        if (e.key === "Escape" && !inline) {
           e.preventDefault();
           ctx?.closeOmnibar();
+        } else if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+          e.preventDefault();
+          if (selectedResult || selectedRemoteResult) execute(selectedId, void 0, e.nativeEvent);
         }
       },
       children: [
@@ -5778,22 +5907,23 @@ function OmnibarCmdk({
             onScroll: onListScroll,
             children: [
               /* @__PURE__ */ jsxRuntime.jsx(cmdk.Command.Empty, { className: "kbd-omnibar-empty", children: isLoadingRemote ? "Searching\u2026" : "No results." }),
-              recentResults.length > 0 && /* @__PURE__ */ jsxRuntime.jsx(cmdk.Command.Group, { heading: "Recent", className: "kbd-omnibar-group", children: recentResults.map((r) => /* @__PURE__ */ jsxRuntime.jsxs(cmdk.Command.Item, { value: r.id, className: "kbd-omnibar-result", onSelect: () => execute(r.id, r.captures), children: [
+              recentResults.length > 0 && /* @__PURE__ */ jsxRuntime.jsx(cmdk.Command.Group, { heading: "Recent", className: "kbd-omnibar-group", children: recentResults.map((r) => /* @__PURE__ */ jsxRuntime.jsx(cmdk.Command.Item, { value: r.id, asChild: true, children: /* @__PURE__ */ jsxRuntime.jsxs(OmnibarResultRow, { href: r.action.href, className: "kbd-omnibar-result", onNavigate: close, onExecute: (event) => execute(r.id, r.captures, event), children: [
                 /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-omnibar-result-label", children: r.action.label }),
                 r.bindings[0] && /* @__PURE__ */ jsxRuntime.jsx("kbd", { className: "kbd-omnibar-binding", children: r.bindings[0] })
-              ] }, r.id)) }),
-              actionResults.length > 0 && /* @__PURE__ */ jsxRuntime.jsx(cmdk.Command.Group, { heading: "Actions", className: "kbd-omnibar-group", children: actionResults.map((r) => /* @__PURE__ */ jsxRuntime.jsxs(cmdk.Command.Item, { value: r.id, className: "kbd-omnibar-result", onSelect: () => execute(r.id, r.captures), children: [
+              ] }) }, r.id)) }),
+              actionResults.length > 0 && /* @__PURE__ */ jsxRuntime.jsx(cmdk.Command.Group, { heading: "Actions", className: "kbd-omnibar-group", children: actionResults.map((r) => /* @__PURE__ */ jsxRuntime.jsx(cmdk.Command.Item, { value: r.id, asChild: true, children: /* @__PURE__ */ jsxRuntime.jsxs(OmnibarResultRow, { href: r.action.href, className: "kbd-omnibar-result", onNavigate: close, onExecute: (event) => execute(r.id, r.captures, event), children: [
                 /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-omnibar-result-label", children: r.action.label }),
                 r.bindings[0] && /* @__PURE__ */ jsxRuntime.jsx("kbd", { className: "kbd-omnibar-binding", children: r.bindings[0] })
-              ] }, r.id)) }),
-              Array.from(remoteGroups.entries()).map(([group, { items }]) => /* @__PURE__ */ jsxRuntime.jsx(cmdk.Command.Group, { heading: group, className: "kbd-omnibar-group", children: items.map((r) => /* @__PURE__ */ jsxRuntime.jsxs(cmdk.Command.Item, { value: r.id, className: "kbd-omnibar-result", onSelect: () => execute(r.id), children: [
+              ] }) }, r.id)) }),
+              Array.from(remoteGroups.entries()).map(([group, { items }]) => /* @__PURE__ */ jsxRuntime.jsx(cmdk.Command.Group, { heading: group, className: "kbd-omnibar-group", children: items.map((r) => /* @__PURE__ */ jsxRuntime.jsx(cmdk.Command.Item, { value: r.id, asChild: true, children: /* @__PURE__ */ jsxRuntime.jsxs(OmnibarResultRow, { href: r.entry.href, className: "kbd-omnibar-result", onNavigate: close, onExecute: (event) => execute(r.id, void 0, event), children: [
                 /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-omnibar-result-label", children: r.entry.label }),
                 r.entry.description && /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-omnibar-result-description", children: r.entry.description })
-              ] }, r.id)) }, group)),
+              ] }) }, r.id)) }, group)),
               isLoadingRemote && /* @__PURE__ */ jsxRuntime.jsx("div", { className: "kbd-omnibar-loading", "aria-hidden": true, children: "Loading\u2026" })
             ]
           }
-        )
+        ),
+        !inParamEntry && selectedHref && /* @__PURE__ */ jsxRuntime.jsx(OmnibarNewTabHint, {})
       ]
     }
   );
