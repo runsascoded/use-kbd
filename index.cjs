@@ -79,7 +79,7 @@ var DEFAULT_BUILTIN_GROUP = "Meta";
 var ACTION_MODE_PREFIX = "__mode:";
 
 // src/utils.ts
-var { max } = Math;
+var { max, min } = Math;
 var SHIFTED_SYMBOLS = /* @__PURE__ */ new Set([
   "!",
   "@",
@@ -719,18 +719,18 @@ function getActionBindings(keymap) {
   }
   return actionToKeys;
 }
-function fuzzyMatch(pattern, text) {
-  if (!pattern) return { matched: true, score: 1, ranges: [] };
-  if (!text) return { matched: false, score: 0, ranges: [] };
-  const patternLower = pattern.toLowerCase();
-  const textLower = text.toLowerCase();
+var WORD_BOUNDARY = /[\s\-_./:,;()[\]]/;
+function isWordStart(text, idx) {
+  return idx === 0 || WORD_BOUNDARY.test(text[idx - 1]);
+}
+function alignFrom(patternLower, text, textLower, from) {
   let patternIdx = 0;
   let score = 0;
   let consecutiveBonus = 0;
   let lastMatchIdx = -2;
   const ranges = [];
   let rangeStart = -1;
-  for (let textIdx = 0; textIdx < textLower.length && patternIdx < patternLower.length; textIdx++) {
+  for (let textIdx = from; textIdx < textLower.length && patternIdx < patternLower.length; textIdx++) {
     if (textLower[textIdx] === patternLower[patternIdx]) {
       let matchScore = 1;
       if (lastMatchIdx === textIdx - 1) {
@@ -739,7 +739,7 @@ function fuzzyMatch(pattern, text) {
       } else {
         consecutiveBonus = 0;
       }
-      if (textIdx === 0 || /[\s\-_./]/.test(text[textIdx - 1])) {
+      if (isWordStart(text, textIdx)) {
         matchScore += 2;
       }
       if (text[textIdx] === text[textIdx].toUpperCase() && /[a-z]/.test(text[textIdx].toLowerCase())) {
@@ -752,24 +752,108 @@ function fuzzyMatch(pattern, text) {
       if (rangeStart === -1) {
         rangeStart = textIdx;
       }
-    } else {
-      if (rangeStart !== -1) {
-        ranges.push([rangeStart, lastMatchIdx + 1]);
-        rangeStart = -1;
-      }
+    } else if (rangeStart !== -1) {
+      ranges.push([rangeStart, lastMatchIdx + 1]);
+      rangeStart = -1;
     }
   }
   if (rangeStart !== -1) {
     ranges.push([rangeStart, lastMatchIdx + 1]);
   }
-  const matched = patternIdx === patternLower.length;
-  if (matched && textLower === patternLower) {
-    score += 10;
+  return { matched: patternIdx === patternLower.length, score, ranges };
+}
+function fuzzyMatch(pattern, text) {
+  if (!pattern) return { matched: true, score: 1, ranges: [] };
+  if (!text) return { matched: false, score: 0, ranges: [] };
+  const patternLower = pattern.toLowerCase();
+  const textLower = text.toLowerCase();
+  let best = null;
+  for (let from = textLower.indexOf(patternLower[0]); from !== -1; from = textLower.indexOf(patternLower[0], from + 1)) {
+    const m = alignFrom(patternLower, text, textLower, from);
+    if (!m.matched) break;
+    if (!best || m.score > best.score) best = m;
   }
-  if (matched && textLower.startsWith(patternLower)) {
-    score += 5;
+  if (!best) return { matched: false, score: 0, ranges: [] };
+  const { score, ranges } = best;
+  if (textLower === patternLower) {
+    return { matched: true, score: score + 15, ranges };
   }
-  return { matched, score, ranges };
+  if (textLower.startsWith(patternLower)) {
+    return { matched: true, score: score + 5, ranges };
+  }
+  return { matched: true, score, ranges };
+}
+function strictMatch(query, text) {
+  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (terms.length === 0) return { matched: true, score: 1, ranges: [] };
+  if (!text) return { matched: false, score: 0, ranges: [] };
+  const textLower = text.toLowerCase();
+  let score = 0;
+  const ranges = [];
+  for (const term of terms) {
+    let bestIdx = -1;
+    let bestScore = -Infinity;
+    for (let idx = textLower.indexOf(term); idx !== -1; idx = textLower.indexOf(term, idx + 1)) {
+      const end = idx + term.length;
+      const wordStart = isWordStart(text, idx);
+      const wholeWord = wordStart && (end === text.length || WORD_BOUNDARY.test(text[end]));
+      const s = term.length * 2 + (wordStart ? term.length : 0) + (wholeWord ? 2 : 0) - idx * 1e-3;
+      if (s > bestScore) {
+        bestScore = s;
+        bestIdx = idx;
+      }
+    }
+    if (bestIdx === -1) return { matched: false, score: 0, ranges: [] };
+    score += bestScore;
+    ranges.push([bestIdx, bestIdx + term.length]);
+  }
+  return { matched: true, score, ranges: mergeRanges(ranges) };
+}
+function mergeRanges(ranges) {
+  const sorted = [...ranges].sort((a, b) => a[0] - b[0]);
+  const merged = [];
+  for (const [a, b] of sorted) {
+    const last = merged[merged.length - 1];
+    if (last && a <= last[1]) last[1] = max(last[1], b);
+    else merged.push([a, b]);
+  }
+  return merged;
+}
+function snippet(text, ranges, { radius = 40, ellipsis = "\u2026" } = {}) {
+  if (ranges.length === 0) {
+    if (text.length <= 2 * radius) return { text, ranges: [] };
+    ranges = [[0, 0]];
+  }
+  const [a, b] = ranges.reduce((best, r) => r[1] - r[0] > best[1] - best[0] ? r : best);
+  const isSpace = (i) => /\s/.test(text[i]);
+  let start = max(0, a - radius);
+  if (start > 0) {
+    let k = start;
+    while (k < a && !isSpace(k)) k++;
+    if (k < a) {
+      while (k < a && isSpace(k)) k++;
+      start = k;
+    }
+  }
+  let end = min(text.length, b + radius);
+  if (end < text.length) {
+    let k = end - 1;
+    while (k >= b && !isSpace(k)) k--;
+    if (k >= b) {
+      while (k > b && isSpace(k - 1)) k--;
+      end = k;
+    }
+  }
+  const prefix = start > 0 ? ellipsis : "";
+  const suffix = end < text.length ? ellipsis : "";
+  const shift = prefix.length - start;
+  const rebased = [];
+  for (const [x, y] of ranges) {
+    const lo = max(x, start);
+    const hi = min(y, end);
+    if (hi > lo) rebased.push([lo + shift, hi + shift]);
+  }
+  return { text: prefix + text.slice(start, end) + suffix, ranges: rebased };
 }
 function bindingHasPlaceholders(binding) {
   return binding.includes("\\d") || binding.includes("\\f");
@@ -813,23 +897,26 @@ function searchActions(query, actions, keymap, isEnabled) {
     const isNumberOnlyQuery = queryNumbers.length > 0 && queryText === "";
     const includeForPlaceholder = isNumberOnlyQuery && hasPlaceholders;
     const labelMatch = fuzzyMatch(effectiveQuery, action.label);
-    const descMatch = action.description ? fuzzyMatch(effectiveQuery, action.description) : { matched: false, score: 0};
-    const groupMatch = action.group ? fuzzyMatch(effectiveQuery, action.group) : { matched: false, score: 0};
-    const idMatch = fuzzyMatch(effectiveQuery, id);
-    let keywordScore = 0;
+    const matches = [];
+    const add = (field, text, m, weight) => {
+      if (m.matched) matches.push({ field, text, ranges: m.ranges, score: m.score, weighted: m.score * weight });
+    };
+    add("label", action.label, labelMatch, 3);
+    if (action.description) add("description", action.description, fuzzyMatch(effectiveQuery, action.description), 1.5);
+    if (action.searchText) add("searchText", action.searchText, strictMatch(effectiveQuery, action.searchText), 1.5);
     const groupLabel = action.actionPair?.label ?? action.actionTriplet?.label;
     const keywords = groupLabel ? [...action.keywords ?? [], groupLabel] : action.keywords;
-    if (keywords) {
-      for (const keyword of keywords) {
-        const kwMatch = fuzzyMatch(effectiveQuery, keyword);
-        if (kwMatch.matched) {
-          keywordScore = max(keywordScore, kwMatch.score);
-        }
-      }
+    let bestKeyword = null;
+    for (const keyword of keywords ?? []) {
+      const kwMatch = fuzzyMatch(effectiveQuery, keyword);
+      if (kwMatch.matched && (!bestKeyword || kwMatch.score > bestKeyword[1].score)) bestKeyword = [keyword, kwMatch];
     }
-    const matched = labelMatch.matched || descMatch.matched || groupMatch.matched || idMatch.matched || keywordScore > 0 || includeForPlaceholder;
-    if (!matched && effectiveQuery) continue;
-    let score = (labelMatch.matched ? labelMatch.score * 3 : 0) + (descMatch.matched ? descMatch.score * 1.5 : 0) + (groupMatch.matched ? groupMatch.score : 0) + (idMatch.matched ? idMatch.score * 0.5 : 0) + keywordScore * 2;
+    if (bestKeyword) add("keyword", bestKeyword[0], bestKeyword[1], 2);
+    if (action.group) add("group", action.group, fuzzyMatch(effectiveQuery, action.group), 1);
+    add("id", id, fuzzyMatch(effectiveQuery, id), 0.5);
+    if (matches.length === 0 && !includeForPlaceholder) continue;
+    let score = matches.reduce((sum, m) => sum + m.weighted, 0) + (action.priority ?? 0);
+    matches.sort((a, b) => b.weighted - a.weighted);
     if (queryNumbers.length > 0 && hasPlaceholders) {
       score += 5;
     }
@@ -839,6 +926,8 @@ function searchActions(query, actions, keymap, isEnabled) {
       bindings,
       score,
       labelMatches: labelMatch.ranges,
+      // An empty (number-only) query trivially "matches" every field; report none
+      matches: effectiveQuery ? matches.map(({ field, text, ranges, score: score2 }) => ({ field, text, ranges, score: score2 })) : [],
       mode: action.mode
     };
     if (hasPlaceholders) {
@@ -1165,6 +1254,8 @@ function useActionsRegistry(options = {}) {
         group: config.group,
         mode: config.mode,
         keywords: config.keywords,
+        searchText: config.searchText,
+        priority: config.priority,
         hideFromModal: config.hideFromModal,
         enabled: config.enabled,
         protected: config.protected,
@@ -2139,6 +2230,7 @@ function useAction(id, config) {
     id,
     config.label,
     config.description,
+    config.searchText,
     config.group,
     config.mode,
     // Compare bindings by value
@@ -2199,6 +2291,8 @@ function useActions(actions) {
       Object.entries(actions).map(([id, c]) => [
         id,
         c.label,
+        c.description,
+        c.searchText,
         c.group,
         c.mode,
         c.defaultBindings,
@@ -3425,7 +3519,7 @@ function useEditableHotkeys(defaults, handlers, options = {}) {
     sequenceTimeout
   };
 }
-var { max: max2, min } = Math;
+var { max: max2, min: min2 } = Math;
 var DEFAULT_DEBOUNCE_MS = 150;
 function useOmnibar(options) {
   const {
@@ -3500,6 +3594,7 @@ function useOmnibar(options) {
             score: 1e3,
             // High score to ensure they appear first
             labelMatches: [],
+            matches: [],
             ...hasPlaceholders && { hasPlaceholders: true }
           });
           recentIdSet.add(actionId);
@@ -3683,30 +3778,27 @@ function useOmnibar(options) {
       const priority = endpoint.config.priority ?? 0;
       const processed = [];
       for (const entry of state.entries) {
-        const labelMatch = fuzzyMatch(query, entry.label);
-        const descMatch = entry.description ? fuzzyMatch(query, entry.description) : null;
-        const keywordsMatch = entry.keywords?.map((k) => fuzzyMatch(query, k)) ?? [];
-        let score = 0;
-        let labelMatches = [];
-        if (labelMatch.matched) {
-          score = Math.max(score, labelMatch.score * 3);
-          labelMatches = labelMatch.ranges;
-        }
-        if (descMatch?.matched) {
-          score = Math.max(score, descMatch.score * 1.5);
-        }
-        for (const km of keywordsMatch) {
-          if (km.matched) {
-            score = Math.max(score, km.score * 2);
-          }
-        }
+        const matches = [];
+        const add = (field, text, weight) => {
+          const m = fuzzyMatch(query, text);
+          if (m.matched) matches.push({ field, text, ranges: m.ranges, score: m.score, weighted: m.score * weight });
+        };
+        add("label", entry.label, 3);
+        if (entry.description) add("description", entry.description, 1.5);
+        for (const keyword of entry.keywords ?? []) add("keyword", keyword, 2);
+        matches.sort((a, b) => b.weighted - a.weighted);
+        const fieldMatches = matches.filter((m, i) => m.field !== "keyword" || matches.findIndex((o) => o.field === "keyword") === i);
+        const score = matches[0]?.weighted ?? 0;
+        const labelMatches = matches.find((m) => m.field === "label")?.ranges ?? [];
         processed.push({
           id: `${endpointId}:${entry.id}`,
           entry,
           endpointId,
           priority,
           score: score || 1,
-          labelMatches
+          labelMatches,
+          // An endpoint may match on data the entry doesn't carry; report only what it does
+          matches: query ? fieldMatches.map(({ field, text, ranges, score: score2 }) => ({ field, text, ranges, score: score2 })) : []
         });
       }
       if (processed.length === 0) continue;
@@ -3774,7 +3866,7 @@ function useOmnibar(options) {
     });
   }, [onOpen, onClose]);
   const selectNext = react.useCallback(() => {
-    setSelectedIndex((prev) => min(prev + 1, totalResults - 1));
+    setSelectedIndex((prev) => min2(prev + 1, totalResults - 1));
   }, [totalResults]);
   const selectPrev = react.useCallback(() => {
     setSelectedIndex((prev) => max2(prev - 1, 0));
@@ -5273,6 +5365,35 @@ function SpeedDial({
     }
   );
 }
+function Highlight({ text, ranges, className = "kbd-omnibar-match" }) {
+  if (!ranges?.length) return /* @__PURE__ */ jsxRuntime.jsx(jsxRuntime.Fragment, { children: text });
+  const parts = [];
+  let pos = 0;
+  for (const [start, end] of ranges) {
+    if (start > pos) parts.push(text.slice(pos, start));
+    parts.push(/* @__PURE__ */ jsxRuntime.jsx("mark", { className, children: text.slice(start, end) }, start));
+    pos = end;
+  }
+  if (pos < text.length) parts.push(text.slice(pos));
+  return /* @__PURE__ */ jsxRuntime.jsx(jsxRuntime.Fragment, { children: parts.map((p, i) => /* @__PURE__ */ jsxRuntime.jsx(react.Fragment, { children: p }, i)) });
+}
+var SNIPPET_FIELDS = ["searchText", "description", "keyword"];
+function contextMatch(matches, fields = SNIPPET_FIELDS) {
+  if (matches.some((m) => m.field === "label")) return void 0;
+  return matches.find((m) => fields.includes(m.field));
+}
+function ResultSnippet({ matches, fields, radius }) {
+  const match = contextMatch(matches, fields);
+  if (!match) return null;
+  const s = snippet(match.text, match.ranges, { radius });
+  return /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-omnibar-result-snippet", "data-field": match.field, children: /* @__PURE__ */ jsxRuntime.jsx(Highlight, { text: s.text, ranges: s.ranges }) });
+}
+function ResultMain({ label, labelMatches, matches, fields }) {
+  return /* @__PURE__ */ jsxRuntime.jsxs("span", { className: "kbd-omnibar-result-main", children: [
+    /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-omnibar-result-label", children: /* @__PURE__ */ jsxRuntime.jsx(Highlight, { text: label, ranges: labelMatches }) }),
+    /* @__PURE__ */ jsxRuntime.jsx(ResultSnippet, { matches, fields })
+  ] });
+}
 var OmnibarResultRow = react.forwardRef(
   function OmnibarResultRow2({ href, onExecute, onNavigate, onClick, onAuxClick, children, ...props }, ref) {
     const handleClick = (event) => {
@@ -5367,6 +5488,8 @@ function Omnibar({
   onExecuteRemote: onExecuteRemoteProp,
   maxResults,
   placeholder = "Type a command...",
+  renderResult,
+  renderRemoteResult,
   children,
   backdropClassName = "kbd-omnibar-backdrop",
   omnibarClassName = "kbd-omnibar"
@@ -5676,15 +5799,15 @@ function Omnibar({
         const modeInfo = modeId && ctx?.modes ? ctx.modes.get(modeId) : void 0;
         const isModeInactive = modeId && ctx?.activeMode !== modeId;
         if (result.id.startsWith(ACTION_MODE_PREFIX)) return null;
-        return /* @__PURE__ */ jsxRuntime.jsxs(
+        return /* @__PURE__ */ jsxRuntime.jsx(
           OmnibarResultRow,
           {
             href: result.action.href,
             onNavigate: close,
             className: `kbd-omnibar-result ${i === selectedIndex ? "selected" : ""}${isModeInactive ? " kbd-mode-inactive" : ""}`,
             onExecute: (event) => execute(result.id, void 0, event),
-            children: [
-              /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-omnibar-result-label", children: result.action.label }),
+            children: renderResult ? renderResult(result, { selected: i === selectedIndex, query }) : /* @__PURE__ */ jsxRuntime.jsxs(jsxRuntime.Fragment, { children: [
+              /* @__PURE__ */ jsxRuntime.jsx(ResultMain, { label: result.action.label, labelMatches: result.labelMatches, matches: result.matches }),
               modeInfo && /* @__PURE__ */ jsxRuntime.jsx(
                 "span",
                 {
@@ -5695,7 +5818,7 @@ function Omnibar({
               ),
               !modeInfo && result.action.group && /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-omnibar-result-category", children: result.action.group }),
               result.bindings.length > 0 && /* @__PURE__ */ jsxRuntime.jsx("div", { className: "kbd-omnibar-result-bindings", children: result.bindings.slice(0, 2).map((binding) => /* @__PURE__ */ jsxRuntime.jsx(BindingBadge, { binding }, binding)) })
-            ]
+            ] })
           },
           result.id
         );
@@ -5721,18 +5844,18 @@ function Omnibar({
             endpointResults.map((result) => {
               const absoluteIndex = results.length + remoteIndex;
               remoteIndex++;
-              return /* @__PURE__ */ jsxRuntime.jsxs(
+              return /* @__PURE__ */ jsxRuntime.jsx(
                 OmnibarResultRow,
                 {
                   href: result.entry.href,
                   onNavigate: close,
                   className: `kbd-omnibar-result ${absoluteIndex === selectedIndex ? "selected" : ""}`,
                   onExecute: (event) => execute(result.id, void 0, event),
-                  children: [
-                    /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-omnibar-result-label", children: result.entry.label }),
+                  children: renderRemoteResult ? renderRemoteResult(result, { selected: absoluteIndex === selectedIndex, query }) : /* @__PURE__ */ jsxRuntime.jsxs(jsxRuntime.Fragment, { children: [
+                    /* @__PURE__ */ jsxRuntime.jsx(ResultMain, { label: result.entry.label, labelMatches: result.labelMatches, matches: result.matches, fields: ["keyword"] }),
                     result.entry.group && /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-omnibar-result-category", children: result.entry.group }),
                     result.entry.description && /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-omnibar-result-description", children: result.entry.description })
-                  ]
+                  ] })
                 },
                 result.id
               );
@@ -5772,7 +5895,9 @@ function OmnibarToggleAction({ defaultBinding }) {
 function OmnibarCmdk({
   defaultBinding = "meta+k",
   inline = false,
-  placeholder = "Type a command\u2026"
+  placeholder = "Type a command\u2026",
+  renderResult,
+  renderRemoteResult
 }) {
   const ctx = useMaybeHotkeysContext();
   const actions = ctx?.registry.actionRegistry ?? {};
@@ -5907,18 +6032,18 @@ function OmnibarCmdk({
             onScroll: onListScroll,
             children: [
               /* @__PURE__ */ jsxRuntime.jsx(cmdk.Command.Empty, { className: "kbd-omnibar-empty", children: isLoadingRemote ? "Searching\u2026" : "No results." }),
-              recentResults.length > 0 && /* @__PURE__ */ jsxRuntime.jsx(cmdk.Command.Group, { heading: "Recent", className: "kbd-omnibar-group", children: recentResults.map((r) => /* @__PURE__ */ jsxRuntime.jsx(cmdk.Command.Item, { value: r.id, asChild: true, children: /* @__PURE__ */ jsxRuntime.jsxs(OmnibarResultRow, { href: r.action.href, className: "kbd-omnibar-result", onNavigate: close, onExecute: (event) => execute(r.id, r.captures, event), children: [
-                /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-omnibar-result-label", children: r.action.label }),
+              recentResults.length > 0 && /* @__PURE__ */ jsxRuntime.jsx(cmdk.Command.Group, { heading: "Recent", className: "kbd-omnibar-group", children: recentResults.map((r) => /* @__PURE__ */ jsxRuntime.jsx(cmdk.Command.Item, { value: r.id, asChild: true, children: /* @__PURE__ */ jsxRuntime.jsx(OmnibarResultRow, { href: r.action.href, className: "kbd-omnibar-result", onNavigate: close, onExecute: (event) => execute(r.id, r.captures, event), children: renderResult ? renderResult(r, { selected: r.id === selectedId, query }) : /* @__PURE__ */ jsxRuntime.jsxs(jsxRuntime.Fragment, { children: [
+                /* @__PURE__ */ jsxRuntime.jsx(ResultMain, { label: r.action.label, labelMatches: r.labelMatches, matches: r.matches }),
                 r.bindings[0] && /* @__PURE__ */ jsxRuntime.jsx("kbd", { className: "kbd-omnibar-binding", children: r.bindings[0] })
-              ] }) }, r.id)) }),
-              actionResults.length > 0 && /* @__PURE__ */ jsxRuntime.jsx(cmdk.Command.Group, { heading: "Actions", className: "kbd-omnibar-group", children: actionResults.map((r) => /* @__PURE__ */ jsxRuntime.jsx(cmdk.Command.Item, { value: r.id, asChild: true, children: /* @__PURE__ */ jsxRuntime.jsxs(OmnibarResultRow, { href: r.action.href, className: "kbd-omnibar-result", onNavigate: close, onExecute: (event) => execute(r.id, r.captures, event), children: [
-                /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-omnibar-result-label", children: r.action.label }),
+              ] }) }) }, r.id)) }),
+              actionResults.length > 0 && /* @__PURE__ */ jsxRuntime.jsx(cmdk.Command.Group, { heading: "Actions", className: "kbd-omnibar-group", children: actionResults.map((r) => /* @__PURE__ */ jsxRuntime.jsx(cmdk.Command.Item, { value: r.id, asChild: true, children: /* @__PURE__ */ jsxRuntime.jsx(OmnibarResultRow, { href: r.action.href, className: "kbd-omnibar-result", onNavigate: close, onExecute: (event) => execute(r.id, r.captures, event), children: renderResult ? renderResult(r, { selected: r.id === selectedId, query }) : /* @__PURE__ */ jsxRuntime.jsxs(jsxRuntime.Fragment, { children: [
+                /* @__PURE__ */ jsxRuntime.jsx(ResultMain, { label: r.action.label, labelMatches: r.labelMatches, matches: r.matches }),
                 r.bindings[0] && /* @__PURE__ */ jsxRuntime.jsx("kbd", { className: "kbd-omnibar-binding", children: r.bindings[0] })
-              ] }) }, r.id)) }),
-              Array.from(remoteGroups.entries()).map(([group, { items }]) => /* @__PURE__ */ jsxRuntime.jsx(cmdk.Command.Group, { heading: group, className: "kbd-omnibar-group", children: items.map((r) => /* @__PURE__ */ jsxRuntime.jsx(cmdk.Command.Item, { value: r.id, asChild: true, children: /* @__PURE__ */ jsxRuntime.jsxs(OmnibarResultRow, { href: r.entry.href, className: "kbd-omnibar-result", onNavigate: close, onExecute: (event) => execute(r.id, void 0, event), children: [
-                /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-omnibar-result-label", children: r.entry.label }),
+              ] }) }) }, r.id)) }),
+              Array.from(remoteGroups.entries()).map(([group, { items }]) => /* @__PURE__ */ jsxRuntime.jsx(cmdk.Command.Group, { heading: group, className: "kbd-omnibar-group", children: items.map((r) => /* @__PURE__ */ jsxRuntime.jsx(cmdk.Command.Item, { value: r.id, asChild: true, children: /* @__PURE__ */ jsxRuntime.jsx(OmnibarResultRow, { href: r.entry.href, className: "kbd-omnibar-result", onNavigate: close, onExecute: (event) => execute(r.id, void 0, event), children: renderRemoteResult ? renderRemoteResult(r, { selected: r.id === selectedId, query }) : /* @__PURE__ */ jsxRuntime.jsxs(jsxRuntime.Fragment, { children: [
+                /* @__PURE__ */ jsxRuntime.jsx(ResultMain, { label: r.entry.label, labelMatches: r.labelMatches, matches: r.matches, fields: ["keyword"] }),
                 r.entry.description && /* @__PURE__ */ jsxRuntime.jsx("span", { className: "kbd-omnibar-result-description", children: r.entry.description })
-              ] }) }, r.id)) }, group)),
+              ] }) }) }, r.id)) }, group)),
               isLoadingRemote && /* @__PURE__ */ jsxRuntime.jsx("div", { className: "kbd-omnibar-loading", "aria-hidden": true, children: "Loading\u2026" })
             ]
           }
@@ -7841,6 +7966,7 @@ exports.DIGIT_PLACEHOLDER = DIGIT_PLACEHOLDER;
 exports.Down = Down;
 exports.Enter = Enter;
 exports.FLOAT_PLACEHOLDER = FLOAT_PLACEHOLDER;
+exports.Highlight = Highlight;
 exports.HotkeysProvider = HotkeysProvider;
 exports.Kbd = Kbd;
 exports.KbdLookup = KbdLookup;
@@ -7859,7 +7985,9 @@ exports.Omnibar = Omnibar;
 exports.OmnibarCmdk = OmnibarCmdk;
 exports.OmnibarEndpointsRegistryContext = OmnibarEndpointsRegistryContext;
 exports.Option = Option;
+exports.ResultSnippet = ResultSnippet;
 exports.Right = Right;
+exports.SNIPPET_FIELDS = SNIPPET_FIELDS;
 exports.SearchIcon = SearchIcon2;
 exports.SearchTrigger = SearchTrigger;
 exports.SequenceModal = SequenceModal;
@@ -7869,6 +7997,7 @@ exports.SpeedDial = SpeedDial;
 exports.Up = Up;
 exports.bindingHasPlaceholders = bindingHasPlaceholders;
 exports.computeSelected = computeSelected;
+exports.contextMatch = contextMatch;
 exports.countPlaceholders = countPlaceholders;
 exports.createTwoColumnRenderer = createTwoColumnRenderer;
 exports.extractCaptures = extractCaptures;
@@ -7899,6 +8028,8 @@ exports.parseHotkeyString = parseHotkeyString;
 exports.parseKeySeq = parseKeySeq;
 exports.parseQueryNumbers = parseQueryNumbers;
 exports.searchActions = searchActions;
+exports.snippet = snippet;
+exports.strictMatch = strictMatch;
 exports.useAction = useAction;
 exports.useActionPair = useActionPair;
 exports.useActionTriplet = useActionTriplet;

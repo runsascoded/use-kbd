@@ -182,6 +182,14 @@ interface ActionDefinition {
     mode?: string;
     /** Additional search keywords */
     keywords?: string[];
+    /**
+     * Long body text that the omnibar searches but never displays as-is (e.g. a
+     * slide's or page's text). Matched strictly: each query term must occur as a
+     * substring (no scattered subsequences). A matching result shows a snippet.
+     */
+    searchText?: string;
+    /** Omnibar ranking boost, added to the match score (see `ActionConfig.priority`) */
+    priority?: number;
     /** Icon identifier (user provides rendering) */
     icon?: string;
     /**
@@ -215,6 +223,18 @@ type ModifierName = 'ctrl' | 'alt' | 'shift' | 'meta';
  * Registry of all available actions
  */
 type ActionRegistry = Record<string, ActionDefinition>;
+/** A searchable field of an action or omnibar entry */
+type MatchField = 'label' | 'description' | 'searchText' | 'keyword' | 'group' | 'id';
+/** Where (and how well) a query matched one field */
+interface FieldMatch {
+    field: MatchField;
+    /** The field's full text (for `keyword`, the matched keyword) */
+    text: string;
+    /** Matched character ranges in `text`, `[start, end)` */
+    ranges: Array<[number, number]>;
+    /** Match score for this field, before field weighting */
+    score: number;
+}
 /**
  * An action with its current keybinding(s) and search match info
  */
@@ -229,6 +249,11 @@ interface ActionSearchResult {
     score: number;
     /** Matched ranges in label for highlighting */
     labelMatches: Array<[number, number]>;
+    /**
+     * Every field the query matched, best (highest weighted score) first. Use
+     * with `snippet()` to show why a result matched, e.g. a `searchText` hit.
+     */
+    matches: FieldMatch[];
     /** Whether this action has bindings with digit placeholders (\d or \d+) */
     hasPlaceholders?: boolean;
     /** Captured digit values from query (e.g., "smooth 3" → [3]) */
@@ -633,6 +658,8 @@ interface RemoteOmnibarResult {
     score: number;
     /** Matched ranges in label for highlighting */
     labelMatches: Array<[number, number]>;
+    /** Every field the query matched (`label`, `description`, `keyword`), best first */
+    matches: FieldMatch[];
 }
 /**
  * Pagination info for an endpoint's results group
@@ -1181,12 +1208,26 @@ interface OmnibarProps {
     maxResults?: number;
     /** Placeholder text for input (default: 'Type a command...') */
     placeholder?: string;
-    /** Custom render function */
+    /**
+     * Replace a local action result's row content, keeping the default chrome
+     * (input, list, keyboard handling, row click / link behavior). Default: the
+     * highlighted label, a snippet line when the match isn't in the label (see
+     * `ActionSearchResult.matches`), the group, and bindings.
+     */
+    renderResult?: (result: ActionSearchResult, state: OmnibarResultRenderState) => ReactNode;
+    /** Like `renderResult`, for endpoint (remote) results. */
+    renderRemoteResult?: (result: RemoteOmnibarResult, state: OmnibarResultRenderState) => ReactNode;
+    /** Custom render function, replacing the whole UI (see `useOmnibar` for a fully headless API) */
     children?: (props: OmnibarRenderProps) => ReactNode;
     /** CSS class for the backdrop */
     backdropClassName?: string;
     /** CSS class for the omnibar container */
     omnibarClassName?: string;
+}
+interface OmnibarResultRenderState {
+    /** Whether this row is the keyboard selection */
+    selected: boolean;
+    query: string;
 }
 interface OmnibarRenderProps {
     query: string;
@@ -1254,7 +1295,7 @@ interface OmnibarRenderProps {
  * />
  * ```
  */
-declare function Omnibar({ actions: actionsProp, handlers: handlersProp, keymap: keymapProp, defaultBinding, isOpen: isOpenProp, onOpen: onOpenProp, onClose: onCloseProp, onExecute: onExecuteProp, onExecuteRemote: onExecuteRemoteProp, maxResults, placeholder, children, backdropClassName, omnibarClassName, }: OmnibarProps): react_jsx_runtime.JSX.Element | null;
+declare function Omnibar({ actions: actionsProp, handlers: handlersProp, keymap: keymapProp, defaultBinding, isOpen: isOpenProp, onOpen: onOpenProp, onClose: onCloseProp, onExecute: onExecuteProp, onExecuteRemote: onExecuteRemoteProp, maxResults, placeholder, renderResult, renderRemoteResult, children, backdropClassName, omnibarClassName, }: OmnibarProps): react_jsx_runtime.JSX.Element | null;
 
 /**
  * Check if a key is a shifted symbol (requires Shift on US keyboard).
@@ -1418,12 +1459,42 @@ interface FuzzyMatchResult {
  * Perform fuzzy matching of a pattern against text.
  * Returns match info including score and ranges for highlighting.
  *
+ * Every alignment start (each occurrence of the pattern's first character) is
+ * tried and the best-scoring alignment wins, so a contiguous occurrence later
+ * in the text beats a scattered one that happens to start earlier.
+ *
  * Scoring:
  * - Consecutive matches score higher
  * - Matches at word boundaries score higher
  * - Earlier matches score higher
  */
 declare function fuzzyMatch(pattern: string, text: string): FuzzyMatchResult;
+/**
+ * Strict matching, for long body text (`ActionConfig.searchText`): every
+ * whitespace-separated query term must occur in `text` as a contiguous,
+ * case-insensitive substring. Scattered subsequences never match. Each term's
+ * best occurrence (preferring a word start, then a whole word, then the
+ * earliest) is reported in `ranges`.
+ */
+declare function strictMatch(query: string, text: string): FuzzyMatchResult;
+interface SnippetOptions {
+    /** Characters of context on each side of the best range (default: 40) */
+    radius?: number;
+    /** Marks truncation at either end (default: '…') */
+    ellipsis?: string;
+}
+interface Snippet {
+    text: string;
+    /** Match ranges re-based onto `text` (ranges outside the window are dropped, partial ones clipped) */
+    ranges: Array<[number, number]>;
+}
+/**
+ * Cut a window of `text` around its best (longest, then earliest) match range,
+ * for rendering e.g. "…the July bill net of **credits** was…". The window is
+ * `radius` characters each side, shrunk to word boundaries, with `ellipsis`
+ * marking truncated ends; `ranges` are re-based onto the returned text.
+ */
+declare function snippet(text: string, ranges: Array<[number, number]>, { radius, ellipsis }?: SnippetOptions): Snippet;
 /**
  * Check if a binding string contains digit placeholders (\d or \d+)
  */
@@ -1500,9 +1571,20 @@ interface ActionConfig {
     defaultBindings?: string[];
     /** Search keywords for omnibar */
     keywords?: string[];
+    /**
+     * Long body text searched by the omnibar but never displayed as-is (e.g. a
+     * slide's text). Matched strictly: each query term must occur as a substring,
+     * never as a scattered subsequence. Results matched here show a snippet.
+     */
+    searchText?: string;
     /** Whether action is currently enabled (default: true) */
     enabled?: boolean;
-    /** Priority for conflict resolution (higher wins, default: 0) */
+    /**
+     * Omnibar ranking boost (default: 0), added to the match score. Match scores
+     * for short labels run roughly 10–60, so 1–5 breaks ties between similar
+     * matches (e.g. rank a deck's controls above its slide jumps), while 100+
+     * puts this action above every non-boosted match.
+     */
     priority?: number;
     /** Hide from ShortcutsModal (still searchable in omnibar) */
     hideFromModal?: boolean;
@@ -2557,6 +2639,33 @@ declare function SearchIcon({ className }: {
 declare function SearchTrigger({ target, className, ariaLabel, children, }: SearchTriggerProps): react_jsx_runtime.JSX.Element | null;
 
 /**
+ * Render `text` with its matched `ranges` wrapped in `<mark>` (class
+ * `kbd-omnibar-match`), e.g. a result's `labelMatches`, or a `FieldMatch`.
+ */
+declare function Highlight({ text, ranges, className }: {
+    text: string;
+    ranges?: Array<[number, number]>;
+    className?: string;
+}): react_jsx_runtime.JSX.Element;
+/** Fields whose matches the default rows explain with a snippet line. */
+declare const SNIPPET_FIELDS: MatchField[];
+/**
+ * The match a result row should explain: its best match, when that isn't in
+ * the label (a label match is already visible, highlighted) and is in one of
+ * `fields`.
+ */
+declare function contextMatch(matches: FieldMatch[], fields?: MatchField[]): FieldMatch | undefined;
+/**
+ * The default row's second line: a highlighted snippet of the field that
+ * matched, when the label didn't (e.g. "…net of **credits** was $41k…").
+ */
+declare function ResultSnippet({ matches, fields, radius }: {
+    matches: FieldMatch[];
+    fields?: MatchField[];
+    radius?: number;
+}): react_jsx_runtime.JSX.Element | null;
+
+/**
  * Opt-in (shipped side-by-side with `<Omnibar />`, which stays the default): a
  * command palette backed by `cmdk` primitives instead of the hand-rolled
  * input/list/keyboard-nav in `<Omnibar />`, while keeping use-kbd's
@@ -2574,10 +2683,14 @@ declare function SearchTrigger({ target, className, ariaLabel, children, }: Sear
  * cmdk makes cheap and the hand-rolled modal `<Omnibar />` does not. Otherwise
  * it's a modal palette toggled by `defaultBinding` (⌘K).
  */
-declare function OmnibarCmdk({ defaultBinding, inline, placeholder, }: {
+declare function OmnibarCmdk({ defaultBinding, inline, placeholder, renderResult, renderRemoteResult, }: {
     defaultBinding?: string;
     inline?: boolean;
     placeholder?: string;
+    /** Replace a local action result's row content; see `OmnibarProps.renderResult` */
+    renderResult?: (result: ActionSearchResult, state: OmnibarResultRenderState) => ReactNode;
+    /** Replace an endpoint result's row content; see `OmnibarProps.renderRemoteResult` */
+    renderRemoteResult?: (result: RemoteOmnibarResult, state: OmnibarResultRenderState) => ReactNode;
 }): react_jsx_runtime.JSX.Element;
 
 /**
@@ -2652,4 +2765,4 @@ declare const DEFAULT_BUILTIN_GROUP = "Meta";
  */
 declare const ACTION_MODE_PREFIX = "__mode:";
 
-export { ACTION_LOOKUP, ACTION_MODAL, ACTION_MODE_PREFIX, ACTION_OMNIBAR, type ActionConfig, type ActionDefinition, type ActionHandler, type ActionHref, type ActionPairConfig, type ActionPairEntry, type ActionPairMeta, type ActionPairShortcut, type ActionRegistry, type ActionSearchResult, type ActionShortcut, type ActionTripletConfig, type ActionTripletEntry, type ActionTripletMeta, type ActionTripletShortcut, ActionsRegistryContext, type ActionsRegistryValue, Alt, type ArrowGroupConfig, type ArrowGroupShortcut, ArrowsDouble, ArrowsDpad, ArrowsMove, Backspace, type BindingInfo, type BindingsExport, Command, Ctrl, DEFAULT_BUILTIN_GROUP, DEFAULT_SEQUENCE_TIMEOUT, DIGITS_PLACEHOLDER, DIGIT_PLACEHOLDER, type Direction, Down, type EndpointPagination, type EndpointPaginationInfo, type EndpointPaginationMode, type EndpointQueryResult, type EndpointResponse, type EndpointSortMode, Enter, FLOAT_PLACEHOLDER, type FuzzyMatchResult, type GroupRenderer, type GroupRendererProps, type HandlerMap, type HotkeyHandler, type HotkeyMap, type HotkeySequence, type HotkeysConfig, type HotkeysContextValue, HotkeysProvider, type HotkeysProviderProps, Kbd, KbdLookup, KbdModal, KbdOmnibar, type KbdProps, Kbds, Key, type KeyCombination, type KeyCombinationDisplay, type KeyConflict, type KeyIconProps, type KeyIconType, type KeySeq, KeybindingEditor, type KeybindingEditorProps, type KeybindingEditorRenderProps, Left, LookupModal, MobileFAB, type MobileFABProps, type ModeConfig, type ModeCustomizations, ModeIndicator, type ModeIndicatorPosition, type ModeIndicatorProps, type ModeState, ModesRegistryContext, type ModesRegistryValue, ModifierIcon, type ModifierIconProps, type ModifierName, type ModifierType, type Modifiers, type MoveTarget, Omnibar, type OmnibarActionEntry, OmnibarCmdk, type OmnibarEndpointAsyncConfig, type OmnibarEndpointConfig, type OmnibarEndpointConfigBase, type OmnibarEndpointSyncConfig, OmnibarEndpointsRegistryContext, type OmnibarEndpointsRegistryValue, type OmnibarEntry, type OmnibarEntryBase, type OmnibarExecutionEvent, type OmnibarLinkEntry, type OmnibarProps, type OmnibarRenderProps, Option, type PendingAction, type RecordHotkeyOptions, type RecordHotkeyResult, type RegisteredAction, type RegisteredEndpoint, type RegisteredMode, type RemoteOmnibarResult, Right, type RowSelectionKeyAction, type RowSelectionRowProps, type RowSelectionState, SearchIcon, SearchTrigger, type SearchTriggerProps, type SeqElem, type SeqElemState, type SeqMatchState, type SequenceCompletion, SequenceModal, type SequenceStateValue, Shift, type ShortcutEntry, type ShortcutGroup, ShortcutsModal, type ShortcutsModalProps, type ShortcutsModalRenderProps, SpeedDial, type SpeedDialAction, type SpeedDialProps, type SpeedDialTooltipProps, type TooltipComponent, type TooltipProps, type TwoColumnConfig, type TwoColumnRow, Up, type UseEditableHotkeysOptions, type UseEditableHotkeysResult, type UseHotkeysOptions, type UseHotkeysResult, type UseOmnibarOptions, type UseOmnibarResult, type UseParamEntryOptions, type UseParamEntryReturn, type UseRowSelectionKeysOptions, type UseRowSelectionOptions, type UseRowSelectionResult, type UserModeConfig, bindingHasPlaceholders, computeSelected, countPlaceholders, createTwoColumnRenderer, extractCaptures, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, formatKeySeq, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasAnyPlaceholderBindings, hasConflicts, hasDigitPlaceholders, hotkeySequenceToKeySeq, isDigitPlaceholder, isMac, isModifierKey, isPlaceholderSentinel, isSequence, isShiftedSymbol, keySeqToHotkeySequence, normalizeKey, parseHotkeyString, parseKeySeq, parseQueryNumbers, searchActions, useAction, useActionPair, useActionTriplet, useActions, useActionsRegistry, useArrowGroup, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useMaybeSequenceState, useMode, useModesRegistry, useOmnibar, useOmnibarEndpoint, useOmnibarEndpointsRegistry, useParamEntry, useRecordHotkey, useRowSelection, useRowSelectionKeys, useSequenceState };
+export { ACTION_LOOKUP, ACTION_MODAL, ACTION_MODE_PREFIX, ACTION_OMNIBAR, type ActionConfig, type ActionDefinition, type ActionHandler, type ActionHref, type ActionPairConfig, type ActionPairEntry, type ActionPairMeta, type ActionPairShortcut, type ActionRegistry, type ActionSearchResult, type ActionShortcut, type ActionTripletConfig, type ActionTripletEntry, type ActionTripletMeta, type ActionTripletShortcut, ActionsRegistryContext, type ActionsRegistryValue, Alt, type ArrowGroupConfig, type ArrowGroupShortcut, ArrowsDouble, ArrowsDpad, ArrowsMove, Backspace, type BindingInfo, type BindingsExport, Command, Ctrl, DEFAULT_BUILTIN_GROUP, DEFAULT_SEQUENCE_TIMEOUT, DIGITS_PLACEHOLDER, DIGIT_PLACEHOLDER, type Direction, Down, type EndpointPagination, type EndpointPaginationInfo, type EndpointPaginationMode, type EndpointQueryResult, type EndpointResponse, type EndpointSortMode, Enter, FLOAT_PLACEHOLDER, type FieldMatch, type FuzzyMatchResult, type GroupRenderer, type GroupRendererProps, type HandlerMap, Highlight, type HotkeyHandler, type HotkeyMap, type HotkeySequence, type HotkeysConfig, type HotkeysContextValue, HotkeysProvider, type HotkeysProviderProps, Kbd, KbdLookup, KbdModal, KbdOmnibar, type KbdProps, Kbds, Key, type KeyCombination, type KeyCombinationDisplay, type KeyConflict, type KeyIconProps, type KeyIconType, type KeySeq, KeybindingEditor, type KeybindingEditorProps, type KeybindingEditorRenderProps, Left, LookupModal, type MatchField, MobileFAB, type MobileFABProps, type ModeConfig, type ModeCustomizations, ModeIndicator, type ModeIndicatorPosition, type ModeIndicatorProps, type ModeState, ModesRegistryContext, type ModesRegistryValue, ModifierIcon, type ModifierIconProps, type ModifierName, type ModifierType, type Modifiers, type MoveTarget, Omnibar, type OmnibarActionEntry, OmnibarCmdk, type OmnibarEndpointAsyncConfig, type OmnibarEndpointConfig, type OmnibarEndpointConfigBase, type OmnibarEndpointSyncConfig, OmnibarEndpointsRegistryContext, type OmnibarEndpointsRegistryValue, type OmnibarEntry, type OmnibarEntryBase, type OmnibarExecutionEvent, type OmnibarLinkEntry, type OmnibarProps, type OmnibarRenderProps, type OmnibarResultRenderState, Option, type PendingAction, type RecordHotkeyOptions, type RecordHotkeyResult, type RegisteredAction, type RegisteredEndpoint, type RegisteredMode, type RemoteOmnibarResult, ResultSnippet, Right, type RowSelectionKeyAction, type RowSelectionRowProps, type RowSelectionState, SNIPPET_FIELDS, SearchIcon, SearchTrigger, type SearchTriggerProps, type SeqElem, type SeqElemState, type SeqMatchState, type SequenceCompletion, SequenceModal, type SequenceStateValue, Shift, type ShortcutEntry, type ShortcutGroup, ShortcutsModal, type ShortcutsModalProps, type ShortcutsModalRenderProps, type Snippet, type SnippetOptions, SpeedDial, type SpeedDialAction, type SpeedDialProps, type SpeedDialTooltipProps, type TooltipComponent, type TooltipProps, type TwoColumnConfig, type TwoColumnRow, Up, type UseEditableHotkeysOptions, type UseEditableHotkeysResult, type UseHotkeysOptions, type UseHotkeysResult, type UseOmnibarOptions, type UseOmnibarResult, type UseParamEntryOptions, type UseParamEntryReturn, type UseRowSelectionKeysOptions, type UseRowSelectionOptions, type UseRowSelectionResult, type UserModeConfig, bindingHasPlaceholders, computeSelected, contextMatch, countPlaceholders, createTwoColumnRenderer, extractCaptures, findConflicts, formatBinding, formatCombination, formatKeyForDisplay, formatKeySeq, fuzzyMatch, getActionBindings, getConflictsArray, getKeyIcon, getModifierIcon, getSequenceCompletions, hasAnyPlaceholderBindings, hasConflicts, hasDigitPlaceholders, hotkeySequenceToKeySeq, isDigitPlaceholder, isMac, isModifierKey, isPlaceholderSentinel, isSequence, isShiftedSymbol, keySeqToHotkeySequence, normalizeKey, parseHotkeyString, parseKeySeq, parseQueryNumbers, searchActions, snippet, strictMatch, useAction, useActionPair, useActionTriplet, useActions, useActionsRegistry, useArrowGroup, useEditableHotkeys, useHotkeys, useHotkeysContext, useMaybeHotkeysContext, useMaybeSequenceState, useMode, useModesRegistry, useOmnibar, useOmnibarEndpoint, useOmnibarEndpointsRegistry, useParamEntry, useRecordHotkey, useRowSelection, useRowSelectionKeys, useSequenceState };
