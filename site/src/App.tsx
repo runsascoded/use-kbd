@@ -18,6 +18,7 @@ import { CalendarDemo } from './routes/CalendarDemo'
 import { ThreeDDemo } from './routes/ThreeDDemo'
 import { CmdkDemo } from './routes/CmdkDemo'
 import { OmnibarLinksDemo } from './routes/OmnibarLinksDemo'
+import { SlideSearchDemo } from './routes/SlideSearchDemo'
 
 function AppNav() {
   const location = useLocation()
@@ -118,9 +119,10 @@ function AppContent() {
           <Route path="/many-actions" element={<ManyActionsDemo />} />
           <Route path="/cmdk" element={<CmdkDemo />} />
           <Route path="/omnibar-links" element={<OmnibarLinksDemo />} />
+          <Route path="/slide-search" element={<SlideSearchDemo />} />
         </Routes>
       </main>
-      {location.pathname !== '/omnibar-links' && <Omnibar />}
+      {location.pathname !== '/omnibar-links' && location.pathname !== '/slide-search' && <Omnibar />}
       <SequenceModal />
       <LookupModal />
       <FloatingControls />

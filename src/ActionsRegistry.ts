@@ -486,6 +486,8 @@ export function useActionsRegistry(options: UseActionsRegistryOptions = {}): Act
         group: config.group,
         mode: config.mode,
         keywords: config.keywords,
+        searchText: config.searchText,
+        priority: config.priority,
         hideFromModal: config.hideFromModal,
         enabled: config.enabled,
         protected: config.protected,

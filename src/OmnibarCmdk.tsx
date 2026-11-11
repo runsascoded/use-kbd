@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Command } from 'cmdk'
 import { useMaybeHotkeysContext } from './HotkeysProvider'
 import { useAction } from './useAction'
 import { useOmnibar, type RemoteOmnibarResult } from './useOmnibar'
 import { useParamEntry } from './useParamEntry'
 import { ACTION_OMNIBAR, DEFAULT_BUILTIN_GROUP } from './constants'
-import type { OmnibarEntry } from './types'
+import type { ActionSearchResult, OmnibarEntry } from './types'
+import type { OmnibarResultRenderState } from './Omnibar'
+import { ResultMain } from './OmnibarResultContent'
 import { OmnibarNewTabHint, OmnibarResultRow } from './OmnibarResultRow'
 
 /**
@@ -48,10 +50,16 @@ export function OmnibarCmdk({
   defaultBinding = 'meta+k',
   inline = false,
   placeholder = 'Type a command…',
+  renderResult,
+  renderRemoteResult,
 }: {
   defaultBinding?: string
   inline?: boolean
   placeholder?: string
+  /** Replace a local action result's row content; see `OmnibarProps.renderResult` */
+  renderResult?: (result: ActionSearchResult, state: OmnibarResultRenderState) => ReactNode
+  /** Replace an endpoint result's row content; see `OmnibarProps.renderRemoteResult` */
+  renderRemoteResult?: (result: RemoteOmnibarResult, state: OmnibarResultRenderState) => ReactNode
 }) {
   const ctx = useMaybeHotkeysContext()
   const actions = ctx?.registry.actionRegistry ?? {}
@@ -210,8 +218,10 @@ export function OmnibarCmdk({
             {recentResults.map(r => (
               <Command.Item key={r.id} value={r.id} asChild>
                 <OmnibarResultRow href={r.action.href} className="kbd-omnibar-result" onNavigate={close} onExecute={event => execute(r.id, r.captures, event)}>
-                  <span className="kbd-omnibar-result-label">{r.action.label}</span>
-                  {r.bindings[0] && <kbd className="kbd-omnibar-binding">{r.bindings[0]}</kbd>}
+                  {renderResult ? renderResult(r, { selected: r.id === selectedId, query }) : <>
+                    <ResultMain label={r.action.label} labelMatches={r.labelMatches} matches={r.matches} />
+                    {r.bindings[0] && <kbd className="kbd-omnibar-binding">{r.bindings[0]}</kbd>}
+                  </>}
                 </OmnibarResultRow>
               </Command.Item>
             ))}
@@ -223,8 +233,10 @@ export function OmnibarCmdk({
             {actionResults.map(r => (
               <Command.Item key={r.id} value={r.id} asChild>
                 <OmnibarResultRow href={r.action.href} className="kbd-omnibar-result" onNavigate={close} onExecute={event => execute(r.id, r.captures, event)}>
-                  <span className="kbd-omnibar-result-label">{r.action.label}</span>
-                  {r.bindings[0] && <kbd className="kbd-omnibar-binding">{r.bindings[0]}</kbd>}
+                  {renderResult ? renderResult(r, { selected: r.id === selectedId, query }) : <>
+                    <ResultMain label={r.action.label} labelMatches={r.labelMatches} matches={r.matches} />
+                    {r.bindings[0] && <kbd className="kbd-omnibar-binding">{r.bindings[0]}</kbd>}
+                  </>}
                 </OmnibarResultRow>
               </Command.Item>
             ))}
@@ -236,10 +248,12 @@ export function OmnibarCmdk({
             {items.map(r => (
               <Command.Item key={r.id} value={r.id} asChild>
                 <OmnibarResultRow href={r.entry.href} className="kbd-omnibar-result" onNavigate={close} onExecute={event => execute(r.id, undefined, event)}>
-                  <span className="kbd-omnibar-result-label">{r.entry.label}</span>
-                  {r.entry.description && (
-                    <span className="kbd-omnibar-result-description">{r.entry.description}</span>
-                  )}
+                  {renderRemoteResult ? renderRemoteResult(r, { selected: r.id === selectedId, query }) : <>
+                    <ResultMain label={r.entry.label} labelMatches={r.labelMatches} matches={r.matches} fields={['keyword']} />
+                    {r.entry.description && (
+                      <span className="kbd-omnibar-result-description">{r.entry.description}</span>
+                    )}
+                  </>}
                 </OmnibarResultRow>
               </Command.Item>
             ))}

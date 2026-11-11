@@ -130,6 +130,7 @@ function Dashboard() {
 - [runsascoded.com/apvd] ([GitHub][apvd-gh] · [usage][apvd-usage]) — Area-Proportional Venn Diagrams
 
 [kbd.rbw.sh]: https://kbd.rbw.sh
+[slide search demo]: https://kbd.rbw.sh/slide-search
 [ctbk.dev]: https://ctbk.dev
 [ctbk-gh]: https://github.com/hudcostreets/ctbk.dev
 [ctbk-diff]: https://github.com/hudcostreets/ctbk.dev/compare/pre-use-kbd...use-kbd-demo
@@ -534,6 +535,43 @@ Link results use the same text color as commands, with a muted ↗ icon at the r
 ```
 
 The general `--kbd-link` / `--kbd-link-hover` variables style prose links inside keyboard components; action rows use the separate controls above. Browser coverage in `site/e2e/omnibar-links.spec.ts` includes modifier and middle-click execution, actual new tabs, plain Enter navigation, event forwarding, and default/customized row styling for both renderers. `site/e2e/omnibar-dispositions.spec.ts` covers the full gesture table, remote links, and URL-free actions. Run it with `pnpm -C site exec playwright test e2e/omnibar-dispositions.spec.ts --headed --workers 1` to additionally verify actual tab focus and distinct browser windows; headless runs check navigation and opener isolation.
+
+#### Search, match context, and ranking
+
+Queries are fuzzy-matched against each action's `label`, `description`, `keywords`, `group`, and id. Each field is scored by its best alignment, so a contiguous "credits" later in a field beats a scattered c…r…e…d…i…t…s near its start. Matched label characters are highlighted (`mark.kbd-omnibar-match`).
+
+For long body text (a slide's or page's content), use `searchText`. It's searched but never displayed as-is, and matched strictly: every query term must occur as a substring, never as a scattered subsequence. When a result matched somewhere other than its label, the default row adds a dimmed second line with a highlighted snippet of the matching `searchText`, `description`, or keyword:
+
+```tsx
+useAction(`slide:${slide.id}`, {
+  label: `${i + 1}. ${slide.title}`,
+  searchText: slide.text,          // "…the bill net of credits was $41k…"
+  handler: () => goTo(i),
+})
+useAction('control:net-of-credits', {
+  label: 'GCS bill: net of credits',
+  priority: 1,                     // rank controls above slide jumps
+  handler: showNetOfCredits,
+})
+```
+
+`priority` (default 0) is added to the match score. Short-label matches score roughly 10–60, so 1–5 breaks ties between similar matches, while 100+ ranks an action above every unboosted match.
+
+Each result's `matches` lists every matched field (`{ field, text, ranges, score }`, best first). `snippet(text, ranges, { radius, ellipsis })` cuts a window around the best range and re-bases the ranges onto it, and `<Highlight text ranges />` renders them. To customize a row while keeping the default input, list, and keyboard handling, pass `renderResult` (and `renderRemoteResult` for endpoint results) to `<Omnibar>` or `<OmnibarCmdk>`:
+
+```tsx
+<Omnibar
+  renderResult={(result, { selected, query }) => {
+    const best = result.matches[0]
+    return <>
+      <Highlight text={result.action.label} ranges={result.labelMatches} />
+      {best?.field === 'searchText' && <small>{snippet(best.text, best.ranges).text}</small>}
+    </>
+  }}
+/>
+```
+
+For a fully custom palette, use the headless `useOmnibar` hook, which returns `results` (with `matches`), the selection, and `execute` / `close`. See the [slide search demo] (`site/src/routes/SlideSearchDemo.tsx`); `site/e2e/match-context.spec.ts` covers matching, `matches`, `snippet`, `priority`, and the rows of both renderers.
 
 ### `<LookupModal>`
 

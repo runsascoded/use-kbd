@@ -10,6 +10,7 @@ import type { SeqElem, OmnibarEntry } from './types'
 import type { ActionRegistry, ActionSearchResult, HotkeySequence, SequenceCompletion } from './types'
 import type { HandlerMap, HotkeyMap } from './useHotkeys'
 import { resolveHref, type OmnibarExecutionEvent } from './omnibarNavigation'
+import { ResultMain } from './OmnibarResultContent'
 import { OmnibarNewTabHint, OmnibarResultRow } from './OmnibarResultRow'
 
 export interface OmnibarProps {
@@ -60,12 +61,27 @@ export interface OmnibarProps {
   maxResults?: number
   /** Placeholder text for input (default: 'Type a command...') */
   placeholder?: string
-  /** Custom render function */
+  /**
+   * Replace a local action result's row content, keeping the default chrome
+   * (input, list, keyboard handling, row click / link behavior). Default: the
+   * highlighted label, a snippet line when the match isn't in the label (see
+   * `ActionSearchResult.matches`), the group, and bindings.
+   */
+  renderResult?: (result: ActionSearchResult, state: OmnibarResultRenderState) => ReactNode
+  /** Like `renderResult`, for endpoint (remote) results. */
+  renderRemoteResult?: (result: RemoteOmnibarResult, state: OmnibarResultRenderState) => ReactNode
+  /** Custom render function, replacing the whole UI (see `useOmnibar` for a fully headless API) */
   children?: (props: OmnibarRenderProps) => ReactNode
   /** CSS class for the backdrop */
   backdropClassName?: string
   /** CSS class for the omnibar container */
   omnibarClassName?: string
+}
+
+export interface OmnibarResultRenderState {
+  /** Whether this row is the keyboard selection */
+  selected: boolean
+  query: string
 }
 
 export interface OmnibarRenderProps {
@@ -190,6 +206,8 @@ export function Omnibar({
   onExecuteRemote: onExecuteRemoteProp,
   maxResults,
   placeholder = 'Type a command...',
+  renderResult,
+  renderRemoteResult,
   children,
   backdropClassName = 'kbd-omnibar-backdrop',
   omnibarClassName = 'kbd-omnibar',
@@ -590,29 +608,29 @@ export function Omnibar({
                     className={`kbd-omnibar-result ${i === selectedIndex ? 'selected' : ''}${isModeInactive ? ' kbd-mode-inactive' : ''}`}
                     onExecute={event => execute(result.id, undefined, event)}
                   >
-                    <span className="kbd-omnibar-result-label">
-                      {result.action.label}
-                    </span>
-                    {modeInfo && (
-                      <span
-                        className="kbd-mode-badge"
-                        style={modeInfo.config.color ? { '--kbd-mode-color': modeInfo.config.color } as React.CSSProperties : undefined}
-                      >
-                        {modeInfo.config.label}
-                      </span>
-                    )}
-                    {!modeInfo && result.action.group && (
-                      <span className="kbd-omnibar-result-category">
-                        {result.action.group}
-                      </span>
-                    )}
-                    {result.bindings.length > 0 && (
-                      <div className="kbd-omnibar-result-bindings">
-                        {result.bindings.slice(0, 2).map((binding) => (
-                          <BindingBadge key={binding} binding={binding} />
-                        ))}
-                      </div>
-                    )}
+                    {renderResult ? renderResult(result, { selected: i === selectedIndex, query }) : <>
+                      <ResultMain label={result.action.label} labelMatches={result.labelMatches} matches={result.matches} />
+                      {modeInfo && (
+                        <span
+                          className="kbd-mode-badge"
+                          style={modeInfo.config.color ? { '--kbd-mode-color': modeInfo.config.color } as React.CSSProperties : undefined}
+                        >
+                          {modeInfo.config.label}
+                        </span>
+                      )}
+                      {!modeInfo && result.action.group && (
+                        <span className="kbd-omnibar-result-category">
+                          {result.action.group}
+                        </span>
+                      )}
+                      {result.bindings.length > 0 && (
+                        <div className="kbd-omnibar-result-bindings">
+                          {result.bindings.slice(0, 2).map((binding) => (
+                            <BindingBadge key={binding} binding={binding} />
+                          ))}
+                        </div>
+                      )}
+                    </>}
                   </OmnibarResultRow>
                 )
               })}
@@ -649,19 +667,19 @@ export function Omnibar({
                             className={`kbd-omnibar-result ${absoluteIndex === selectedIndex ? 'selected' : ''}`}
                             onExecute={event => execute(result.id, undefined, event)}
                           >
-                            <span className="kbd-omnibar-result-label">
-                              {result.entry.label}
-                            </span>
-                            {result.entry.group && (
-                              <span className="kbd-omnibar-result-category">
-                                {result.entry.group}
-                              </span>
-                            )}
-                            {result.entry.description && (
-                              <span className="kbd-omnibar-result-description">
-                                {result.entry.description}
-                              </span>
-                            )}
+                            {renderRemoteResult ? renderRemoteResult(result, { selected: absoluteIndex === selectedIndex, query }) : <>
+                              <ResultMain label={result.entry.label} labelMatches={result.labelMatches} matches={result.matches} fields={['keyword']} />
+                              {result.entry.group && (
+                                <span className="kbd-omnibar-result-category">
+                                  {result.entry.group}
+                                </span>
+                              )}
+                              {result.entry.description && (
+                                <span className="kbd-omnibar-result-description">
+                                  {result.entry.description}
+                                </span>
+                              )}
+                            </>}
                           </OmnibarResultRow>
                         )
                       })}

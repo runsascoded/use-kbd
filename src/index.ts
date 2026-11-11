@@ -5,6 +5,8 @@ export type {
   ActionPairMeta,
   ActionRegistry,
   ActionSearchResult,
+  FieldMatch,
+  MatchField,
   ActionTripletMeta,
   BindingsExport,
   EndpointPagination,
@@ -53,7 +55,7 @@ export type {
 export type { ActionPairShortcut, ActionShortcut, ActionTripletShortcut, ArrowGroupShortcut, GroupRenderer, GroupRendererProps, ShortcutEntry, ShortcutGroup, ShortcutsModalProps, ShortcutsModalRenderProps, TooltipComponent, TooltipProps } from './ShortcutsModal'
 export type { TwoColumnConfig, TwoColumnRow } from './TwoColumnRenderer'
 export { createTwoColumnRenderer } from './TwoColumnRenderer'
-export type { OmnibarProps, OmnibarRenderProps } from './Omnibar'
+export type { OmnibarProps, OmnibarRenderProps, OmnibarResultRenderState } from './Omnibar'
 
 // HotkeysProvider (high-level integration with dynamic action registration)
 export type { HotkeysConfig, HotkeysContextValue, HotkeysProviderProps, SequenceStateValue } from './HotkeysProvider'
@@ -114,6 +116,7 @@ export type { SpeedDialAction, SpeedDialProps, SpeedDialTooltipProps } from './S
 export { SearchTrigger, SearchIcon } from './SearchTrigger'
 export type { SearchTriggerProps } from './SearchTrigger'
 export { Omnibar } from './Omnibar'
+export { Highlight, ResultSnippet, contextMatch, SNIPPET_FIELDS } from './OmnibarResultContent'
 // Opt-in cmdk-backed palette, side-by-side with <Omnibar />. Requires the
 // optional peer dep `cmdk`. See specs/cmdk-delegation.md.
 export { OmnibarCmdk } from './OmnibarCmdk'
@@ -152,6 +155,8 @@ export {
   formatKeyForDisplay,
   formatKeySeq,
   fuzzyMatch,
+  strictMatch,
+  snippet,
   getActionBindings,
   getConflictsArray,
   getSequenceCompletions,
@@ -175,7 +180,7 @@ export {
   searchActions,
 } from './utils'
 
-export type { FuzzyMatchResult, KeyConflict } from './utils'
+export type { FuzzyMatchResult, KeyConflict, Snippet, SnippetOptions } from './utils'
 
 // Constants
 export {

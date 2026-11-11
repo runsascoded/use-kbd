@@ -50,3 +50,14 @@ interface ActionSearchResult {
 ## Consumer
 
 `~/c/oa/disky-deep-dive/react/SlideSearch.tsx`: would give each slide its plain text as `searchText` and its controls `priority: 1`, then rely on the default snippet line.
+
+## Implementation (done)
+
+- **Best alignment:** `fuzzyMatch` tries every alignment start (each occurrence of the query's first character) and keeps the best-scoring greedy alignment, so a contiguous occurrence anywhere beats an earlier scattered one. Exact- and prefix-match bonuses are unchanged.
+- **Strictness:** `strictMatch(query, text)` (exported) requires each whitespace-separated term to occur as a substring; it prefers word-start, then whole-word, then earliest occurrences. It applies to `searchText` only; no global `matchMode` was added, since `description` stays short display text and `searchText` covers long bodies.
+- **`searchText`** on `ActionConfig` / `ActionDefinition`, weighted like `description` (×1.5).
+- **`matches: FieldMatch[]`** on `ActionSearchResult` and `RemoteOmnibarResult`, best weighted score first. Only the best keyword is reported. `matches` is empty for recents and for number-only placeholder queries. Labels that don't match now get empty `labelMatches`; the old greedy scan returned partial ranges.
+- **`snippet(text, ranges, { radius = 40, ellipsis = '…' })`** centers on the longest range (earliest on ties) and trims both ends to word boundaries.
+- **`priority`** is an additive score boost. `ActionConfig.priority` already existed, documented as "conflict resolution" but unused, so it now means omnibar ranking, consistent with endpoint `priority`. `groupPriority` was skipped; consumers can set `priority` per action.
+- **Rendering:** `renderResult` / `renderRemoteResult` (`(result, { selected, query })`) on both `<Omnibar>` and `<OmnibarCmdk>`. The default row is `.kbd-omnibar-result-main`: the highlighted label (`mark.kbd-omnibar-match`) plus a `.kbd-omnibar-result-snippet` line when the best match isn't the label and is in `searchText` / `description` / `keyword`. Remote rows already show `description`, so they show only keyword snippets. Also exported: `Highlight`, `ResultSnippet`, `contextMatch`, `SNIPPET_FIELDS`. Match styling uses `--kbd-omnibar-match-{bg,color,weight,decoration,decoration-color}`.
+- **Demo:** `/slide-search`, with `?renderer=custom` and `?renderer=cmdk`. Tests: `site/e2e/match-context.spec.ts`, whose pure-function tests import `use-kbd` directly in the Playwright runner.

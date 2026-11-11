@@ -1,6 +1,6 @@
 import type { KeyCombination, KeyCombinationDisplay, HotkeySequence, SeqElem, KeySeq, Modifiers } from './types'
 
-const { max } = Math
+const { max, min } = Math
 
 /**
  * Symbols that require Shift key on US keyboard layout.
@@ -809,7 +809,7 @@ export function getConflictsArray(keymap: Record<string, string | string[]>): Ke
 // Sequence Completion Utilities
 // ============================================================================
 
-import type { SequenceCompletion, ActionRegistry, ActionSearchResult } from './types'
+import type { SequenceCompletion, ActionRegistry, ActionSearchResult, FieldMatch, MatchField } from './types'
 
 /**
  * Get possible completions for a partially-typed sequence.
@@ -1015,22 +1015,14 @@ export interface FuzzyMatchResult {
   ranges: Array<[number, number]>
 }
 
-/**
- * Perform fuzzy matching of a pattern against text.
- * Returns match info including score and ranges for highlighting.
- *
- * Scoring:
- * - Consecutive matches score higher
- * - Matches at word boundaries score higher
- * - Earlier matches score higher
- */
-export function fuzzyMatch(pattern: string, text: string): FuzzyMatchResult {
-  if (!pattern) return { matched: true, score: 1, ranges: [] }
-  if (!text) return { matched: false, score: 0, ranges: [] }
+const WORD_BOUNDARY = /[\s\-_./:,;()[\]]/
 
-  const patternLower = pattern.toLowerCase()
-  const textLower = text.toLowerCase()
+function isWordStart(text: string, idx: number): boolean {
+  return idx === 0 || WORD_BOUNDARY.test(text[idx - 1])
+}
 
+/** Score one greedy subsequence alignment of `patternLower`, starting at `from`. */
+function alignFrom(patternLower: string, text: string, textLower: string, from: number): FuzzyMatchResult {
   let patternIdx = 0
   let score = 0
   let consecutiveBonus = 0
@@ -1038,7 +1030,7 @@ export function fuzzyMatch(pattern: string, text: string): FuzzyMatchResult {
   const ranges: Array<[number, number]> = []
   let rangeStart = -1
 
-  for (let textIdx = 0; textIdx < textLower.length && patternIdx < patternLower.length; textIdx++) {
+  for (let textIdx = from; textIdx < textLower.length && patternIdx < patternLower.length; textIdx++) {
     if (textLower[textIdx] === patternLower[patternIdx]) {
       // Base score for match
       let matchScore = 1
@@ -1052,7 +1044,7 @@ export function fuzzyMatch(pattern: string, text: string): FuzzyMatchResult {
       }
 
       // Bonus for word boundary match (start of word)
-      if (textIdx === 0 || /[\s\-_./]/.test(text[textIdx - 1])) {
+      if (isWordStart(text, textIdx)) {
         matchScore += 2
       }
 
@@ -1068,37 +1060,173 @@ export function fuzzyMatch(pattern: string, text: string): FuzzyMatchResult {
       lastMatchIdx = textIdx
       patternIdx++
 
-      // Track ranges for highlighting
       if (rangeStart === -1) {
         rangeStart = textIdx
       }
-    } else {
-      // End current range
-      if (rangeStart !== -1) {
-        ranges.push([rangeStart, lastMatchIdx + 1])
-        rangeStart = -1
-      }
+    } else if (rangeStart !== -1) {
+      ranges.push([rangeStart, lastMatchIdx + 1])
+      rangeStart = -1
     }
   }
 
-  // Close final range
   if (rangeStart !== -1) {
     ranges.push([rangeStart, lastMatchIdx + 1])
   }
 
-  const matched = patternIdx === patternLower.length
+  return { matched: patternIdx === patternLower.length, score, ranges }
+}
+
+/**
+ * Perform fuzzy matching of a pattern against text.
+ * Returns match info including score and ranges for highlighting.
+ *
+ * Every alignment start (each occurrence of the pattern's first character) is
+ * tried and the best-scoring alignment wins, so a contiguous occurrence later
+ * in the text beats a scattered one that happens to start earlier.
+ *
+ * Scoring:
+ * - Consecutive matches score higher
+ * - Matches at word boundaries score higher
+ * - Earlier matches score higher
+ */
+export function fuzzyMatch(pattern: string, text: string): FuzzyMatchResult {
+  if (!pattern) return { matched: true, score: 1, ranges: [] }
+  if (!text) return { matched: false, score: 0, ranges: [] }
+
+  const patternLower = pattern.toLowerCase()
+  const textLower = text.toLowerCase()
+
+  let best: FuzzyMatchResult | null = null
+  for (let from = textLower.indexOf(patternLower[0]); from !== -1; from = textLower.indexOf(patternLower[0], from + 1)) {
+    const m = alignFrom(patternLower, text, textLower, from)
+    // Later starts only see a suffix of the text, so once one fails, all later ones do
+    if (!m.matched) break
+    if (!best || m.score > best.score) best = m
+  }
+  if (!best) return { matched: false, score: 0, ranges: [] }
+
+  const { score, ranges } = best
 
   // Bonus for exact match
-  if (matched && textLower === patternLower) {
-    score += 10
+  if (textLower === patternLower) {
+    return { matched: true, score: score + 15, ranges }
   }
 
   // Bonus for prefix match
-  if (matched && textLower.startsWith(patternLower)) {
-    score += 5
+  if (textLower.startsWith(patternLower)) {
+    return { matched: true, score: score + 5, ranges }
   }
 
-  return { matched, score, ranges }
+  return { matched: true, score, ranges }
+}
+
+/**
+ * Strict matching, for long body text (`ActionConfig.searchText`): every
+ * whitespace-separated query term must occur in `text` as a contiguous,
+ * case-insensitive substring. Scattered subsequences never match. Each term's
+ * best occurrence (preferring a word start, then a whole word, then the
+ * earliest) is reported in `ranges`.
+ */
+export function strictMatch(query: string, text: string): FuzzyMatchResult {
+  const terms = query.toLowerCase().split(/\s+/).filter(Boolean)
+  if (terms.length === 0) return { matched: true, score: 1, ranges: [] }
+  if (!text) return { matched: false, score: 0, ranges: [] }
+
+  const textLower = text.toLowerCase()
+  let score = 0
+  const ranges: Array<[number, number]> = []
+  for (const term of terms) {
+    let bestIdx = -1
+    let bestScore = -Infinity
+    for (let idx = textLower.indexOf(term); idx !== -1; idx = textLower.indexOf(term, idx + 1)) {
+      const end = idx + term.length
+      const wordStart = isWordStart(text, idx)
+      const wholeWord = wordStart && (end === text.length || WORD_BOUNDARY.test(text[end]))
+      const s = term.length * 2 + (wordStart ? term.length : 0) + (wholeWord ? 2 : 0) - idx * 0.001
+      if (s > bestScore) {
+        bestScore = s
+        bestIdx = idx
+      }
+    }
+    if (bestIdx === -1) return { matched: false, score: 0, ranges: [] }
+    score += bestScore
+    ranges.push([bestIdx, bestIdx + term.length])
+  }
+  return { matched: true, score, ranges: mergeRanges(ranges) }
+}
+
+/** Sort ranges and merge overlapping / adjacent ones. */
+function mergeRanges(ranges: Array<[number, number]>): Array<[number, number]> {
+  const sorted = [...ranges].sort((a, b) => a[0] - b[0])
+  const merged: Array<[number, number]> = []
+  for (const [a, b] of sorted) {
+    const last = merged[merged.length - 1]
+    if (last && a <= last[1]) last[1] = max(last[1], b)
+    else merged.push([a, b])
+  }
+  return merged
+}
+
+export interface SnippetOptions {
+  /** Characters of context on each side of the best range (default: 40) */
+  radius?: number
+  /** Marks truncation at either end (default: '…') */
+  ellipsis?: string
+}
+
+export interface Snippet {
+  text: string
+  /** Match ranges re-based onto `text` (ranges outside the window are dropped, partial ones clipped) */
+  ranges: Array<[number, number]>
+}
+
+/**
+ * Cut a window of `text` around its best (longest, then earliest) match range,
+ * for rendering e.g. "…the July bill net of **credits** was…". The window is
+ * `radius` characters each side, shrunk to word boundaries, with `ellipsis`
+ * marking truncated ends; `ranges` are re-based onto the returned text.
+ */
+export function snippet(
+  text: string,
+  ranges: Array<[number, number]>,
+  { radius = 40, ellipsis = '…' }: SnippetOptions = {},
+): Snippet {
+  if (ranges.length === 0) {
+    if (text.length <= 2 * radius) return { text, ranges: [] }
+    ranges = [[0, 0]]
+  }
+  const [a, b] = ranges.reduce((best, r) => (r[1] - r[0] > best[1] - best[0] ? r : best))
+  const isSpace = (i: number) => /\s/.test(text[i])
+
+  let start = max(0, a - radius)
+  if (start > 0) {
+    let k = start
+    while (k < a && !isSpace(k)) k++
+    if (k < a) {
+      while (k < a && isSpace(k)) k++
+      start = k
+    }
+  }
+  let end = min(text.length, b + radius)
+  if (end < text.length) {
+    let k = end - 1
+    while (k >= b && !isSpace(k)) k--
+    if (k >= b) {
+      while (k > b && isSpace(k - 1)) k--
+      end = k
+    }
+  }
+
+  const prefix = start > 0 ? ellipsis : ''
+  const suffix = end < text.length ? ellipsis : ''
+  const shift = prefix.length - start
+  const rebased: Array<[number, number]> = []
+  for (const [x, y] of ranges) {
+    const lo = max(x, start)
+    const hi = min(y, end)
+    if (hi > lo) rebased.push([lo + shift, hi + shift])
+  }
+  return { text: prefix + text.slice(start, end) + suffix, ranges: rebased }
 }
 
 /**
@@ -1203,34 +1331,31 @@ export function searchActions(
 
     // Match against multiple fields
     const labelMatch = fuzzyMatch(effectiveQuery, action.label)
-    const descMatch = action.description ? fuzzyMatch(effectiveQuery, action.description) : { matched: false, score: 0, ranges: [] }
-    const groupMatch = action.group ? fuzzyMatch(effectiveQuery, action.group) : { matched: false, score: 0, ranges: [] }
-    const idMatch = fuzzyMatch(effectiveQuery, id)
-
-    // Check keywords (a pair/triplet's group label counts as one, so searching
-    // "Previous / Next year" finds each member)
-    let keywordScore = 0
+    const matches: Array<FieldMatch & { weighted: number }> = []
+    const add = (field: MatchField, text: string, m: FuzzyMatchResult, weight: number) => {
+      if (m.matched) matches.push({ field, text, ranges: m.ranges, score: m.score, weighted: m.score * weight })
+    }
+    add('label', action.label, labelMatch, 3)
+    if (action.description) add('description', action.description, fuzzyMatch(effectiveQuery, action.description), 1.5)
+    if (action.searchText) add('searchText', action.searchText, strictMatch(effectiveQuery, action.searchText), 1.5)
+    // Keywords: only the best one counts (a pair/triplet's group label counts as
+    // one, so searching "Previous / Next year" finds each member)
     const groupLabel = action.actionPair?.label ?? action.actionTriplet?.label
     const keywords = groupLabel ? [...(action.keywords ?? []), groupLabel] : action.keywords
-    if (keywords) {
-      for (const keyword of keywords) {
-        const kwMatch = fuzzyMatch(effectiveQuery, keyword)
-        if (kwMatch.matched) {
-          keywordScore = max(keywordScore, kwMatch.score)
-        }
-      }
+    let bestKeyword: [string, FuzzyMatchResult] | null = null
+    for (const keyword of keywords ?? []) {
+      const kwMatch = fuzzyMatch(effectiveQuery, keyword)
+      if (kwMatch.matched && (!bestKeyword || kwMatch.score > bestKeyword[1].score)) bestKeyword = [keyword, kwMatch]
     }
+    if (bestKeyword) add('keyword', bestKeyword[0], bestKeyword[1], 2)
+    if (action.group) add('group', action.group, fuzzyMatch(effectiveQuery, action.group), 1)
+    add('id', id, fuzzyMatch(effectiveQuery, id), 0.5)
 
-    // Calculate total score (label weighted highest)
-    const matched = labelMatch.matched || descMatch.matched || groupMatch.matched || idMatch.matched || keywordScore > 0 || includeForPlaceholder
-    if (!matched && effectiveQuery) continue
+    if (matches.length === 0 && !includeForPlaceholder) continue
 
-    let score =
-      (labelMatch.matched ? labelMatch.score * 3 : 0) +
-      (descMatch.matched ? descMatch.score * 1.5 : 0) +
-      (groupMatch.matched ? groupMatch.score : 0) +
-      (idMatch.matched ? idMatch.score * 0.5 : 0) +
-      keywordScore * 2
+    // Total score: weighted sum over matched fields (label weighted highest)
+    let score = matches.reduce((sum, m) => sum + m.weighted, 0) + (action.priority ?? 0)
+    matches.sort((a, b) => b.weighted - a.weighted)
 
     // Boost score for placeholder actions when query contains a number
     if (queryNumbers.length > 0 && hasPlaceholders) {
@@ -1243,6 +1368,8 @@ export function searchActions(
       bindings,
       score,
       labelMatches: labelMatch.ranges,
+      // An empty (number-only) query trivially "matches" every field; report none
+      matches: effectiveQuery ? matches.map(({ field, text, ranges, score }) => ({ field, text, ranges, score })) : [],
       mode: action.mode,
     }
 

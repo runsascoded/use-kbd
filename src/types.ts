@@ -184,6 +184,14 @@ export interface ActionDefinition {
   mode?: string
   /** Additional search keywords */
   keywords?: string[]
+  /**
+   * Long body text that the omnibar searches but never displays as-is (e.g. a
+   * slide's or page's text). Matched strictly: each query term must occur as a
+   * substring (no scattered subsequences). A matching result shows a snippet.
+   */
+  searchText?: string
+  /** Omnibar ranking boost, added to the match score (see `ActionConfig.priority`) */
+  priority?: number
   /** Icon identifier (user provides rendering) */
   icon?: string
   /**
@@ -218,6 +226,20 @@ export type ModifierName = 'ctrl' | 'alt' | 'shift' | 'meta'
  */
 export type ActionRegistry = Record<string, ActionDefinition>
 
+/** A searchable field of an action or omnibar entry */
+export type MatchField = 'label' | 'description' | 'searchText' | 'keyword' | 'group' | 'id'
+
+/** Where (and how well) a query matched one field */
+export interface FieldMatch {
+  field: MatchField
+  /** The field's full text (for `keyword`, the matched keyword) */
+  text: string
+  /** Matched character ranges in `text`, `[start, end)` */
+  ranges: Array<[number, number]>
+  /** Match score for this field, before field weighting */
+  score: number
+}
+
 /**
  * An action with its current keybinding(s) and search match info
  */
@@ -232,6 +254,11 @@ export interface ActionSearchResult {
   score: number
   /** Matched ranges in label for highlighting */
   labelMatches: Array<[number, number]>
+  /**
+   * Every field the query matched, best (highest weighted score) first. Use
+   * with `snippet()` to show why a result matched, e.g. a `searchText` hit.
+   */
+  matches: FieldMatch[]
   /** Whether this action has bindings with digit placeholders (\d or \d+) */
   hasPlaceholders?: boolean
   /** Captured digit values from query (e.g., "smooth 3" → [3]) */

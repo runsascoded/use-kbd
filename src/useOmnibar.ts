@@ -3,7 +3,7 @@ import { useHotkeys, HotkeyMap, HandlerMap } from './useHotkeys'
 
 const { max, min } = Math
 import { searchActions, getSequenceCompletions, fuzzyMatch, getActionBindings, hasAnyPlaceholderBindings } from './utils'
-import type { ActionRegistry, ActionSearchResult, EndpointPaginationMode, HotkeySequence, OmnibarEntry } from './types'
+import type { ActionRegistry, ActionSearchResult, EndpointPaginationMode, FieldMatch, HotkeySequence, MatchField, OmnibarEntry } from './types'
 import type { SequenceCompletion } from './types'
 import type { EndpointQueryResult, OmnibarEndpointsRegistryValue } from './OmnibarEndpointsRegistry'
 import { executionKeyEvent, openHref, opensNewContext, resolveHref, type OmnibarExecutionEvent } from './omnibarNavigation'
@@ -38,6 +38,8 @@ export interface RemoteOmnibarResult {
   score: number
   /** Matched ranges in label for highlighting */
   labelMatches: Array<[number, number]>
+  /** Every field the query matched (`label`, `description`, `keyword`), best first */
+  matches: FieldMatch[]
 }
 
 /**
@@ -291,6 +293,7 @@ export function useOmnibar(options: UseOmnibarOptions): UseOmnibarResult {
             bindings,
             score: 1000, // High score to ensure they appear first
             labelMatches: [],
+            matches: [],
             ...(hasPlaceholders && { hasPlaceholders: true }),
           })
           recentIdSet.add(actionId)
@@ -525,26 +528,20 @@ export function useOmnibar(options: UseOmnibarOptions): UseOmnibarResult {
       const processed: RemoteOmnibarResult[] = []
 
       for (const entry of state.entries) {
-        // Score the entry against the query
-        const labelMatch = fuzzyMatch(query, entry.label)
-        const descMatch = entry.description ? fuzzyMatch(query, entry.description) : null
-        const keywordsMatch = entry.keywords?.map(k => fuzzyMatch(query, k)) ?? []
-
-        // Calculate weighted score
-        let score = 0
-        let labelMatches: Array<[number, number]> = []
-        if (labelMatch.matched) {
-          score = Math.max(score, labelMatch.score * 3)
-          labelMatches = labelMatch.ranges
+        // Score the entry against the query; the best-weighted field sets the score
+        const matches: Array<FieldMatch & { weighted: number }> = []
+        const add = (field: MatchField, text: string, weight: number) => {
+          const m = fuzzyMatch(query, text)
+          if (m.matched) matches.push({ field, text, ranges: m.ranges, score: m.score, weighted: m.score * weight })
         }
-        if (descMatch?.matched) {
-          score = Math.max(score, descMatch.score * 1.5)
-        }
-        for (const km of keywordsMatch) {
-          if (km.matched) {
-            score = Math.max(score, km.score * 2)
-          }
-        }
+        add('label', entry.label, 3)
+        if (entry.description) add('description', entry.description, 1.5)
+        for (const keyword of entry.keywords ?? []) add('keyword', keyword, 2)
+        matches.sort((a, b) => b.weighted - a.weighted)
+        // Keep only the best keyword
+        const fieldMatches = matches.filter((m, i) => m.field !== 'keyword' || matches.findIndex(o => o.field === 'keyword') === i)
+        const score = matches[0]?.weighted ?? 0
+        const labelMatches = matches.find(m => m.field === 'label')?.ranges ?? []
 
         processed.push({
           id: `${endpointId}:${entry.id}`,
@@ -553,6 +550,8 @@ export function useOmnibar(options: UseOmnibarOptions): UseOmnibarResult {
           priority,
           score: score || 1,
           labelMatches,
+          // An endpoint may match on data the entry doesn't carry; report only what it does
+          matches: query ? fieldMatches.map(({ field, text, ranges, score }) => ({ field, text, ranges, score })) : [],
         })
       }
       if (processed.length === 0) continue

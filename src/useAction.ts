@@ -38,9 +38,20 @@ export interface ActionConfig {
   defaultBindings?: string[]
   /** Search keywords for omnibar */
   keywords?: string[]
+  /**
+   * Long body text searched by the omnibar but never displayed as-is (e.g. a
+   * slide's text). Matched strictly: each query term must occur as a substring,
+   * never as a scattered subsequence. Results matched here show a snippet.
+   */
+  searchText?: string
   /** Whether action is currently enabled (default: true) */
   enabled?: boolean
-  /** Priority for conflict resolution (higher wins, default: 0) */
+  /**
+   * Omnibar ranking boost (default: 0), added to the match score. Match scores
+   * for short labels run roughly 10–60, so 1–5 breaks ties between similar
+   * matches (e.g. rank a deck's controls above its slide jumps), while 100+
+   * puts this action above every non-boosted match.
+   */
   priority?: number
   /** Hide from ShortcutsModal (still searchable in omnibar) */
   hideFromModal?: boolean
@@ -130,6 +141,7 @@ export function useAction(id: string, config: ActionConfig): void {
     id,
     config.label,
     config.description,
+    config.searchText,
     config.group,
     config.mode,
     // Compare bindings by value
@@ -216,6 +228,8 @@ export function useActions(actions: Record<string, ActionConfig>): void {
       Object.entries(actions).map(([id, c]) => [
         id,
         c.label,
+        c.description,
+        c.searchText,
         c.group,
         c.mode,
         c.defaultBindings,
